@@ -117,6 +117,9 @@ USER root
 
 WORKDIR /workspaces
 
+# Start new shells in /workspaces instead of $HOME
+RUN echo 'cd /workspaces' >> /home/developer/.bashrc
+
 USER developer:developer
 
 CMD ["tail", "-f", "/dev/null"]

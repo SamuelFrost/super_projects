@@ -1,0 +1,31 @@
+{
+  "recommendations": [
+    // Remote development
+    "ms-vscode-remote.remote-containers",
+    "ms-vscode-remote.remote-wsl",
+    "ms-vscode-remote.remote-ssh",
+    "ms-vscode-remote.remote-ssh-edit",
+    "ms-vscode.remote-server",
+    "ms-vscode.remote-explorer",
+
+    // Docker / containers
+    "ms-azuretools.vscode-containers",
+
+    // Git
+    "eamodio.gitlens",
+
+    // Ruby
+    "shopify.ruby-lsp",
+    "marcoroth.herb-lsp",      // ERB/HTML template language server
+    "marcoroth.stimulus-lsp",  // Stimulus.js
+
+    // General
+    "streetsidesoftware.code-spell-checker",
+
+    // Keybindings (comment out if not using Atom-style bindings)
+    // "ms-vscode.atom-keybindings",
+
+    // Browser debugging
+    // "firefox-devtools.vscode-firefox-debug",
+  ]
+}

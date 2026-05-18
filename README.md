@@ -56,6 +56,9 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - Node.js + npm
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini` command; free tier available)
 - `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
+- recommended extensions for VS Code and Cursor
+- recommended settings for VS Code and Cursor
+
 
 ### Persisted data
 

@@ -1,0 +1,44 @@
+{
+    // -------------------------------------------------------------------------
+    // Ruby LSP
+    // -------------------------------------------------------------------------
+    "rubyLsp.rubyVersionManager": {
+        "identifier": "none" // Change to "mise" if ruby version management is needed
+    },
+
+    // -------------------------------------------------------------------------
+    // Herb (ERB/HTML language server)
+    // -------------------------------------------------------------------------
+    "languageServerHerb.linter.enabled": true,
+    "languageServerHerb.formatter.enabled": true,
+    "languageServerHerb.ruby.lint": [
+        // "rubocop",
+        // "reek",
+        // "brakeman"
+    ],
+
+    // -------------------------------------------------------------------------
+    // Spell checker — add project-specific words here
+    // -------------------------------------------------------------------------
+    "cSpell.words": [
+        "eamodio",   // gitlens extension author
+        "marcoroth", // herb-lsp / stimulus-lsp extension author
+        "moby",      // Docker moby
+        "usermod",   // Linux usermod command
+        "KAMAL"      // Kamal deploy tool
+    ],
+
+    // -------------------------------------------------------------------------
+    // Editor
+    // -------------------------------------------------------------------------
+    "html.format.wrapLineLength": 500,
+    "workbench.editor.tabSizingFixedMaxWidth": 100,
+    "workbench.editor.tabSizingFixedMinWidth": 100,
+
+    // -------------------------------------------------------------------------
+    // WSL: enable this in user settings (not workspace) on WSL machines so that
+    // devcontainers are built and run inside WSL rather than on Windows.
+    // Cannot be set as a workspace setting — add to your user settings.json:
+    //   "dev.containers.executeInWSL": true
+    // -------------------------------------------------------------------------
+}

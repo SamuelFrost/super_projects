@@ -24,5 +24,6 @@ services:
     network_mode: host
     # Sometimes you may want to avoid using host for security reasons or due to port conflicts with the host machine.
     # To disable this, create a new network and use that network mode instead.
+    # Note: in this case you will need to forward ports from the devcontainer to the host machine for services to be accessible.
     # networks:
     #   - super_projects_default

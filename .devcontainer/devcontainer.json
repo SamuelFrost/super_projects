@@ -1,0 +1,53 @@
+// For format details, see https://containers.dev/implementors/json_reference/.
+{
+  "name": "super_projects",
+  "dockerComposeFile": "compose.yaml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspaces/",
+  "shutdownAction": "none",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+    // For the following source path to work correctly when using devcontainers through VSCode/Cursor with WSL
+    // you will need to enable the user setting "dev.containers.executeInWSL"
+    "source=~/.ssh,target=/home/developer/.ssh,type=bind,consistency=cached"
+  ],
+
+  "remoteUser": "developer",
+  "updateRemoteUserUID": true,
+
+  // Populate .env with host UID and docker.sock GID before the image is built
+  "initializeCommand": "sh -c '(echo \"DEVELOPER_UID=$(id -u)\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\") > .env'",
+
+  // Expose localWorkspaceFolder so tools inside the container can reference the host path
+  "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },
+
+  "containerEnv": {
+    "EDITOR": "code",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
+
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
+
+  // Features are largely handled by the Dockerfile directly for finer control,
+  // but the equivalent devcontainer features are listed here for reference.
+  "features": {
+    // "ghcr.io/devcontainers/features/github-cli:1": {},
+    // "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+    //   "moby": false,
+    //   "dockerDashComposeVersion": "v2"
+    // }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "streetsidesoftware.code-spell-checker",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-containers"
+      ],
+      "settings": {}
+    }
+  }
+}

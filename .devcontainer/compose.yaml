@@ -1,0 +1,22 @@
+name: "super_projects"
+
+services:
+  devcontainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DEVELOPER_UID: ${DEVELOPER_UID:-501}
+        DOCKER_GID: ${DOCKER_GID:-1}
+    pull_policy: never
+    volumes:
+      - ../:/workspaces:cached
+      # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Gemini CLI: .devcontainer/gemini-data -> ~/.gemini (persists across rebuilds)
+      - ./gemini-data:/home/developer/.gemini
+      # Bash history: mounts from host home directory for continuity with non-devcontainer shells
+      - ${HOME}/.bash_history:/home/developer/.bash_history
+    command: tail -f /dev/null
+    user: developer
+    network_mode: host

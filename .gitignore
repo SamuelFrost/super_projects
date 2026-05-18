@@ -1,0 +1,20 @@
+# Ignore everything by default — this repo only tracks the dev environment scaffolding,
+# not any of the projects that live inside this directory.
+*
+
+# Unignore the dev environment and IDE config directories/files
+!.gitignore
+!.devcontainer/
+!.devcontainer/**
+!.cursor/
+!.cursor/**
+!.claude/
+!.claude/**
+!.vscode/
+!.vscode/**
+!README.md
+!AGENTS.md
+!agents.md
+
+# Ignore persisted CLI data even though the parent dirs are whitelisted above
+.devcontainer/gemini-data/

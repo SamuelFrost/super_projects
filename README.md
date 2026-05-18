@@ -30,7 +30,11 @@ Individual project directories cloned inside here are **not tracked** by this re
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux)
-- [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers), or [Cursor](https://cursor.sh/)
+- One of the following:
+  - [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+  - [Cursor](https://cursor.sh/)
+  - [devcontainer CLI](https://containers.dev/install)
+
 - **WSL users:** enable `dev.containers.executeInWSL` in your editor settings so SSH and UID mounts resolve correctly
 
 ### Steps

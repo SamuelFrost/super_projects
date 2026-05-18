@@ -19,4 +19,10 @@ services:
       - ${HOME}/.bash_history:/home/developer/.bash_history
     command: tail -f /dev/null
     user: developer
+    # Use host network mode to allow the devcontainer to access the host's network
+    # This allows services started from within the devcontainer to be accessible from the host machine via localhost, simplifying local development.
     network_mode: host
+    # Sometimes you may want to avoid using host for security reasons or due to port conflicts with the host machine.
+    # To disable this, create a new network and use that network mode instead.
+    # networks:
+    #   - super_projects_default

@@ -35,9 +35,9 @@ Individual project directories cloned inside here are **not tracked** by this re
 
 ### Steps
 
-1. Fork this repo and clone it where you keep your projects:
+1. Fork this repo (<https://github.com/samuelfrost/super_projects>) and clone it where you keep your projects:
    ```sh
-   git clone git@github.com:<your-org>/super_projects.git ~/projects
+   git clone git@github.com:samuelfrost/super_projects.git ~/projects
    ```
 2. Open the directory in VS Code or Cursor.
 3. When prompted, click **Reopen in Container** (or run the _Dev Containers: Reopen in Container_ command).

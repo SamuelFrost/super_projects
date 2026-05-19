@@ -15,6 +15,7 @@
 !README.md
 !AGENTS.md
 !agents.md
+!.mise.toml
 
 # Ignore generated/persisted files even though the parent dirs are whitelisted above
 .devcontainer/.env

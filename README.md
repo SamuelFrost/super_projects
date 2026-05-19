@@ -6,24 +6,9 @@ Fork this repository, place it where you would normally keep your projects direc
 
 ## What this is
 
-`super_projects` is designed to sit **in place of** your projects parent directory. Rather than configuring each developer's machine individually, the dev environment (Docker, IDE settings, AI tooling) is codified here and shared via git.
+`super_projects` is designed to be your projects' parent directory. Rather than configuring each developer's machine individually, the dev environment (Docker, IDE settings, AI tooling) is codified here and shared via git.
 
 Teams fork this repo and maintain their own version of the Docker image, devcontainer settings, and IDE extensions — so every developer gets an identical, reproducible environment.
-
-## What's tracked in git
-
-The `.gitignore` is configured to ignore everything **except** the files that define the development environment:
-
-| Path | Purpose |
-|------|---------|
-| `.devcontainer/` | Dockerfile, compose, and devcontainer config |
-| `.cursor/` | Cursor IDE rules, settings, and skills |
-| `.claude/` | Claude project config |
-| `.vscode/` | VS Code settings and extension recommendations |
-| `README.md` | This file |
-| `AGENTS.md` / `agents.md` | AI agent context for tools like Claude Code, Gemini CLI |
-
-Individual project directories cloned inside here are **not tracked** by this repo.
 
 ## Getting started
 
@@ -79,10 +64,9 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
 - Google Chrome, launched with remote debugging on port 9223 (accessible from the desktop GUI and via MCP)
 - `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `npx` — Cursor connects to Chrome through the forwarded port.
+- [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, Java, and more
 - Recommended extensions and settings for VS Code and Cursor
-- TODO: Add mise for version management
-- TODO: add rubylsp, stimulus-lsp, and herb-lsp for language servers
-- TODO: fix file ownership issues with the devcontainer
+- TODO: add ruby-lsp, stimulus-lsp, and herb-lsp for language servers
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
@@ -100,13 +84,47 @@ The Chrome profile is stored in a named Docker volume so it survives container r
 docker volume rm super_projects_chrome-devtools-mcp-profile
 ```
 
+### Tool version management (mise)
+
+`mise` is pre-installed and activated in every shell. Configure the tools your project needs by editing `.mise.toml` at the repo root:
+
+```toml
+[tools]
+ruby   = "3.4"
+node   = "22"
+python = "3.13"
+```
+
+Then install them inside the container:
+
+```sh
+mise install
+```
+
+**Baking tools into the image at build time** (faster cold starts, useful for CI or large teams): uncomment the two `COPY`/`RUN` lines near the bottom of `.devcontainer/Dockerfile`, then rebuild. The cache only busts when `.mise.toml` changes, so unrelated Dockerfile edits remain fully cached.
+
 ### Enabling Claude Code CLI
 
 The Claude Code CLI setup is included but commented out in the Dockerfile. To enable it, uncomment the relevant lines and rebuild the container.
 
 ## Customising for your team
 
-- **Add tools:** edit `.devcontainer/Dockerfile` and rebuild.
-- **Add extensions:** add extension IDs to the `customizations.vscode.extensions` array in `.devcontainer/devcontainer.json`.
-- **Add environment variables:** use `containerEnv` in `devcontainer.json` for variables that should always be set inside the container.
-- **Project-specific services** (databases, caches, etc.): add services to `.devcontainer/compose.yaml`.
+- **Add/modify tools:** edit `.devcontainer/Dockerfile` and rebuild.
+- **Add/modify extensions:** add extension IDs to the `customizations.vscode.extensions` array in `.devcontainer/devcontainer.json`.
+- **Add/modify environment variables:** use `containerEnv` in `devcontainer.json` for variables that should always be set inside the container.
+- **Project-specific services** take advantage of the GUI and add emulators / browsers / other gui tools to the dockerfile build.
+
+## What's tracked in git
+
+The `.gitignore` is configured to ignore everything **except** the files that define the development environment:
+
+| Path | Purpose |
+|------|---------|
+| `.devcontainer/` | Dockerfile, compose, and devcontainer config |
+| `.cursor/` | Cursor IDE rules, settings, and skills |
+| `.claude/` | Claude project config |
+| `.vscode/` | VS Code settings and extension recommendations |
+| `README.md` | This file |
+| `AGENTS.md` / `agents.md` | AI agent context for tools like Claude Code, Gemini CLI |
+
+Individual project directories cloned inside here are **not tracked** by this repo.

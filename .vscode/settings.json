@@ -3,7 +3,7 @@
     // Ruby LSP
     // -------------------------------------------------------------------------
     "rubyLsp.rubyVersionManager": {
-        "identifier": "none" // Change to "mise" if ruby version management is needed
+        "identifier": "mise"
     },
 
     // -------------------------------------------------------------------------
@@ -25,7 +25,8 @@
         "marcoroth", // herb-lsp / stimulus-lsp extension author
         "moby",      // Docker moby
         "usermod",   // Linux usermod command
-        "KAMAL"      // Kamal deploy tool
+        "KAMAL",      // Kamal deploy tool
+        "samuelfrost", // Creator of super_projects
     ],
 
     // -------------------------------------------------------------------------

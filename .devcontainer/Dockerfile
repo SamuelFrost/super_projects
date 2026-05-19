@@ -2,9 +2,11 @@ ARG UBUNTU_VERSION=24.04
 FROM ubuntu:${UBUNTU_VERSION}
 
 # Prevent interactive prompts during apt installs
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
 
-# Install core development tools
+# Install core development tools and mise build dependencies.
 # curl:           downloading packages and general HTTP from the terminal
 # git:            version control
 # openssh-client: share host SSH credentials (needed for git operations over SSH)
@@ -12,8 +14,24 @@ ENV DEBIAN_FRONTEND=noninteractive
 # procps:         top, free, ps — system monitoring
 # poppler-utils:  pdftotext etc. — lets agents/scripts read PDFs as text
 # ffmpeg:         probe/process video and audio (metadata, extract audio)
-# zlib1g-dev:     common compression library required by several build tools
 # tzdata:         timezone data (suppressed interactive prompt via ENV above)
+# --- mise compile-from-source dependencies ---
+# zlib1g-dev:     compression (Ruby, Python)
+# libssl-dev:     TLS/SSL (Ruby, Python)
+# libyaml-dev:    YAML parsing (Ruby)
+# libffi-dev:     foreign function interface (Ruby, Python)
+# libreadline-dev: interactive REPL line editing (Ruby, Python)
+# libgmp-dev:     big integer math (Ruby)
+# libncurses5-dev: terminal UI (Ruby)
+# libjemalloc-dev: optional performance allocator (Ruby)
+# liblzma-dev:    XZ compression (Python)
+# libbz2-dev:     bzip2 compression (Python)
+# libsqlite3-dev: embedded database (Python)
+# patch:          applies source patches during ruby-build compilation
+# make:           drives the C build process (runs Makefiles)
+# gcc:            C compiler — required to build Ruby, Python, and most native gems
+# g++:            C++ compiler — required for gems/extensions with C++ code
+# autoconf:       generates ./configure scripts from Makefile.in templates
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   curl \
   git \
@@ -22,11 +40,30 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   procps \
   poppler-utils \
   ffmpeg \
-  zlib1g-dev \
   tzdata \
   ca-certificates \
   gnupg \
+  locales \
+  zlib1g-dev \
+  libssl-dev \
+  libyaml-dev \
+  libffi-dev \
+  libreadline-dev \
+  libgmp-dev \
+  libncurses5-dev \
+  libjemalloc-dev \
+  liblzma-dev \
+  libbz2-dev \
+  libsqlite3-dev \
+  patch \
+  make \
+  gcc \
+  g++ \
+  autoconf \
   && rm -rf /var/lib/apt/lists/*
+
+# Generate the en_US.UTF-8 locale so tools that invoke perl (e.g. ruby-build) don't warn.
+RUN locale-gen en_US.UTF-8
 
 # Generate a stable machine-id so Chrome doesn't emit the "0 characters" warning.
 RUN head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' > /etc/machine-id
@@ -204,6 +241,18 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
   && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
+# mise — universal version manager for Ruby, Node, Python, Go, Java, etc.
+#   Installed system-wide via apt; each developer's tool installs go in ~/.local.
+#   Docs: https://mise.jdx.dev
+# ------------------------------------------------------------------------------
+RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
+       -o /etc/apt/keyrings/mise-archive-keyring.asc \
+  && printf "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.asc] https://mise.jdx.dev/deb stable main\n" \
+       > /etc/apt/sources.list.d/mise.list \
+  && apt-get update -qq && apt-get install -y --no-install-recommends mise \
+  && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------------------------
 # AI coding CLI: Gemini CLI.  Run `gemini` in the terminal.
 #   - Free tier: run `gemini` and sign in with Google (no API key needed).
 #   - Or export GEMINI_API_KEY (https://aistudio.google.com/apikey) for API key auth.
@@ -212,11 +261,30 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
 #   Docs: https://github.com/google-gemini/gemini-cli
 # ------------------------------------------------------------------------------
 USER developer:developer
-# Put developer's npm global bin on PATH so globally installed packages are reachable by name
-ENV PATH="/home/developer/.npm-global/bin:${PATH}"
+# mise shims first so mise-managed tools shadow system ones; npm-global bin follows.
+# MISE_TRUSTED_CONFIG_PATHS pre-trusts /workspaces and all subdirectories so mise
+# reads each project's .mise.toml without prompting for `mise trust`.
+ENV PATH="/home/developer/.local/share/mise/shims:/home/developer/.npm-global/bin:${PATH}" \
+    MISE_TRUSTED_CONFIG_PATHS=/workspaces
+RUN mkdir -p /home/developer/.config/mise
 RUN npm config set prefix /home/developer/.npm-global && \
     npm install -g @google/gemini-cli
 USER root
+
+# ==============================================================================
+# BUILD-TIME TOOL INSTALLATION (optional — uncomment to bake versions into image)
+# ==============================================================================
+# If you maintain a .mise.toml at the workspace root, you can have mise install
+# the exact tool versions at image build time so every developer gets them
+# pre-cached without waiting on first-run downloads.
+#
+# 1. Uncomment the two lines below.
+# 2. Rebuild the image (`devcontainer up --remove-existing-container`).
+#    The COPY line will only bust the cache when .mise.toml actually changes,
+#    so normal Dockerfile edits above this point stay fully cached.
+#
+# COPY --chown=developer:developer ../.mise.toml /workspaces/.mise.toml
+# RUN cd /workspaces && mise trust && mise install
 
 # ------------------------------------------------------------------------------
 # start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
@@ -263,8 +331,10 @@ echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n
 
 WORKDIR /workspaces
 
-# Start new shells in /workspaces instead of $HOME
-RUN echo 'cd /workspaces' >> /home/developer/.bashrc
+# Start new shells in /workspaces; activate mise so interactive terminals pick up
+# mise-managed tools automatically (shims handle non-interactive scripts via PATH).
+RUN echo 'cd /workspaces' >> /home/developer/.bashrc && \
+    echo 'eval "$(mise activate bash)"' >> /home/developer/.bashrc
 
 USER developer:developer
 

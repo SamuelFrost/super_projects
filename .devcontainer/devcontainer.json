@@ -46,11 +46,23 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "Shopify.ruby-lsp",
         "streetsidesoftware.code-spell-checker",
         "eamodio.gitlens",
-        "ms-azuretools.vscode-containers"
+        "marcoroth.herb-lsp",
+        "marcoroth.stimulus-lsp",
+        "zoma.vscode-auto-open-workspace",
+        "ms-azuretools.vscode-containers",
+        "ms-vscode-remote.remote-containers",
+        "ms-vscode-remote.remote-wsl",
+        "ms-vscode-remote.remote-ssh",
+        "ms-vscode-remote.remote-ssh-edit",
+        "ms-vscode.remote-server",
+        "ms-vscode.remote-explorer"
       ],
-      "settings": {}
+      "settings": {
+        "autoOpenWorkspace.enableAutoOpenAlwaysFirst": true
+      }
     }
   }
 }

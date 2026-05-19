@@ -1,0 +1,27 @@
+# mise tool version configuration — https://mise.jdx.dev
+#
+# This is the workspace-root fallback config. Each sub-project should carry its
+# own .mise.toml (or .tool-versions) so its versions are pinned independently:
+#
+#   /workspaces/project-a/.mise.toml  →  ruby = "3.4"
+#   /workspaces/project-b/.mise.toml  →  ruby = "4.0"
+#
+# mise picks up the nearest config file when you cd into a directory and
+# switches tool versions automatically. Multiple versions of the same tool
+# can be installed side-by-side — mise manages them all.
+#
+# Full list of supported plugins: https://mise.jdx.dev/plugins.html
+
+[settings]
+# Automatically install tools listed in .mise.toml when entering a directory.
+auto_install = true
+# Use pre-built Ruby binaries instead of compiling from source.
+# Becomes the default in mise 2026.8; set to true only if you need custom build flags.
+ruby.compile = false
+
+[tools]
+ruby    = "4.0"
+# node    = "22"
+# python  = "3.13"
+# go      = "1.22"
+# java    = "temurin-21"

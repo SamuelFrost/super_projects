@@ -16,5 +16,6 @@
 !AGENTS.md
 !agents.md
 
-# Ignore persisted CLI data even though the parent dirs are whitelisted above
+# Ignore generated/persisted files even though the parent dirs are whitelisted above
+.devcontainer/.env
 .devcontainer/gemini-data/

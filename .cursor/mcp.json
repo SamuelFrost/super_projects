@@ -1,8 +1,13 @@
 {
     "mcpServers": {
         "chrome-devtools": {
-            "url": "http://localhost:8080/mcp",
-            "transport": "http"
+            "command": "docker",
+            "args": [
+                "exec", "-i",
+                "super_projects-devcontainer-1",
+                "npx", "-y", "chrome-devtools-mcp@latest",
+                "--browser-url=http://localhost:9223"
+            ]
         }
     }
 }

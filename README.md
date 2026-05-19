@@ -46,19 +46,19 @@ git clone git@github.com:samuelfrost/super_projects.git
 
 ```sh
 # Build and start (runs initializeCommand to generate .env, then builds + starts)
-devcontainer up
+devcontainer up --remove-existing-container
 
 # Open a shell inside the container
 devcontainer exec bash
 
-# Open Google Chrome in the container with remote debugging for MCP
+# Manually start/restart Chrome inside the container (auto-starts with the container)
 devcontainer exec chrome
 
 # Stop
 docker compose -f .devcontainer/compose.yaml down
 ```
 
-The VNC desktop and MCP proxy start automatically with the container — no extra steps needed.
+The VNC desktop and Chrome start automatically with the container — no extra steps needed.
 
 ---
 
@@ -80,14 +80,14 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini` command; free tier available)
 - `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
 - Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
-- Google Chrome, launched with remote debugging for MCP (accessible from the desktop GUI)
-- `chrome-devtools-mcp` + `mcp-proxy` (Streamable HTTP MCP at `http://localhost:8080/mcp`)
+- Google Chrome, launched with remote debugging on port 9223 (accessible from the desktop GUI and via MCP)
+- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `npx` — Cursor connects to Chrome through the forwarded port, no custom proxy needed
 - Recommended extensions and settings for VS Code and Cursor
 - TODO: Add mise for version management
 - TODO: add rubylsp, stimulus-lsp, and herb-lsp for language servers
 - TODO: fix file ownership issues with the devcontainer
 
-The VNC/Chrome/MCP stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
+The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
 ### Persisted data
 

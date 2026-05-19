@@ -21,16 +21,16 @@ services:
       - chrome-devtools-mcp-profile:/home/developer/chrome-profile
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       - ${HOME}/.bash_history:/home/developer/.bash_history
-    # start-vnc launches Xvfb/XFCE/x11vnc/websockify/Chrome/mcp-proxy in the
-    # background, then we exec tail to keep the container alive.
+    # start-vnc launches Xvfb/XFCE/x11vnc/websockify/Chrome in the background,
+    # then we exec tail to keep the container alive.
     # Running it here (not in postStartCommand) means VNC is available from
     # plain `docker compose up` without needing a devcontainer-aware editor.
     command: bash -c "start-vnc && exec tail -f /dev/null"
     user: developer
     ports:
-      - "6080:6080" # noVNC port (browser compatible GUI for VNC)
-      # - "5900:5900" # VNC port (GUI forwarding)
-      - "8080:8080" # Chrome DevTools MCP port (in case you want to use the MCP client from the host machine)
+      - "6080:6080"   # noVNC  — browser GUI for VNC
+      # - "5900:5900" # VNC raw port (optional, for native VNC clients)
+      - "9223:9223"   # Chrome remote debugging — host-side npx chrome-devtools-mcp connects here
     # Use host network mode to allow the devcontainer to access the host's network
     # This allows services started from within the devcontainer to be accessible from the host machine via localhost, simplifying local development.
     # network_mode: host

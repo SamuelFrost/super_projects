@@ -15,9 +15,11 @@
   "remoteUser": "developer",
   "updateRemoteUserUID": true,
 
-  // Populate .env with host UID and docker.sock GID before the image is built.
+  // Populate .devcontainer/.env with host UID and docker.sock GID before the image is built.
+  // Docker Compose resolves ${VAR} substitutions from the .env file in the same directory as
+  // the compose file (.devcontainer/), so the file must live there — not at the workspace root.
   // Also pre-create the gemini-data bind-mount dir so Docker doesn't create it as root.
-  "initializeCommand": "sh -c '(echo \"DEVELOPER_UID=$(id -u)\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\") > .env && mkdir -p .devcontainer/gemini-data'",
+  "initializeCommand": "sh -c 'printf \"DEVELOPER_UID=$(id -u)\\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\\n\" > .devcontainer/.env && mkdir -p .devcontainer/gemini-data'",
 
   // Expose localWorkspaceFolder so tools inside the container can reference the host path
   "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },

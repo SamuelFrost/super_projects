@@ -28,16 +28,22 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   gnupg \
   && rm -rf /var/lib/apt/lists/*
 
+# Generate a stable machine-id so Chrome doesn't emit the "0 characters" warning.
+RUN head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' > /etc/machine-id
+
 # Build args: populated by initializeCommand with host `id -u` and `docker.sock` gid
 ARG DEVELOPER_UID=501
 ARG DOCKER_GID=1
 
-# Create docker group with the host's GID so the mounted docker.sock is accessible
-RUN groupadd --gid ${DOCKER_GID} docker || groupadd --gid 1001 docker || groupadd docker || true
+# Ubuntu 24.04 ships a default `ubuntu` user at UID 1000; remove it before
+# creating `developer` so there is no UID conflict when the host uid is 1000.
+# Create docker group with the host's GID so the mounted docker.sock is accessible.
+RUN userdel --remove ubuntu 2>/dev/null || true && \
+    groupadd --gid ${DOCKER_GID} docker || groupadd --gid 1001 docker || groupadd docker || true
 
 # Create developer user matching the host UID (updateRemoteUserUID in devcontainer.json can adjust UID at start)
 RUN groupadd --system developer && \
-  useradd --system --uid ${DEVELOPER_UID} --gid developer --create-home --shell /bin/bash developer && \
+  useradd --uid ${DEVELOPER_UID} --gid developer --create-home --shell /bin/bash developer && \
   usermod -aG docker developer
 
 # Ensure developer owns their home directory.
@@ -65,7 +71,7 @@ RUN install -m 0755 -d /etc/apt/keyrings \
 # Installs only the CLI + Compose plugin — no daemon.
 # ------------------------------------------------------------------------------
 RUN install -m 0755 -d /etc/apt/keyrings \
-  && curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  && curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors https://download.docker.com/linux/ubuntu/gpg \
        -o /etc/apt/keyrings/docker.asc \
   && chmod a+r /etc/apt/keyrings/docker.asc
 # /etc/os-release provides VERSION_CODENAME (e.g. "noble" for 24.04)
@@ -108,8 +114,7 @@ ENV DISPLAY=:99 \
     VNC_PORT=5900 \
     NOVNC_PORT=6080 \
     NOVNC_RESOLUTION=1920x1080 \
-    CHROME_REMOTE_DEBUGGING_PORT=9223 \
-    MCP_PROXY_PORT=8080
+    CHROME_REMOTE_DEBUGGING_PORT=9223
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   novnc \
@@ -140,26 +145,41 @@ RUN install -m 0755 -d /etc/apt/keyrings \
        fonts-liberation \
        fonts-noto-cjk \
        dumb-init \
-       pipx \
   && rm -rf /var/lib/apt/lists/*
 
-# Wrapper so any launch path (terminal, desktop, start-vnc) gets the full set
-# of required flags without repetition. Reads ENV vars so values are tuneable
-# via `docker compose environment:` without rebuilding.
+# Idempotent Chrome launcher.
+# Checks the remote debugging endpoint to detect a running instance;
+# starts Chrome only if it is not already up.
+# Binds the remote debugging port on 0.0.0.0 so Docker port-publishing can
+# forward it to the host, allowing host-side MCP clients to connect via npx.
+# --remote-allow-origins=* lets chrome-devtools-mcp open the CDP WebSocket
+# (Chrome 111+ rejects cross-origin upgrades without this flag).
 RUN printf '#!/bin/bash\n\
-# Clear stale singleton lock files so a second invocation (e.g. from the\n\
-# terminal while start-vnc already launched Chrome, or after a container\n\
-# restart) never hits the "profile in use by another computer" error.\n\
+CHROME_PORT="${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n\
 _profile="${CHROME_USER_DATA_DIR:-/home/developer/chrome-profile}"\n\
-rm -f "$_profile/SingletonLock" "$_profile/SingletonSocket" "$_profile/SingletonCookie" 2>/dev/null\n\
-exec /usr/bin/google-chrome \\\n\
-  --no-sandbox \\\n\
-  --disable-gpu \\\n\
-  --remote-debugging-port="${CHROME_REMOTE_DEBUGGING_PORT:-9223}" \\\n\
-  --remote-debugging-address=127.0.0.1 \\\n\
-  --user-data-dir="$_profile" \\\n\
-  "$@"\n' \
-  > /usr/local/bin/chrome && chmod +x /usr/local/bin/chrome
+\n\
+_chrome_ready() {\n\
+  curl -sf --max-time 1 "http://localhost:${CHROME_PORT}/json/version" >/dev/null 2>&1\n\
+}\n\
+\n\
+if ! _chrome_ready; then\n\
+  chown -R "$(id -u):$(id -g)" "$_profile" 2>/dev/null || true\n\
+  rm -f "$_profile/SingletonLock" "$_profile/SingletonSocket" "$_profile/SingletonCookie" 2>/dev/null\n\
+  nohup env DISPLAY="${DISPLAY:-:99}" /usr/bin/google-chrome \\\n\
+    --no-sandbox \\\n\
+    --disable-gpu \\\n\
+    --remote-debugging-port="${CHROME_PORT}" \\\n\
+    --remote-debugging-address=0.0.0.0 \\\n\
+    --remote-allow-origins="*" \\\n\
+    --user-data-dir="$_profile" \\\n\
+    "${@:-about:blank}" >/tmp/chrome.log 2>&1 &\n\
+  for i in $(seq 20); do\n\
+    _chrome_ready && break\n\
+    sleep 0.5\n\
+  done\n\
+  _chrome_ready || echo "Chrome may have failed to start; check /tmp/chrome.log" >&2\n\
+fi\n\
+' > /usr/local/bin/chrome && chmod +x /usr/local/bin/chrome
 
 # Point the XFCE application menu launcher at the wrapper so it also picks up
 # all the flags above (including remote-debugging-port for MCP connectivity).
@@ -167,22 +187,12 @@ RUN sed -i \
   's|Exec=/usr/bin/google-chrome-stable|Exec=/usr/local/bin/chrome|g' \
   /usr/share/applications/google-chrome.desktop
 
-# ------------------------------------------------------------------------------
-# mcp-proxy — HTTP/WebSocket gateway that wraps stdio MCP servers.
-#   Installed system-wide via pipx so it is reachable by any user.
-#   PIPX_BIN_DIR=/usr/local/bin puts the `mcp-proxy` binary on the global PATH.
-#   Docs: https://github.com/sparfenyuk/mcp-proxy
-# ------------------------------------------------------------------------------
-ENV PIPX_HOME=/opt/pipx \
-    PIPX_BIN_DIR=/usr/local/bin
-RUN pipx install mcp-proxy
-
 # ==============================================================================
 # LIGHTER / MORE FREQUENTLY UPDATED LAYERS
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# Node.js 20 LTS via NodeSource (Ubuntu ships v18; chrome-devtools-mcp requires v20+)
+# Node.js 20 LTS via NodeSource (Ubuntu ships v18; Gemini CLI requires v20+)
 # npm is bundled with the NodeSource nodejs package — no separate install needed.
 # ------------------------------------------------------------------------------
 RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
@@ -204,11 +214,8 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
 USER developer:developer
 # Put developer's npm global bin on PATH so globally installed packages are reachable by name
 ENV PATH="/home/developer/.npm-global/bin:${PATH}"
-# Puppeteer bundled with chrome-devtools-mcp would download its own Chrome; skip it since we have Chrome installed.
-ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm config set prefix /home/developer/.npm-global && \
-    npm install -g @google/gemini-cli && \
-    npm install -g chrome-devtools-mcp
+    npm install -g @google/gemini-cli
 USER root
 
 # ------------------------------------------------------------------------------
@@ -222,7 +229,6 @@ pkill x11vnc 2>/dev/null\n\
 pkill websockify 2>/dev/null\n\
 pkill -f xfce4-session 2>/dev/null\n\
 pkill -f google-chrome 2>/dev/null\n\
-pkill mcp-proxy 2>/dev/null\n\
 sleep 0.3\n\
 nohup Xvfb :99 -screen 0 "${NOVNC_RESOLUTION:-1920x1080}x24" >/tmp/xvfb.log 2>&1 &\n\
 sleep 0.5\n\
@@ -232,14 +238,9 @@ setsid x11vnc -display :99 -nopw -forever -shared \\\n\
 sleep 0.5\n\
 nohup websockify --web /usr/share/novnc \\\n\
   "${NOVNC_PORT:-6080}" "localhost:${VNC_PORT:-5900}" >/tmp/websockify.log 2>&1 &\n\
-nohup env DISPLAY=:99 chrome chrome://inspect/#remote-debugging >/tmp/chrome.log 2>&1 &\n\
-sleep 1\n\
-nohup mcp-proxy --port "${MCP_PROXY_PORT:-8080}" -- \\\n\
-  chrome-devtools-mcp \\\n\
-  --browser-url "http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}" \\\n\
-  >/tmp/mcp-proxy.log 2>&1 &\n\
+chrome\n\
 echo "noVNC ready:  http://localhost:${NOVNC_PORT:-6080}/vnc.html"\n\
-echo "MCP proxy:    http://localhost:${MCP_PROXY_PORT:-8080}/mcp"\n\
+echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n\
 ' > /usr/local/bin/start-vnc && chmod +x /usr/local/bin/start-vnc
 
 # ------------------------------------------------------------------------------

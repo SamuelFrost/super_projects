@@ -51,9 +51,6 @@ devcontainer up --remove-existing-container
 # Open a shell inside the container
 devcontainer exec bash
 
-# Manually start/restart Chrome inside the container (auto-starts with the container)
-devcontainer exec chrome
-
 # Stop
 docker compose -f .devcontainer/compose.yaml down
 ```
@@ -81,7 +78,7 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
 - Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
 - Google Chrome, launched with remote debugging on port 9223 (accessible from the desktop GUI and via MCP)
-- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `npx` — Cursor connects to Chrome through the forwarded port, no custom proxy needed
+- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `npx` — Cursor connects to Chrome through the forwarded port.
 - Recommended extensions and settings for VS Code and Cursor
 - TODO: Add mise for version management
 - TODO: add rubylsp, stimulus-lsp, and herb-lsp for language servers

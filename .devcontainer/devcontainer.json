@@ -29,20 +29,6 @@
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
 
-  // VNC/noVNC/Chrome stack is started by the container's own command in compose.yaml,
-  // so it works with plain `docker compose up` without needing this hook.
-  // Desktop available at http://localhost:6080/vnc.html (no password).
-
-  // Explicitly forward VNC ports so Cursor/VSCode creates a proper tunnel that
-  // supports WebSocket upgrades. Without this, Docker Desktop's host-network
-  // proxy handles HTTP fine but drops WebSocket upgrade connections.
-  // "forwardPorts": [6080, 5900, 8080],
-  // "portsAttributes": {
-  //   "6080": { "label": "noVNC (browser)", "onAutoForward": "notify" },
-  //   "5900": { "label": "VNC", "onAutoForward": "silent" },
-  //   "8080": { "label": "Chrome DevTools MCP", "onAutoForward": "silent" }
-  // },
-
   "otherPortsAttributes": {
     "onAutoForward": "ignore"
   },

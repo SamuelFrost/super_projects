@@ -128,3 +128,9 @@ The `.gitignore` is configured to ignore everything **except** the files that de
 | `AGENTS.md` / `agents.md` | AI agent context for tools like Claude Code, Gemini CLI |
 
 Individual project directories cloned inside here are **not tracked** by this repo.
+
+## To create a new rails project
+
+```bash
+docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
+```

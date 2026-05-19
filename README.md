@@ -30,22 +30,45 @@ Individual project directories cloned inside here are **not tracked** by this re
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux)
-- One of the following:
-  - [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-  - [Cursor](https://cursor.sh/)
-  - [devcontainer CLI](https://containers.dev/install)
+- Atleast one of the following: 
+  - [Dev Containers CLI](https://github.com/devcontainers/cli)
+  - [VS Code](https://code.visualstudio.com/download) (with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers))
+  - [Cursor](https://cursor.com/download) (with the Dev Containers extension)
+
+Clone this repo where you keep your projects; you can make it the parent directory of all your projects, for a few select projects, or use it as a monorepo. It's recommended you fork this repo and keep your own version for your team.
+```sh
+git clone git@github.com:samuelfrost/super_projects.git
+```
+
+---
+
+### Option A — CLI (no IDE required)
+
+```sh
+# Build and start (runs initializeCommand to generate .env, then builds + starts)
+devcontainer up
+
+# Open a shell inside the container
+devcontainer exec bash
+
+# Open Google Chrome in the container with remote debugging for MCP
+devcontainer exec chrome
+
+# Stop
+docker compose -f .devcontainer/compose.yaml down
+```
+
+The VNC desktop and MCP proxy start automatically with the container — no extra steps needed.
+
+---
+
+### Option B — VS Code / Cursor
 
 - **WSL users:** enable `dev.containers.executeInWSL` in your editor settings so SSH and UID mounts resolve correctly
 
-### Steps
-
-1. Fork this repo (<https://github.com/samuelfrost/super_projects>) and clone it where you keep your projects:
-   ```sh
-   git clone git@github.com:samuelfrost/super_projects.git ~/projects
-   ```
-2. Open the directory in VS Code or Cursor.
-3. When prompted, click **Reopen in Container** (or run the _Dev Containers: Reopen in Container_ command).
-4. The container builds once; subsequent opens are fast.
+1. Open the directory in [VS Code](https://code.visualstudio.com/download) (with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)) or [Cursor](https://cursor.com/download) (with the Dev Containers extension).
+2. When prompted, click **Reopen in Container** (or run the _Dev Containers: Reopen in Container_ command).
+3. The container builds once; subsequent opens are fast.
 
 ## Devcontainer details
 
@@ -56,17 +79,29 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - Node.js + npm
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini` command; free tier available)
 - `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
-- recommended extensions for VS Code and Cursor
-- recommended settings for VS Code and Cursor
+- Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
+- Google Chrome, launched with remote debugging for MCP (accessible from the desktop GUI)
+- `chrome-devtools-mcp` + `mcp-proxy` (Streamable HTTP MCP at `http://localhost:8080/mcp`)
+- Recommended extensions and settings for VS Code and Cursor
+- TODO: Add mise for version management
+- TODO: add rubylsp, stimulus-lsp, and herb-lsp for language servers
+- TODO: fix file ownership issues with the devcontainer
 
+The VNC/Chrome/MCP stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
 ### Persisted data
 
 | Volume | Container path | Purpose |
 |--------|---------------|---------|
-| `.devcontainer/gemini-data/` | `~/.gemini` | Gemini CLI sessions/config (gitignored) |
-| `~/.bash_history` (host) | `~/.bash_history` | Shell history continuity |
-| `~/.ssh` (host) | `~/.ssh` | SSH key forwarding |
+| `.devcontainer/gemini-data/` (bind) | `~/.gemini` | Gemini CLI sessions/config (gitignored) |
+| `~/.bash_history` (host bind) | `~/.bash_history` | Shell history continuity |
+| `~/.ssh` (host bind) | `~/.ssh` | SSH key forwarding |
+| `super_projects_chrome-devtools-mcp-profile` (named volume) | `~/chrome-profile` | Chrome logins, cookies, extensions |
+
+The Chrome profile is stored in a named Docker volume so it survives container rebuilds. It is only lost if you explicitly remove the volume:
+```sh
+docker volume rm super_projects_chrome-devtools-mcp-profile
+```
 
 ### Enabling Claude Code CLI
 

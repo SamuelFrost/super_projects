@@ -15,15 +15,39 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Gemini CLI: .devcontainer/gemini-data -> ~/.gemini (persists across rebuilds)
       - ./gemini-data:/home/developer/.gemini
+      # Chrome profile: named volume so Docker initialises it from the image
+      # (a bind-mount would create the parent dir as root, crashing Chrome).
+      # Data survives container stop/start and is only lost on `docker volume rm`.
+      - chrome-devtools-mcp-profile:/home/developer/chrome-profile
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       - ${HOME}/.bash_history:/home/developer/.bash_history
-    command: tail -f /dev/null
+    # start-vnc launches Xvfb/XFCE/x11vnc/websockify/Chrome/mcp-proxy in the
+    # background, then we exec tail to keep the container alive.
+    # Running it here (not in postStartCommand) means VNC is available from
+    # plain `docker compose up` without needing a devcontainer-aware editor.
+    command: bash -c "start-vnc && exec tail -f /dev/null"
     user: developer
+    ports:
+      - "6080:6080" # noVNC port (browser compatible GUI for VNC)
+      # - "5900:5900" # VNC port (GUI forwarding)
+      - "8080:8080" # Chrome DevTools MCP port (in case you want to use the MCP client from the host machine)
     # Use host network mode to allow the devcontainer to access the host's network
     # This allows services started from within the devcontainer to be accessible from the host machine via localhost, simplifying local development.
-    network_mode: host
+    # network_mode: host
+    # Chrome requires more shared memory than Docker's default 64 MB
+    shm_size: '2gb'
     # Sometimes you may want to avoid using host for security reasons or due to port conflicts with the host machine.
     # To disable this, create a new network and use that network mode instead.
     # Note: in this case you will need to forward ports from the devcontainer to the host machine for services to be accessible.
-    # networks:
-    #   - super_projects_default
+    networks:
+      - super_projects_default
+
+volumes:
+  # Chrome profile data: logins, cookies, extensions, history.
+  # Survives container stop/start and rebuilds; lost only on `docker volume rm super_projects_chrome-devtools-mcp-profile`.
+  chrome-devtools-mcp-profile: {}
+
+networks:
+  super_projects_default:
+    external: false
+    name: super_projects_default

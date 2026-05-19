@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "chrome-devtools": {
+            "url": "http://localhost:8080/mcp",
+            "transport": "http"
+        }
+    }
+}

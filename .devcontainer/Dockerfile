@@ -40,8 +40,12 @@ RUN groupadd --system developer && \
   useradd --system --uid ${DEVELOPER_UID} --gid developer --create-home --shell /bin/bash developer && \
   usermod -aG docker developer
 
-# Ensure developer owns their home directory
-RUN chown -R developer:developer /home/developer
+# Ensure developer owns their home directory.
+# Pre-create the chrome-profile dir so Docker initialises the named volume with
+# developer ownership (Docker creates missing volume mount points as root).
+RUN chown -R developer:developer /home/developer && \
+    mkdir -p /home/developer/chrome-profile && \
+    chown developer:developer /home/developer/chrome-profile
 
 # ------------------------------------------------------------------------------
 # GitHub CLI (gh)
@@ -75,12 +79,118 @@ RUN . /etc/os-release && \
        docker-buildx-plugin \
   && rm -rf /var/lib/apt/lists/*
 
+# ==============================================================================
+# HEAVY LAYERS — placed early so they are cached and never re-run when lighter
+# things (Gemini CLI, startup scripts) change.
+# ==============================================================================
+
 # ------------------------------------------------------------------------------
-# Node.js + npm  (required for Gemini CLI and other JS-based tooling)
+# Desktop GUI: XFCE4
+#   ~300 MB; almost never changes → own layer for stable caching.
+#   dbus-x11:    X11 dbus integration required by the XFCE session manager.
+#   xfce4-terminal: default terminal emulator for the desktop.
 # ------------------------------------------------------------------------------
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
-  nodejs \
-  npm \
+  xfce4 \
+  xfce4-terminal \
+  dbus-x11 \
+  && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------------------------
+# VNC server stack
+#   Xvfb:        headless virtual X display (DISPLAY=:99)
+#   x11vnc:      shares the Xvfb display over VNC (port 5900)
+#   novnc + websockify: bridge VNC → WebSocket for browser access (port 6080)
+#   x11-xserver-utils: xsetroot and other X utilities
+#   xterm:       lightweight fallback terminal
+# ------------------------------------------------------------------------------
+ENV DISPLAY=:99 \
+    VNC_PORT=5900 \
+    NOVNC_PORT=6080 \
+    NOVNC_RESOLUTION=1920x1080 \
+    CHROME_REMOTE_DEBUGGING_PORT=9223 \
+    MCP_PROXY_PORT=8080
+
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+  novnc \
+  websockify \
+  x11-xserver-utils \
+  x11vnc \
+  xterm \
+  xvfb \
+  && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------------------------
+# Google Chrome
+#   ~250 MB; amd64-only (Google does not publish arm64 Chrome debs).
+#   fonts-liberation: core fonts Chrome needs for proper text rendering.
+#   A wrapper at /usr/local/bin/chrome applies the container-required flags:
+#     --no-sandbox       Chrome cannot create a user namespace sandbox inside Docker.
+#     --disable-gpu      No real GPU in the container; avoids slow GPU probe loops.
+# ------------------------------------------------------------------------------
+RUN install -m 0755 -d /etc/apt/keyrings \
+  && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+       | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
+  && chmod a+r /etc/apt/keyrings/google-chrome.gpg \
+  && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
+       > /etc/apt/sources.list.d/google-chrome.list \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends \
+       google-chrome-stable \
+       fonts-liberation \
+       fonts-noto-cjk \
+       dumb-init \
+       pipx \
+  && rm -rf /var/lib/apt/lists/*
+
+# Wrapper so any launch path (terminal, desktop, start-vnc) gets the full set
+# of required flags without repetition. Reads ENV vars so values are tuneable
+# via `docker compose environment:` without rebuilding.
+RUN printf '#!/bin/bash\n\
+# Clear stale singleton lock files so a second invocation (e.g. from the\n\
+# terminal while start-vnc already launched Chrome, or after a container\n\
+# restart) never hits the "profile in use by another computer" error.\n\
+_profile="${CHROME_USER_DATA_DIR:-/home/developer/chrome-profile}"\n\
+rm -f "$_profile/SingletonLock" "$_profile/SingletonSocket" "$_profile/SingletonCookie" 2>/dev/null\n\
+exec /usr/bin/google-chrome \\\n\
+  --no-sandbox \\\n\
+  --disable-gpu \\\n\
+  --remote-debugging-port="${CHROME_REMOTE_DEBUGGING_PORT:-9223}" \\\n\
+  --remote-debugging-address=127.0.0.1 \\\n\
+  --user-data-dir="$_profile" \\\n\
+  "$@"\n' \
+  > /usr/local/bin/chrome && chmod +x /usr/local/bin/chrome
+
+# Point the XFCE application menu launcher at the wrapper so it also picks up
+# all the flags above (including remote-debugging-port for MCP connectivity).
+RUN sed -i \
+  's|Exec=/usr/bin/google-chrome-stable|Exec=/usr/local/bin/chrome|g' \
+  /usr/share/applications/google-chrome.desktop
+
+# ------------------------------------------------------------------------------
+# mcp-proxy — HTTP/WebSocket gateway that wraps stdio MCP servers.
+#   Installed system-wide via pipx so it is reachable by any user.
+#   PIPX_BIN_DIR=/usr/local/bin puts the `mcp-proxy` binary on the global PATH.
+#   Docs: https://github.com/sparfenyuk/mcp-proxy
+# ------------------------------------------------------------------------------
+ENV PIPX_HOME=/opt/pipx \
+    PIPX_BIN_DIR=/usr/local/bin
+RUN pipx install mcp-proxy
+
+# ==============================================================================
+# LIGHTER / MORE FREQUENTLY UPDATED LAYERS
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Node.js 20 LTS via NodeSource (Ubuntu ships v18; chrome-devtools-mcp requires v20+)
+# npm is bundled with the NodeSource nodejs package — no separate install needed.
+# ------------------------------------------------------------------------------
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+       > /etc/apt/sources.list.d/nodesource.list \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends nodejs \
   && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
@@ -94,8 +204,43 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
 USER developer:developer
 # Put developer's npm global bin on PATH so globally installed packages are reachable by name
 ENV PATH="/home/developer/.npm-global/bin:${PATH}"
-RUN npm config set prefix /home/developer/.npm-global && npm install -g @google/gemini-cli
+# Puppeteer bundled with chrome-devtools-mcp would download its own Chrome; skip it since we have Chrome installed.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+RUN npm config set prefix /home/developer/.npm-global && \
+    npm install -g @google/gemini-cli && \
+    npm install -g chrome-devtools-mcp
 USER root
+
+# ------------------------------------------------------------------------------
+# start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
+#   Safe to call repeatedly — kills stale processes first.
+#   Uses nohup so background processes survive when postStartCommand's shell exits.
+# ------------------------------------------------------------------------------
+RUN printf '#!/bin/bash\n\
+pkill Xvfb 2>/dev/null\n\
+pkill x11vnc 2>/dev/null\n\
+pkill websockify 2>/dev/null\n\
+pkill -f xfce4-session 2>/dev/null\n\
+pkill -f google-chrome 2>/dev/null\n\
+pkill mcp-proxy 2>/dev/null\n\
+sleep 0.3\n\
+nohup Xvfb :99 -screen 0 "${NOVNC_RESOLUTION:-1920x1080}x24" >/tmp/xvfb.log 2>&1 &\n\
+sleep 0.5\n\
+nohup env DISPLAY=:99 startxfce4 >/tmp/xfce4.log 2>&1 &\n\
+setsid x11vnc -display :99 -nopw -forever -shared \\\n\
+  -rfbport "${VNC_PORT:-5900}" >/tmp/x11vnc.log 2>&1 &\n\
+sleep 0.5\n\
+nohup websockify --web /usr/share/novnc \\\n\
+  "${NOVNC_PORT:-6080}" "localhost:${VNC_PORT:-5900}" >/tmp/websockify.log 2>&1 &\n\
+nohup env DISPLAY=:99 chrome chrome://inspect/#remote-debugging >/tmp/chrome.log 2>&1 &\n\
+sleep 1\n\
+nohup mcp-proxy --port "${MCP_PROXY_PORT:-8080}" -- \\\n\
+  chrome-devtools-mcp \\\n\
+  --browser-url "http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}" \\\n\
+  >/tmp/mcp-proxy.log 2>&1 &\n\
+echo "noVNC ready:  http://localhost:${NOVNC_PORT:-6080}/vnc.html"\n\
+echo "MCP proxy:    http://localhost:${MCP_PROXY_PORT:-8080}/mcp"\n\
+' > /usr/local/bin/start-vnc && chmod +x /usr/local/bin/start-vnc
 
 # ------------------------------------------------------------------------------
 # Claude Code CLI (commented out; uncomment and rebuild to enable)
@@ -122,4 +267,7 @@ RUN echo 'cd /workspaces' >> /home/developer/.bashrc
 
 USER developer:developer
 
-CMD ["tail", "-f", "/dev/null"]
+# dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
+# compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["start-vnc", "&&", "tail", "-f", "/dev/null"]

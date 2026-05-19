@@ -15,8 +15,9 @@
   "remoteUser": "developer",
   "updateRemoteUserUID": true,
 
-  // Populate .env with host UID and docker.sock GID before the image is built
-  "initializeCommand": "sh -c '(echo \"DEVELOPER_UID=$(id -u)\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\") > .env'",
+  // Populate .env with host UID and docker.sock GID before the image is built.
+  // Also pre-create the gemini-data bind-mount dir so Docker doesn't create it as root.
+  "initializeCommand": "sh -c '(echo \"DEVELOPER_UID=$(id -u)\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\") > .env && mkdir -p .devcontainer/gemini-data'",
 
   // Expose localWorkspaceFolder so tools inside the container can reference the host path
   "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },
@@ -25,6 +26,20 @@
     "EDITOR": "code",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
+
+  // VNC/noVNC/Chrome stack is started by the container's own command in compose.yaml,
+  // so it works with plain `docker compose up` without needing this hook.
+  // Desktop available at http://localhost:6080/vnc.html (no password).
+
+  // Explicitly forward VNC ports so Cursor/VSCode creates a proper tunnel that
+  // supports WebSocket upgrades. Without this, Docker Desktop's host-network
+  // proxy handles HTTP fine but drops WebSocket upgrade connections.
+  // "forwardPorts": [6080, 5900, 8080],
+  // "portsAttributes": {
+  //   "6080": { "label": "noVNC (browser)", "onAutoForward": "notify" },
+  //   "5900": { "label": "VNC", "onAutoForward": "silent" },
+  //   "8080": { "label": "Chrome DevTools MCP", "onAutoForward": "silent" }
+  // },
 
   "otherPortsAttributes": {
     "onAutoForward": "ignore"

@@ -119,14 +119,15 @@ The `.gitignore` is configured to ignore everything **except** the files that de
 
 Individual project directories cloned inside here are **not tracked** by this repo.
 
-## To create a new rails project
+## Simple example project: To create a new rails project monorepo
+<!-- note: Using this as a monorepo is a recommended pattern of this (if you plan to use it as a monorepo, you would want to fork and rename the repo, and remove the git ignores in this case), if you want to instead use it as a parent directory for this example, simply create the subdirectory and run the command and put the docker compose file inside it as desired. -->
 
 ```bash
 docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
 ```
 For best results, set up a docker-compose.yaml file to run postgres and the sample app in the same network so they can communicate with each other.
 
-Example docker-compose.yaml file:
+Example docker-compose.yaml file (place in the parent directory of the sample app, if following the above command, it will be directory of this repo or where you executed the command):
 ```yaml
 name: super_projects_samples
 

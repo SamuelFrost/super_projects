@@ -23,6 +23,9 @@ services:
       # across rebuilds so `mise install` only re-runs for new/changed tool versions.
       # Lost only on `docker volume rm super_projects_mise-data`.
       - mise-data:/home/developer/.local/share/mise
+      # SSH keys: bind-mounted from host home directory for continuity with non-devcontainer shells
+      # Note: this increases the risk of SSH key exposure such as in the case the container is compromised.
+      - ${HOME}/.ssh:/home/developer/.ssh:cached
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       - ${HOME}/.bash_history:/home/developer/.bash_history
     # start-vnc + mise install run here (not in the Dockerfile) so image builds stay

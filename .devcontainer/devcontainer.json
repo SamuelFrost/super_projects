@@ -6,12 +6,15 @@
   "workspaceFolder": "/workspaces/",
   "shutdownAction": "none",
   "mounts": [
-    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
-    // For the following source path to work correctly when using devcontainers through VSCode/Cursor with WSL
-    // you will need to enable the user setting "dev.containers.executeInWSL"
-    "source=~/.ssh,target=/home/developer/.ssh,type=bind,consistency=cached"
+    {
+      // Workspace, SSH, and bash history mounts live in compose.yaml so they apply to
+      // `docker compose up` / `devcontainer up` without relying on this file.
+      // "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+      // For the following source path to work correctly when using devcontainers through VSCode/Cursor with WSL
+      // you will need to enable the user setting "dev.containers.executeInWSL"
+      // "source=~/.ssh,target=/home/developer/.ssh,type=bind,consistency=cached"
+    }
   ],
-
   "remoteUser": "developer",
   "updateRemoteUserUID": true,
 

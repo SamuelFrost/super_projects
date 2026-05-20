@@ -124,3 +124,55 @@ Individual project directories cloned inside here are **not tracked** by this re
 ```bash
 docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
 ```
+For best results, set up a docker-compose.yaml file to run postgres and the sample app in the same network so they can communicate with each other.
+
+Example docker-compose.yaml file:
+```yaml
+name: super_projects_samples
+
+services:
+  sample_app_1:
+    build:
+      context: ./sample_app_1
+      dockerfile: Dockerfile
+    environment:
+      - RAILS_ENV=development
+      - SECRET_KEY_BASE=secret
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/sample_app_1_development
+    ports:
+      - "3000:80"
+      # available on the host machine at http://localhost:3000
+      # available within the container at http://sample_app_1 (note, you will need to add `config.hosts << "sample_app_1"` to config/environments/development.rb to access it from the chrome service inside the devcontainer)
+    volumes:
+      - ${LOCAL_WORKSPACE_FOLDER:-.}/sample_app_1:/rails
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - super_projects_default
+
+  postgres:
+    image: postgres:18.3
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sample_app_1_development
+    volumes:
+      - sample_app_1_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - super_projects_default
+
+networks:
+  super_projects_default:
+    external: true
+
+volumes:
+  sample_app_1_postgres_data:
+    external: false
+    name: sample_app_1_postgres_data
+```

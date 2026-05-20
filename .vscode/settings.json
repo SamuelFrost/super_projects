@@ -11,11 +11,6 @@
     // -------------------------------------------------------------------------
     "languageServerHerb.linter.enabled": true,
     "languageServerHerb.formatter.enabled": true,
-    "languageServerHerb.ruby.lint": [
-        // "rubocop",
-        // "reek",
-        // "brakeman"
-    ],
 
     // -------------------------------------------------------------------------
     // Spell checker — add project-specific words here

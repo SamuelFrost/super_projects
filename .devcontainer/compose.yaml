@@ -19,13 +19,17 @@ services:
       # (a bind-mount would create the parent dir as root, crashing Chrome).
       # Data survives container stop/start and is only lost on `docker volume rm`.
       - chrome-devtools-mcp-profile:/home/developer/chrome-profile
+      # mise tool cache: persists downloaded archives and compiled/pre-built installs
+      # across rebuilds so `mise install` only re-runs for new/changed tool versions.
+      # Lost only on `docker volume rm super_projects_mise-data`.
+      - mise-data:/home/developer/.local/share/mise
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       - ${HOME}/.bash_history:/home/developer/.bash_history
-    # start-vnc launches Xvfb/XFCE/x11vnc/websockify/Chrome in the background,
-    # then we exec tail to keep the container alive.
-    # Running it here (not in postStartCommand) means VNC is available from
-    # plain `docker compose up` without needing a devcontainer-aware editor.
-    command: bash -c "start-vnc && exec tail -f /dev/null"
+    # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
+    # fast and tool installs persist in the mise-data volume across rebuilds.
+    # Works with plain `docker compose up` and with Cursor/VS Code devcontainers.
+    command: bash -c "start-vnc && cd /workspaces && mise install && exec tail -f /dev/null"
+    hostname: super_projects
     user: developer
     ports:
       - "6080:6080"   # noVNC  — browser GUI for VNC
@@ -46,6 +50,10 @@ volumes:
   # Chrome profile data: logins, cookies, extensions, history.
   # Survives container stop/start and rebuilds; lost only on `docker volume rm super_projects_chrome-devtools-mcp-profile`.
   chrome-devtools-mcp-profile: {}
+  # mise downloads and installs (~/.local/share/mise).
+  # Survives rebuilds so tool versions don't need to be re-downloaded or recompiled.
+  # Lost only on `docker volume rm super_projects_mise-data`.
+  mise-data: {}
 
 networks:
   super_projects_default:

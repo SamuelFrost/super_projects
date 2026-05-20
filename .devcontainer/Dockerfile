@@ -1,6 +1,8 @@
 ARG UBUNTU_VERSION=24.04
 FROM ubuntu:${UBUNTU_VERSION}
 
+WORKDIR /workspaces
+
 # Prevent interactive prompts during apt installs
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=en_US.UTF-8 \
@@ -84,11 +86,17 @@ RUN groupadd --system developer && \
   usermod -aG docker developer
 
 # Ensure developer owns their home directory.
-# Pre-create the chrome-profile dir so Docker initialises the named volume with
-# developer ownership (Docker creates missing volume mount points as root).
+# Pre-create directories that will be backed by named volumes so Docker
+# initialises those volumes with developer ownership rather than root
+# (Docker creates missing mount-point directories as root if they don't exist).
 RUN chown -R developer:developer /home/developer && \
-    mkdir -p /home/developer/chrome-profile && \
-    chown developer:developer /home/developer/chrome-profile
+    mkdir -p /home/developer/chrome-profile \
+             /home/developer/.local/share/mise \
+             /home/developer/.local/state/mise && \
+    chown -R developer:developer \
+             /home/developer/chrome-profile \
+             /home/developer/.local/share/mise \
+             /home/developer/.local/state/mise
 
 # ------------------------------------------------------------------------------
 # GitHub CLI (gh)
@@ -252,6 +260,9 @@ RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
   && apt-get update -qq && apt-get install -y --no-install-recommends mise \
   && rm -rf /var/lib/apt/lists/*
 
+# Activate mise for interactive terminals so they pick up mise-managed tools.
+RUN echo 'eval "$(mise activate bash)"' >> /home/developer/.bashrc
+
 # ------------------------------------------------------------------------------
 # AI coding CLI: Gemini CLI.  Run `gemini` in the terminal.
 #   - Free tier: run `gemini` and sign in with Google (no API key needed).
@@ -261,12 +272,6 @@ RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
 #   Docs: https://github.com/google-gemini/gemini-cli
 # ------------------------------------------------------------------------------
 USER developer:developer
-# mise shims first so mise-managed tools shadow system ones; npm-global bin follows.
-# MISE_TRUSTED_CONFIG_PATHS pre-trusts /workspaces and all subdirectories so mise
-# reads each project's .mise.toml without prompting for `mise trust`.
-ENV PATH="/home/developer/.local/share/mise/shims:/home/developer/.npm-global/bin:${PATH}" \
-    MISE_TRUSTED_CONFIG_PATHS=/workspaces
-RUN mkdir -p /home/developer/.config/mise
 RUN npm config set prefix /home/developer/.npm-global && \
     npm install -g @google/gemini-cli
 USER root
@@ -314,21 +319,6 @@ echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n
 #   chmod 755 /tmp/claude; \
 #   mv /tmp/claude /usr/local/bin/claude
 
-# Start new shells in /workspaces; activate mise so interactive terminals pick up
-# mise-managed tools automatically (shims handle non-interactive scripts via PATH).
-USER root
-RUN echo 'cd /workspaces' >> /home/developer/.bashrc && \
-    echo 'eval "$(mise activate bash)"' >> /home/developer/.bashrc
-
-# ==============================================================================
-# BUILD-TIME TOOL INSTALLATION (optional — uncomment to bake versions into image)
-# ==============================================================================
-COPY --chown=developer:developer .mise.toml /workspaces/.mise.toml
-USER developer:developer
-RUN cd /workspaces && mise install
-
-
-WORKDIR /workspaces
 USER developer:developer
 # dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
 # compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.

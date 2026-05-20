@@ -78,6 +78,7 @@ The VNC/Chrome stack starts automatically when the container starts and can be r
 | `~/.bash_history` (host bind) | `~/.bash_history` | Shell history continuity |
 | `~/.ssh` (host bind) | `~/.ssh` | SSH key forwarding |
 | `super_projects_chrome-devtools-mcp-profile` (named volume) | `~/chrome-profile` | Chrome logins, cookies, extensions |
+| `super_projects_mise-data` (named volume) | `~/.local/share/mise` | mise downloads and tool installs |
 
 The Chrome profile is stored in a named Docker volume so it survives container rebuilds. It is only lost if you explicitly remove the volume:
 ```sh
@@ -86,22 +87,11 @@ docker volume rm super_projects_chrome-devtools-mcp-profile
 
 ### Tool version management (mise)
 
-`mise` is pre-installed and activated in every shell. Configure the tools your project needs by editing `.mise.toml` at the repo root:
+`mise` is pre-installed and activated in every shell. Configure the tools your project needs by editing `.mise.toml` or including a `mise.toml` or `.tool-versions` file in the a project's directory see [mise documentation](https://mise.jdx.dev/getting-started.html) for more details.
 
-```toml
-[tools]
-ruby   = "3.4"
-node   = "22"
-python = "3.13"
-```
+Tools defined in the top level directory `.mise.toml` are installed automatically when the container starts (`mise install` in `compose.yaml`). Note: downloads and installs are stored in the `mise-data` Docker volume, so they will persist across container rebuilds unless you explicitly remove the volume with `docker volume rm super_projects_mise-data`.
 
-Then install them inside the container:
-
-```sh
-mise install
-```
-
-**Baking tools into the image at build time** (faster cold starts, useful for CI or large teams): uncomment the two `COPY`/`RUN` lines near the bottom of `.devcontainer/Dockerfile`, then rebuild. The cache only busts when `.mise.toml` changes, so unrelated Dockerfile edits remain fully cached.
+To install tools from mise in a particular project directory run `mise install` in the project directory.
 
 ### Enabling Claude Code CLI
 

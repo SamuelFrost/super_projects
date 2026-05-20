@@ -18,6 +18,8 @@ auto_install = true
 # Use pre-built Ruby binaries instead of compiling from source.
 # Becomes the default in mise 2026.8; set to true only if you need custom build flags.
 ruby.compile = false
+trusted_config_paths = ["/workspaces"]
+
 
 [tools]
 ruby    = "4.0"

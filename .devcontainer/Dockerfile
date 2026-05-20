@@ -271,21 +271,6 @@ RUN npm config set prefix /home/developer/.npm-global && \
     npm install -g @google/gemini-cli
 USER root
 
-# ==============================================================================
-# BUILD-TIME TOOL INSTALLATION (optional — uncomment to bake versions into image)
-# ==============================================================================
-# If you maintain a .mise.toml at the workspace root, you can have mise install
-# the exact tool versions at image build time so every developer gets them
-# pre-cached without waiting on first-run downloads.
-#
-# 1. Uncomment the two lines below.
-# 2. Rebuild the image (`devcontainer up --remove-existing-container`).
-#    The COPY line will only bust the cache when .mise.toml actually changes,
-#    so normal Dockerfile edits above this point stay fully cached.
-#
-# COPY --chown=developer:developer ../.mise.toml /workspaces/.mise.toml
-# RUN cd /workspaces && mise trust && mise install
-
 # ------------------------------------------------------------------------------
 # start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
 #   Safe to call repeatedly — kills stale processes first.
@@ -329,15 +314,22 @@ echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n
 #   chmod 755 /tmp/claude; \
 #   mv /tmp/claude /usr/local/bin/claude
 
-WORKDIR /workspaces
-
 # Start new shells in /workspaces; activate mise so interactive terminals pick up
 # mise-managed tools automatically (shims handle non-interactive scripts via PATH).
+USER root
 RUN echo 'cd /workspaces' >> /home/developer/.bashrc && \
     echo 'eval "$(mise activate bash)"' >> /home/developer/.bashrc
 
+# ==============================================================================
+# BUILD-TIME TOOL INSTALLATION (optional — uncomment to bake versions into image)
+# ==============================================================================
+COPY --chown=developer:developer .mise.toml /workspaces/.mise.toml
 USER developer:developer
+RUN cd /workspaces && mise install
 
+
+WORKDIR /workspaces
+USER developer:developer
 # dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
 # compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

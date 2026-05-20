@@ -3,8 +3,8 @@ name: "super_projects"
 services:
   devcontainer:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
       args:
         DEVELOPER_UID: ${DEVELOPER_UID:-501}
         DOCKER_GID: ${DOCKER_GID:-1}

@@ -25,9 +25,10 @@ services:
       - mise-data:/home/developer/.local/share/mise
       # SSH keys: bind-mounted from host home directory for continuity with non-devcontainer shells
       # Note: this increases the risk of SSH key exposure such as in the case the container is compromised.
-      - ${HOME}/.ssh:/home/developer/.ssh:cached
+      # HOST_HOME_DIR comes from initializeCommand (.devcontainer/.env); avoids empty ${HOME} when IDE runs compose. TODO: may work without the special HOST_HOME_DIR treatment, just need to test it out on different machines (mac/wsl/linux).
+      - ${HOST_HOME_DIR:-${HOME}}/.ssh:/home/developer/.ssh:cached
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
-      - ${HOME}/.bash_history:/home/developer/.bash_history
+      - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
     # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
     # fast and tool installs persist in the mise-data volume across rebuilds.
     # Works with plain `docker compose up` and with Cursor/VS Code devcontainers.

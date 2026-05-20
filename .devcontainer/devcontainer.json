@@ -5,24 +5,15 @@
   "service": "devcontainer",
   "workspaceFolder": "/workspaces/",
   "shutdownAction": "none",
-  "mounts": [
-    {
-      // Workspace, SSH, and bash history mounts live in compose.yaml so they apply to
-      // `docker compose up` / `devcontainer up` without relying on this file.
-      // "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
-      // For the following source path to work correctly when using devcontainers through VSCode/Cursor with WSL
-      // you will need to enable the user setting "dev.containers.executeInWSL"
-      // "source=~/.ssh,target=/home/developer/.ssh,type=bind,consistency=cached"
-    }
-  ],
-  "remoteUser": "developer",
-  "updateRemoteUserUID": true,
+
+  // "remoteUser": "developer",
+  // "updateRemoteUserUID": true,
 
   // Populate .devcontainer/.env with host UID and docker.sock GID before the image is built.
   // Docker Compose resolves ${VAR} substitutions from the .env file in the same directory as
   // the compose file (.devcontainer/), so the file must live there — not at the workspace root.
   // Also pre-create the gemini-data bind-mount dir so Docker doesn't create it as root.
-  "initializeCommand": "sh -c 'printf \"DEVELOPER_UID=$(id -u)\\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\\n\" > .devcontainer/.env && mkdir -p .devcontainer/gemini-data'",
+  "initializeCommand": "sh -c 'printf \"DEVELOPER_UID=$(id -u)\\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\\nHOST_HOME_DIR=$HOME\\n\" > .devcontainer/.env && mkdir -p .devcontainer/gemini-data'",
 
   // Expose localWorkspaceFolder so tools inside the container can reference the host path
   "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },

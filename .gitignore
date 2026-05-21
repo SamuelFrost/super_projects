@@ -13,6 +13,7 @@
 !.vscode/
 !.vscode/**
 !README.md
+!LICENSE
 !AGENTS.md
 !agents.md
 !.mise.toml

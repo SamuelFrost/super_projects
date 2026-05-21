@@ -115,9 +115,17 @@ The `.gitignore` is configured to ignore everything **except** the files that de
 | `.claude/` | Claude project config |
 | `.vscode/` | VS Code settings and extension recommendations |
 | `README.md` | This file |
+| `LICENSE` | Super Projects License (attribution required when reusing) |
 | `AGENTS.md` / `agents.md` | AI agent context for tools like Claude Code, Gemini CLI |
 
 Individual project directories cloned inside here are **not tracked** by this repo.
+
+## License
+
+This project is licensed under the [Super Projects License](LICENSE). You may use, modify, and distribute this code freely, provided you:
+
+- Include a copy of [LICENSE](LICENSE) in any repository or distribution that uses this code
+- Give credit to **Samuel Anthony Frost** with a web URL to a page he manages that includes a way to contact him (for example [GitHub](https://github.com/SamuelFrost) or [LinkedIn](https://www.linkedin.com/in/samuel-frost-0a8711a3))
 
 ## Simple example project: To create a new rails project monorepo
 <!-- note: Using this as a monorepo is a recommended pattern of this (if you plan to use it as a monorepo, you would want to fork and rename the repo, and remove the git ignores in this case), if you want to instead use it as a parent directory for this example, simply create the subdirectory and run the command and put the docker compose file inside it as desired. -->

@@ -122,9 +122,11 @@ Individual project directories cloned inside here are **not tracked** by this re
 
 ## License
 
-This project is licensed under the [Super Projects License](LICENSE). You may use, modify, and distribute this code freely, provided you:
+This project is licensed under the [Super Projects License](LICENSE). The license applies only to the **super_projects scaffold** tracked in this repository (devcontainer, IDE config, `README.md`, `LICENSE`, and related files listed in [What's tracked in git](#whats-tracked-in-git)). It does **not** apply to files you or your company add — application code, databases, assets, and other project directories remain yours under whatever terms you choose.
 
-- Include a copy of [LICENSE](LICENSE) in any repository or distribution that uses this code
+When reusing or redistributing super_projects scaffold files, you must:
+
+- Include a copy of [LICENSE](LICENSE) in any repository or distribution that incorporates that scaffold
 - Give credit to **Samuel Anthony Frost** with a web URL to a page he manages that includes a way to contact him (for example [GitHub](https://github.com/SamuelFrost), [LinkedIn](https://www.linkedin.com/in/samuel-frost-0a8711a3), or [X](https://x.com/Samuelfrost7))
 
 ## Simple example project: To create a new rails project monorepo

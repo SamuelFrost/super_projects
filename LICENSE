@@ -2,9 +2,34 @@ Super Projects License
 
 Copyright (c) 2026 Samuel Anthony Frost
 
+Scope of licensed material ("Software")
+
+This license applies only to the development-environment scaffolding distributed
+in the super_projects repository (https://github.com/SamuelFrost/super_projects)
+by Samuel Anthony Frost — referred to below as the "Software". The Software
+includes the files and configurations that are part of that repository, such as
+(when present):
+
+- `.devcontainer/` (Dockerfile, compose, devcontainer config, and related docs)
+- `.cursor/`, `.claude/`, `.vscode/` (IDE and agent configuration)
+- `README.md`, `LICENSE`, `AGENTS.md` / `agents.md`, `.mise.toml`, `.gitignore`
+
+This license does NOT apply to:
+
+- Any files, directories, or configurations created or added by a person or
+  company using super_projects (including application source code, databases,
+  assets, secrets, and team- or project-specific customizations)
+- Project directories or other content that merely lives alongside the Software
+  in a parent directory, monorepo, or container workspace
+
+When you fork, clone, or copy super_projects, this license covers the scaffold
+you received from that distribution. Your own additions and the work of your
+organization remain under terms you choose; they are not automatically licensed
+under the Super Projects License.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
+of the Software and associated documentation files included in that distribution,
+to deal in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
@@ -17,9 +42,10 @@ furnished to do so, subject to the following conditions:
    and/or other materials provided with the distribution.
 
 3. A complete copy of this license file must be included in any repository,
-   distribution, or substantial portion of the Software that incorporates
-   this code (for example, when forking, vendoring, or bundling into another
-   project).
+   distribution, or substantial portion that incorporates the Software (as
+   defined in the Scope section above — for example, when forking, vendoring,
+   or bundling super_projects scaffold files into another project). This
+   requirement does not extend to unrelated files added by the licensee.
 
 4. Attribution. Any use, reproduction, modification, or distribution of the
    Software must give appropriate credit to Samuel Anthony Frost. Attribution

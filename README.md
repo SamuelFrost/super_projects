@@ -115,7 +115,7 @@ The `.gitignore` is configured to ignore everything **except** the files that de
 | `.claude/` | Claude project config |
 | `.vscode/` | VS Code settings and extension recommendations |
 | `README.md` | This file |
-| `LICENSE` | Super Projects License (attribution required when reusing) |
+| `SUPER_PROJECTS_LICENSE` | Super Projects SUPER_PROJECTS_LICENSE (attribution required when reusing) |
 | `AGENTS.md` / `agents.md` | AI agent context for tools like Claude Code, Gemini CLI |
 
 Individual project directories cloned inside here are **not tracked** by this repo.
@@ -126,8 +126,9 @@ This project is licensed under the [Super Projects License](LICENSE). The licens
 
 When reusing or redistributing super_projects scaffold files, you must:
 
-- Include a copy of [LICENSE](LICENSE) in any repository or distribution that incorporates that scaffold
-- Give credit to **Samuel Anthony Frost** with a web URL to a page he manages that includes a way to contact him (for example [GitHub](https://github.com/SamuelFrost), [LinkedIn](https://www.linkedin.com/in/samuel-frost-0a8711a3), or [X](https://x.com/Samuelfrost7))
+- Include a copy of [SUPER_PROJECTS_LICENSE](SUPER_PROJECTS_LICENSE) in any repository or distribution that incorporates that scaffold
+- Give credit to **Samuel Anthony Frost** with a web URL to a page he manages that includes a way to contact him (for example [GitHub](https://github.com/SamuelFrost), [LinkedIn](https://www.linkedin.com/in/samuel-frost-0a8711a3), or [X](https://x.com/Samuelfrost7)). (Including the SUPER PROJECTS LICENSE satisfies this requirement; the readme and such may be modified as needed)
+
 
 ## Simple example project: To create a new rails project monorepo
 <!-- note: Using this as a monorepo is a recommended pattern of this (if you plan to use it as a monorepo, you would want to fork and rename the repo, and remove the git ignores in this case), if you want to instead use it as a parent directory for this example, simply create the subdirectory and run the command and put the docker compose file inside it as desired. -->

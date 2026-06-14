@@ -32,7 +32,7 @@ services:
     # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
     # fast and tool installs persist in the mise-data volume across rebuilds.
     # Works with plain `docker compose up` and with Cursor/VS Code devcontainers.
-    command: bash -c "start-vnc && cd /workspaces && mise install && exec tail -f /dev/null"
+    command: bash -c "start-vnc && cd /workspaces && mise trust /workspaces/.mise.toml && mise install && exec tail -f /dev/null"
     hostname: super_projects
     user: developer
     ports:
@@ -61,5 +61,4 @@ volumes:
 
 networks:
   super_projects_default:
-    external: false
     name: super_projects_default

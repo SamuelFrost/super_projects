@@ -287,7 +287,7 @@ RUN mkdir -p /home/developer/.config/mise && \
     chown -R developer:developer /home/developer/.config
 
 # Activate mise for interactive terminals so they pick up mise-managed tools.
-RUN echo '[ -r /workspaces/.devcontainer/mise-shell-init.sh ] && . /workspaces/.devcontainer/mise-shell-init.sh || eval "$(mise activate bash)"' >> /home/developer/.bashrc \
+RUN echo '[ -r /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh ] && . /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh || eval "$(mise activate bash)"' >> /home/developer/.bashrc \
   && echo '[ -r /etc/profile.d/ssh-agent.sh ] && . /etc/profile.d/ssh-agent.sh' >> /home/developer/.bashrc \
   && echo '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' >> /home/developer/.bashrc
 

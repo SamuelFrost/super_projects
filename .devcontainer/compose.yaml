@@ -43,7 +43,7 @@ services:
         if [ -S "$$AGENT_SOCK" ]; then
           ssh-add -l >/dev/null 2>&1 || rm -f "$$AGENT_SOCK"
         fi
-        exec ssh-agent -a "$$AGENT_SOCK" bash -c 'ensure-auth; print-cursor-worker-hint; grep -q mise-shell-init.sh ~/.bashrc 2>/dev/null || echo "[ -r /workspaces/.devcontainer/mise-shell-init.sh ] && . /workspaces/.devcontainer/mise-shell-init.sh" >> ~/.bashrc; start-vnc && cd /workspaces && mise trust /workspaces/.mise.toml && mise install && exec tail -f /dev/null'
+        exec ssh-agent -a "$$AGENT_SOCK" bash -c 'ensure-auth; print-cursor-worker-hint; grep -q mise-shell-init.sh ~/.bashrc 2>/dev/null || echo "[ -r /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh ] && . /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh" >> ~/.bashrc; start-vnc && cd /workspaces && mise trust /workspaces/.mise.toml && mise install && exec tail -f /dev/null'
     hostname: super_projects
     user: developer
     environment:

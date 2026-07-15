@@ -14,6 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # openssh-client: share host SSH credentials (needed for git operations over SSH)
 # vim:            quick terminal edits when SSH'd in
 # procps:         top, free, ps — system monitoring
+# ripgrep:        fast recursive search via the `rg` command
 # poppler-utils:  pdftotext etc. — lets agents/scripts read PDFs as text
 # ffmpeg:         probe/process video and audio (metadata, extract audio)
 # tzdata:         timezone data (suppressed interactive prompt via ENV above)
@@ -40,6 +41,7 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   openssh-client \
   vim \
   procps \
+  ripgrep \
   poppler-utils \
   ffmpeg \
   tzdata \
@@ -63,6 +65,11 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   g++ \
   autoconf \
   && rm -rf /var/lib/apt/lists/*
+
+# Route ssh/git clients to the container ssh-agent even when SSH_AUTH_SOCK is unset.
+RUN printf '%s\n' 'Host *' '  IdentityAgent /home/developer/.ssh/agent.sock' \
+  > /etc/ssh/ssh_config.d/99-shared-agent.conf \
+  && chmod 644 /etc/ssh/ssh_config.d/99-shared-agent.conf
 
 # Generate the en_US.UTF-8 locale so tools that invoke perl (e.g. ruby-build) don't warn.
 RUN locale-gen en_US.UTF-8
@@ -89,14 +96,11 @@ RUN groupadd --system developer && \
 # Pre-create directories that will be backed by named volumes so Docker
 # initialises those volumes with developer ownership rather than root
 # (Docker creates missing mount-point directories as root if they don't exist).
-RUN chown -R developer:developer /home/developer && \
-    mkdir -p /home/developer/chrome-profile \
+RUN mkdir -p /home/developer/chrome-profile \
              /home/developer/.local/share/mise \
-             /home/developer/.local/state/mise && \
-    chown -R developer:developer \
-             /home/developer/chrome-profile \
-             /home/developer/.local/share/mise \
-             /home/developer/.local/state/mise
+             /home/developer/.local/state/mise \
+             /home/developer/.config/gh && \
+    chown -R developer:developer /home/developer
 
 # ------------------------------------------------------------------------------
 # GitHub CLI (gh)
@@ -130,6 +134,26 @@ RUN . /etc/os-release && \
        docker-buildx-plugin \
   && rm -rf /var/lib/apt/lists/*
 
+# ------------------------------------------------------------------------------
+# Azure CLI (az)
+#   Installed from Microsoft's apt repository (deb822 format), matching the
+#   manual install steps in the docs so the version is reproducible and the
+#   layer stays cached.
+#   Docs: https://learn.microsoft.com/en-us/cli/azure/install-azure-cli
+# ------------------------------------------------------------------------------
+RUN install -m 0755 -d /etc/apt/keyrings \
+  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+       | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
+  && chmod a+r /etc/apt/keyrings/microsoft.gpg
+# /etc/os-release provides VERSION_CODENAME (e.g. "noble" for 24.04)
+RUN . /etc/os-release && \
+  printf "Types: deb\nURIs: https://packages.microsoft.com/repos/azure-cli/\nSuites: %s\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n" \
+    "${VERSION_CODENAME}" "$(dpkg --print-architecture)" \
+    > /etc/apt/sources.list.d/azure-cli.sources \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends azure-cli \
+  && rm -rf /var/lib/apt/lists/*
+
 # ==============================================================================
 # HEAVY LAYERS — placed early so they are cached and never re-run when lighter
 # things (Gemini CLI, startup scripts) change.
@@ -159,9 +183,25 @@ ENV DISPLAY=:99 \
     VNC_PORT=5900 \
     NOVNC_PORT=6080 \
     NOVNC_RESOLUTION=1920x1080 \
-    CHROME_REMOTE_DEBUGGING_PORT=9223
+    CHROME_REMOTE_DEBUGGING_PORT=9223 \
+    LIBGL_ALWAYS_SOFTWARE=1
 
+# --- VNC server stack dependencies ---
+# libegl1:        EGL library, needed for WebGL support in Chrome.
+# libgbm1:        GBM library, needed for hardware acceleration in Chrome.
+# libgl1:         OpenGL library, needed for graphics in Chrome.
+# libgl1-mesa-dri: Mesa OpenGL drivers, needed for graphics in Chrome.
+# novnc:          noVNC web client, needed for VNC access.
+# websockify:     WebSocket to TCP proxy, needed for noVNC.
+# x11-xserver-utils: X11 utilities, needed for X11 display management.
+# x11vnc:         VNC server, needed for VNC access.
+# xterm:          lightweight fallback terminal, needed for debugging.
+# xvfb:          virtual X display, needed for headless Chrome.
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+  libegl1 \
+  libgbm1 \
+  libgl1 \
+  libgl1-mesa-dri \
   novnc \
   websockify \
   x11-xserver-utils \
@@ -175,8 +215,9 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
 #   ~250 MB; amd64-only (Google does not publish arm64 Chrome debs).
 #   fonts-liberation: core fonts Chrome needs for proper text rendering.
 #   A wrapper at /usr/local/bin/chrome applies the container-required flags:
-#     --no-sandbox       Chrome cannot create a user namespace sandbox inside Docker.
-#     --disable-gpu      No real GPU in the container; avoids slow GPU probe loops.
+#     --no-sandbox              Chrome cannot create a user namespace sandbox inside Docker.
+#     --enable-unsafe-swiftshader  Software WebGL (no GPU in the container).
+#     --ignore-gpu-blocklist    Allow SwiftShader when Chrome would blocklist the GPU.
 # ------------------------------------------------------------------------------
 RUN install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
@@ -212,7 +253,8 @@ if ! _chrome_ready; then\n\
   rm -f "$_profile/SingletonLock" "$_profile/SingletonSocket" "$_profile/SingletonCookie" 2>/dev/null\n\
   nohup env DISPLAY="${DISPLAY:-:99}" /usr/bin/google-chrome \\\n\
     --no-sandbox \\\n\
-    --disable-gpu \\\n\
+    --ignore-gpu-blocklist \\\n\
+    --enable-unsafe-swiftshader \\\n\
     --remote-debugging-port="${CHROME_PORT}" \\\n\
     --remote-debugging-address=0.0.0.0 \\\n\
     --remote-allow-origins="*" \\\n\
@@ -271,7 +313,23 @@ RUN mkdir -p /home/developer/.config/mise && \
     chown -R developer:developer /home/developer/.config
 
 # Activate mise for interactive terminals so they pick up mise-managed tools.
-RUN echo 'eval "$(mise activate bash)"' >> /home/developer/.bashrc
+RUN echo '[ -r /workspaces/.devcontainer/mise-shell-init.sh ] && . /workspaces/.devcontainer/mise-shell-init.sh || eval "$(mise activate bash)"' >> /home/developer/.bashrc \
+  && echo '[ -r /etc/profile.d/ssh-agent.sh ] && . /etc/profile.d/ssh-agent.sh' >> /home/developer/.bashrc \
+  && echo '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' >> /home/developer/.bashrc
+
+# Ensure ssh-agent is running at ~/.ssh/agent.sock (bind-mounted with keys).
+RUN printf '%s\n' \
+  'export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"' \
+  '_agent_sock="$SSH_AUTH_SOCK"' \
+  'if [ -S "$_agent_sock" ]; then' \
+  '  ssh-add -l >/dev/null 2>&1 || rm -f "$_agent_sock"' \
+  'fi' \
+  'if [ ! -S "$_agent_sock" ]; then' \
+  '  eval "$(ssh-agent -a "$_agent_sock")"' \
+  'fi' \
+  'unset _agent_sock' \
+  > /etc/profile.d/ssh-agent.sh \
+  && chmod 644 /etc/profile.d/ssh-agent.sh
 
 # ------------------------------------------------------------------------------
 # AI coding CLI: Gemini CLI.  Run `gemini` in the terminal.
@@ -284,6 +342,13 @@ RUN echo 'eval "$(mise activate bash)"' >> /home/developer/.bashrc
 USER developer:developer
 RUN npm config set prefix /home/developer/.npm-global && \
     npm install -g @google/gemini-cli
+
+# ------------------------------------------------------------------------------
+# Cursor agent CLI — register this devcontainer as a My Machines Cloud Agent worker.
+#   Docs: https://cursor.com/docs/cloud-agent/my-machines
+# ------------------------------------------------------------------------------
+RUN curl https://cursor.com/install -fsS | bash
+ENV PATH="/home/developer/.local/bin:${PATH}"
 USER root
 
 # ------------------------------------------------------------------------------
@@ -298,7 +363,8 @@ pkill websockify 2>/dev/null\n\
 pkill -f xfce4-session 2>/dev/null\n\
 pkill -f google-chrome 2>/dev/null\n\
 sleep 0.3\n\
-nohup Xvfb :99 -screen 0 "${NOVNC_RESOLUTION:-1920x1080}x24" >/tmp/xvfb.log 2>&1 &\n\
+nohup Xvfb :99 -screen 0 "${NOVNC_RESOLUTION:-1920x1080}x24" \\\n\
+  +extension GLX +extension RENDER -noreset >/tmp/xvfb.log 2>&1 &\n\
 sleep 0.5\n\
 nohup env DISPLAY=:99 startxfce4 >/tmp/xfce4.log 2>&1 &\n\
 setsid x11vnc -display :99 -nopw -forever -shared \\\n\
@@ -310,6 +376,75 @@ chrome\n\
 echo "noVNC ready:  http://localhost:${NOVNC_PORT:-6080}/vnc.html"\n\
 echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n\
 ' > /usr/local/bin/start-vnc && chmod +x /usr/local/bin/start-vnc
+
+
+# ensure-auth: keep a container-local ssh-agent available and load common SSH keys.
+# Passphrase-protected keys prompt in interactive terminals; loaded keys persist until the container stops.
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  'set -euo pipefail' \
+  'CONTAINER_AGENT_SOCK="${HOME}/.ssh/agent.sock"' \
+  'export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$CONTAINER_AGENT_SOCK}"' \
+  'start_container_agent() {' \
+  '  export SSH_AUTH_SOCK="$CONTAINER_AGENT_SOCK"' \
+  '  if [ -S "$CONTAINER_AGENT_SOCK" ]; then' \
+  '    ssh-add -l >/dev/null 2>&1 || rm -f "$CONTAINER_AGENT_SOCK"' \
+  '  fi' \
+  '  if [ ! -S "$CONTAINER_AGENT_SOCK" ]; then' \
+  '    eval "$(ssh-agent -a "$CONTAINER_AGENT_SOCK")"' \
+  '  fi' \
+  '}' \
+  'key_fingerprint() { ssh-keygen -lf "$1" 2>/dev/null | awk "{print \$2}"; }' \
+  'key_in_agent() {' \
+  '  local fp="$1"' \
+  '  ssh-add -l 2>/dev/null | grep -qF "$fp"' \
+  '}' \
+  'try_add_key() {' \
+  '  local key="$1"' \
+  '  if [ -t 0 ]; then' \
+  '    ssh-add "$key"' \
+  '  else' \
+  '    ssh-add "$key" </dev/null 2>/dev/null' \
+  '  fi' \
+  '}' \
+  'start_container_agent' \
+  'shopt -s nullglob' \
+  'keys=("${HOME}"/.ssh/id_*)' \
+  'missing=()' \
+  'for key in "${keys[@]}"; do' \
+  '  [ -f "$key" ] || continue' \
+  '  case "$key" in *.pub|*known_hosts*|*config) continue ;; esac' \
+  '  fp="$(key_fingerprint "$key")" || continue' \
+  '  if key_in_agent "$fp"; then' \
+  '    echo "SSH $(basename "$key"): loaded"' \
+  '    continue' \
+  '  fi' \
+  '  if try_add_key "$key"; then' \
+  '    echo "SSH $(basename "$key"): loaded"' \
+  '  else' \
+  '    missing+=("$(basename "$key")")' \
+  '    echo "SSH $(basename "$key"): not loaded" >&2' \
+  '  fi' \
+  'done' \
+  'if [ ${#missing[@]} -gt 0 ]; then' \
+  '  echo "Load missing keys once in an interactive terminal, for example:" >&2' \
+  '  echo "  ssh-add ~/.ssh/<key-name>" >&2' \
+  'fi' \
+  'if gh auth status >/dev/null 2>&1; then' \
+  '  echo "GitHub CLI: authenticated"' \
+  'else' \
+  '  echo "GitHub CLI: run once (persists across rebuilds): gh auth login" >&2' \
+  'fi' \
+  > /usr/local/bin/ensure-auth && chmod +x /usr/local/bin/ensure-auth
+
+# print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
+RUN printf '#!/bin/bash\n\
+echo ""\n\
+echo "Cursor Cloud Agent (My Machines):"\n\
+echo "  agent login"\n\
+echo "  agent worker start --name \\"super_projects_devcontainer\\""\n\
+echo ""\n\
+' > /usr/local/bin/print-cursor-worker-hint && chmod +x /usr/local/bin/print-cursor-worker-hint
 
 # ------------------------------------------------------------------------------
 # Claude Code CLI (commented out; uncomment and rebuild to enable)
@@ -330,7 +465,8 @@ echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n
 #   mv /tmp/claude /usr/local/bin/claude
 
 USER developer:developer
+# USER root
 # dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
 # compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["start-vnc", "&&", "tail", "-f", "/dev/null"]
+CMD ["bash", "-c", "start-vnc && exec tail -f /dev/null"]

@@ -21,8 +21,11 @@
   "containerEnv": {
     "EDITOR": "code",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "MISE_TRUSTED_CONFIG_PATHS": "/workspaces"
+    "MISE_TRUSTED_CONFIG_PATHS": "/workspaces",
+    "SSH_AUTH_SOCK": "/home/developer/.ssh/agent.sock"
   },
+
+  "postStartCommand": "ensure-auth && print-cursor-worker-hint",
 
   "otherPortsAttributes": {
     "onAutoForward": "ignore"
@@ -46,6 +49,8 @@
         "eamodio.gitlens",
         "marcoroth.herb-lsp",
         "marcoroth.stimulus-lsp",
+        "biomejs.biome",
+        "vitest.explorer",
         "zoma.vscode-auto-open-workspace",
         "ms-azuretools.vscode-containers",
         "ms-vscode-remote.remote-containers",

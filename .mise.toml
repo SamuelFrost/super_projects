@@ -20,8 +20,10 @@ auto_install = true
 ruby.compile = false
 
 [tools]
+# Fallback when no nearer .tool-versions exists (e.g. workspace root scripts).
+# Subrepositories pin node via their own .tool-versions.
 ruby    = "4.0"
-# node    = "22"
+node    = "22"
 # python  = "3.13"
 # go      = "1.22"
 # java    = "temurin-21"

@@ -15,6 +15,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Gemini CLI: .devcontainer/gemini-data -> ~/.gemini (persists across rebuilds)
       - ./gemini-data:/home/developer/.gemini
+      # GitHub CLI auth tokens (gh auth login); survives rebuilds.
+      - gh-data:/home/developer/.config/gh
       # Chrome profile: named volume so Docker initialises it from the image
       # (a bind-mount would create the parent dir as root, crashing Chrome).
       # Data survives container stop/start and is only lost on `docker volume rm`.
@@ -23,30 +25,38 @@ services:
       # across rebuilds so `mise install` only re-runs for new/changed tool versions.
       # Lost only on `docker volume rm super_projects_mise-data`.
       - mise-data:/home/developer/.local/share/mise
-      # SSH keys: bind-mounted from host home directory for continuity with non-devcontainer shells
-      # Note: this increases the risk of SSH key exposure such as in the case the container is compromised.
-      # HOST_HOME_DIR comes from initializeCommand (.devcontainer/.env); avoids empty ${HOME} when IDE runs compose. TODO: may work without the special HOST_HOME_DIR treatment, just need to test it out on different machines (mac/wsl/linux).
+      # SSH keys: bind-mounted from host home directory for continuity with non-devcontainer shells.
+      # Note: this increases the risk of SSH key exposure if the container is compromised.
+      # HOST_HOME_DIR comes from initializeCommand (.devcontainer/.env); avoids empty ${HOME} when IDE runs compose.
       - ${HOST_HOME_DIR:-${HOME}}/.ssh:/home/developer/.ssh:cached
-      # Bash history: mounts from host home directory for continuity with non-devcontainer shells
-      - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
+      # Bash history: mounts from host home directory for continuity with non-devcontainer shells.
+      # - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
     # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
     # fast and tool installs persist in the mise-data volume across rebuilds.
-    # Works with plain `docker compose up` and with Cursor/VS Code devcontainers.
-    command: bash -c "start-vnc && cd /workspaces && mise trust /workspaces/.mise.toml && mise install && exec tail -f /dev/null"
+    # ssh-agent runs for the container lifetime; ensure-auth (postStartCommand) loads keys.
+    command:
+      - bash
+      - -c
+      - |
+        AGENT_SOCK=/home/developer/.ssh/agent.sock
+        export SSH_AUTH_SOCK=$$AGENT_SOCK
+        if [ -S "$$AGENT_SOCK" ]; then
+          ssh-add -l >/dev/null 2>&1 || rm -f "$$AGENT_SOCK"
+        fi
+        exec ssh-agent -a "$$AGENT_SOCK" bash -c 'ensure-auth; print-cursor-worker-hint; grep -q mise-shell-init.sh ~/.bashrc 2>/dev/null || echo "[ -r /workspaces/.devcontainer/mise-shell-init.sh ] && . /workspaces/.devcontainer/mise-shell-init.sh" >> ~/.bashrc; start-vnc && cd /workspaces && mise trust /workspaces/.mise.toml && mise install && exec tail -f /dev/null'
     hostname: super_projects
     user: developer
+    environment:
+      UID: ${DEVELOPER_UID:-501}
+      SSH_AUTH_SOCK: /home/developer/.ssh/agent.sock
     ports:
       - "6080:6080"   # noVNC  — browser GUI for VNC
       # - "5900:5900" # VNC raw port (optional, for native VNC clients)
       - "9223:9223"   # Chrome remote debugging — host-side npx chrome-devtools-mcp connects here
-    # Use host network mode to allow the devcontainer to access the host's network
-    # This allows services started from within the devcontainer to be accessible from the host machine via localhost, simplifying local development.
-    # network_mode: host
-    # Chrome requires more shared memory than Docker's default 64 MB
-    shm_size: '2gb'
-    # Sometimes you may want to avoid using host for security reasons or due to port conflicts with the host machine.
-    # To disable this, create a new network and use that network mode instead.
-    # Note: in this case you will need to forward ports from the devcontainer to the host machine for services to be accessible.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Chrome requires more shared memory than Docker's default 64 MB.
+    shm_size: '3gb'
     networks:
       - super_projects_default
 
@@ -58,6 +68,8 @@ volumes:
   # Survives rebuilds so tool versions don't need to be re-downloaded or recompiled.
   # Lost only on `docker volume rm super_projects_mise-data`.
   mise-data: {}
+  # GitHub CLI auth (gh auth login). Lost only on `docker volume rm super_projects_gh-data`.
+  gh-data: {}
 
 networks:
   super_projects_default:

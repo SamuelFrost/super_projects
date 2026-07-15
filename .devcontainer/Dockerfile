@@ -240,33 +240,7 @@ RUN install -m 0755 -d /etc/apt/keyrings \
 # forward it to the host, allowing host-side MCP clients to connect via npx.
 # --remote-allow-origins=* lets chrome-devtools-mcp open the CDP WebSocket
 # (Chrome 111+ rejects cross-origin upgrades without this flag).
-RUN printf '#!/bin/bash\n\
-CHROME_PORT="${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n\
-_profile="${CHROME_USER_DATA_DIR:-/home/developer/chrome-profile}"\n\
-\n\
-_chrome_ready() {\n\
-  curl -sf --max-time 1 "http://localhost:${CHROME_PORT}/json/version" >/dev/null 2>&1\n\
-}\n\
-\n\
-if ! _chrome_ready; then\n\
-  chown -R "$(id -u):$(id -g)" "$_profile" 2>/dev/null || true\n\
-  rm -f "$_profile/SingletonLock" "$_profile/SingletonSocket" "$_profile/SingletonCookie" 2>/dev/null\n\
-  nohup env DISPLAY="${DISPLAY:-:99}" /usr/bin/google-chrome \\\n\
-    --no-sandbox \\\n\
-    --ignore-gpu-blocklist \\\n\
-    --enable-unsafe-swiftshader \\\n\
-    --remote-debugging-port="${CHROME_PORT}" \\\n\
-    --remote-debugging-address=0.0.0.0 \\\n\
-    --remote-allow-origins="*" \\\n\
-    --user-data-dir="$_profile" \\\n\
-    "${@:-about:blank}" >/tmp/chrome.log 2>&1 &\n\
-  for i in $(seq 20); do\n\
-    _chrome_ready && break\n\
-    sleep 0.5\n\
-  done\n\
-  _chrome_ready || echo "Chrome may have failed to start; check /tmp/chrome.log" >&2\n\
-fi\n\
-' > /usr/local/bin/chrome && chmod +x /usr/local/bin/chrome
+COPY --chmod=0755 .devcontainer/dockerfile_scripts/chrome /usr/local/bin/chrome
 
 # Point the XFCE application menu launcher at the wrapper so it also picks up
 # all the flags above (including remote-debugging-port for MCP connectivity).
@@ -318,18 +292,7 @@ RUN echo '[ -r /workspaces/.devcontainer/mise-shell-init.sh ] && . /workspaces/.
   && echo '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' >> /home/developer/.bashrc
 
 # Ensure ssh-agent is running at ~/.ssh/agent.sock (bind-mounted with keys).
-RUN printf '%s\n' \
-  'export SSH_AUTH_SOCK="$HOME/.ssh/agent.sock"' \
-  '_agent_sock="$SSH_AUTH_SOCK"' \
-  'if [ -S "$_agent_sock" ]; then' \
-  '  ssh-add -l >/dev/null 2>&1 || rm -f "$_agent_sock"' \
-  'fi' \
-  'if [ ! -S "$_agent_sock" ]; then' \
-  '  eval "$(ssh-agent -a "$_agent_sock")"' \
-  'fi' \
-  'unset _agent_sock' \
-  > /etc/profile.d/ssh-agent.sh \
-  && chmod 644 /etc/profile.d/ssh-agent.sh
+COPY --chmod=0644 .devcontainer/dockerfile_scripts/ssh-agent.sh /etc/profile.d/ssh-agent.sh
 
 # ------------------------------------------------------------------------------
 # AI coding CLI: Gemini CLI.  Run `gemini` in the terminal.
@@ -356,95 +319,15 @@ USER root
 #   Safe to call repeatedly — kills stale processes first.
 #   Uses nohup so background processes survive when postStartCommand's shell exits.
 # ------------------------------------------------------------------------------
-RUN printf '#!/bin/bash\n\
-pkill Xvfb 2>/dev/null\n\
-pkill x11vnc 2>/dev/null\n\
-pkill websockify 2>/dev/null\n\
-pkill -f xfce4-session 2>/dev/null\n\
-pkill -f google-chrome 2>/dev/null\n\
-sleep 0.3\n\
-nohup Xvfb :99 -screen 0 "${NOVNC_RESOLUTION:-1920x1080}x24" \\\n\
-  +extension GLX +extension RENDER -noreset >/tmp/xvfb.log 2>&1 &\n\
-sleep 0.5\n\
-nohup env DISPLAY=:99 startxfce4 >/tmp/xfce4.log 2>&1 &\n\
-setsid x11vnc -display :99 -nopw -forever -shared \\\n\
-  -rfbport "${VNC_PORT:-5900}" >/tmp/x11vnc.log 2>&1 &\n\
-sleep 0.5\n\
-nohup websockify --web /usr/share/novnc \\\n\
-  "${NOVNC_PORT:-6080}" "localhost:${VNC_PORT:-5900}" >/tmp/websockify.log 2>&1 &\n\
-chrome\n\
-echo "noVNC ready:  http://localhost:${NOVNC_PORT:-6080}/vnc.html"\n\
-echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"\n\
-' > /usr/local/bin/start-vnc && chmod +x /usr/local/bin/start-vnc
+COPY --chmod=0755 .devcontainer/dockerfile_scripts/start-vnc /usr/local/bin/start-vnc
 
 
 # ensure-auth: keep a container-local ssh-agent available and load common SSH keys.
 # Passphrase-protected keys prompt in interactive terminals; loaded keys persist until the container stops.
-RUN printf '%s\n' \
-  '#!/bin/bash' \
-  'set -euo pipefail' \
-  'CONTAINER_AGENT_SOCK="${HOME}/.ssh/agent.sock"' \
-  'export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$CONTAINER_AGENT_SOCK}"' \
-  'start_container_agent() {' \
-  '  export SSH_AUTH_SOCK="$CONTAINER_AGENT_SOCK"' \
-  '  if [ -S "$CONTAINER_AGENT_SOCK" ]; then' \
-  '    ssh-add -l >/dev/null 2>&1 || rm -f "$CONTAINER_AGENT_SOCK"' \
-  '  fi' \
-  '  if [ ! -S "$CONTAINER_AGENT_SOCK" ]; then' \
-  '    eval "$(ssh-agent -a "$CONTAINER_AGENT_SOCK")"' \
-  '  fi' \
-  '}' \
-  'key_fingerprint() { ssh-keygen -lf "$1" 2>/dev/null | awk "{print \$2}"; }' \
-  'key_in_agent() {' \
-  '  local fp="$1"' \
-  '  ssh-add -l 2>/dev/null | grep -qF "$fp"' \
-  '}' \
-  'try_add_key() {' \
-  '  local key="$1"' \
-  '  if [ -t 0 ]; then' \
-  '    ssh-add "$key"' \
-  '  else' \
-  '    ssh-add "$key" </dev/null 2>/dev/null' \
-  '  fi' \
-  '}' \
-  'start_container_agent' \
-  'shopt -s nullglob' \
-  'keys=("${HOME}"/.ssh/id_*)' \
-  'missing=()' \
-  'for key in "${keys[@]}"; do' \
-  '  [ -f "$key" ] || continue' \
-  '  case "$key" in *.pub|*known_hosts*|*config) continue ;; esac' \
-  '  fp="$(key_fingerprint "$key")" || continue' \
-  '  if key_in_agent "$fp"; then' \
-  '    echo "SSH $(basename "$key"): loaded"' \
-  '    continue' \
-  '  fi' \
-  '  if try_add_key "$key"; then' \
-  '    echo "SSH $(basename "$key"): loaded"' \
-  '  else' \
-  '    missing+=("$(basename "$key")")' \
-  '    echo "SSH $(basename "$key"): not loaded" >&2' \
-  '  fi' \
-  'done' \
-  'if [ ${#missing[@]} -gt 0 ]; then' \
-  '  echo "Load missing keys once in an interactive terminal, for example:" >&2' \
-  '  echo "  ssh-add ~/.ssh/<key-name>" >&2' \
-  'fi' \
-  'if gh auth status >/dev/null 2>&1; then' \
-  '  echo "GitHub CLI: authenticated"' \
-  'else' \
-  '  echo "GitHub CLI: run once (persists across rebuilds): gh auth login" >&2' \
-  'fi' \
-  > /usr/local/bin/ensure-auth && chmod +x /usr/local/bin/ensure-auth
+COPY --chmod=0755 .devcontainer/dockerfile_scripts/ensure-auth /usr/local/bin/ensure-auth
 
 # print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
-RUN printf '#!/bin/bash\n\
-echo ""\n\
-echo "Cursor Cloud Agent (My Machines):"\n\
-echo "  agent login"\n\
-echo "  agent worker start --name \\"super_projects_devcontainer\\""\n\
-echo ""\n\
-' > /usr/local/bin/print-cursor-worker-hint && chmod +x /usr/local/bin/print-cursor-worker-hint
+COPY --chmod=0755 .devcontainer/dockerfile_scripts/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
 
 # ------------------------------------------------------------------------------
 # Claude Code CLI (commented out; uncomment and rebuild to enable)

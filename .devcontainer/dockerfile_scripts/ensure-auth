@@ -1,0 +1,61 @@
+#!/bin/bash
+set -euo pipefail
+CONTAINER_AGENT_SOCK="${HOME}/.ssh/agent.sock"
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$CONTAINER_AGENT_SOCK}"
+
+start_container_agent() {
+  export SSH_AUTH_SOCK="$CONTAINER_AGENT_SOCK"
+  if [ -S "$CONTAINER_AGENT_SOCK" ]; then
+    ssh-add -l >/dev/null 2>&1 || rm -f "$CONTAINER_AGENT_SOCK"
+  fi
+  if [ ! -S "$CONTAINER_AGENT_SOCK" ]; then
+    eval "$(ssh-agent -a "$CONTAINER_AGENT_SOCK")"
+  fi
+}
+
+key_fingerprint() {
+  ssh-keygen -lf "$1" 2>/dev/null | awk "{print \$2}"
+}
+
+key_in_agent() {
+  local fp="$1"
+  ssh-add -l 2>/dev/null | grep -qF "$fp"
+}
+
+try_add_key() {
+  local key="$1"
+  if [ -t 0 ]; then
+    ssh-add "$key"
+  else
+    ssh-add "$key" </dev/null 2>/dev/null
+  fi
+}
+
+start_container_agent
+shopt -s nullglob
+keys=("${HOME}"/.ssh/id_*)
+missing=()
+for key in "${keys[@]}"; do
+  [ -f "$key" ] || continue
+  case "$key" in *.pub|*known_hosts*|*config) continue ;; esac
+  fp="$(key_fingerprint "$key")" || continue
+  if key_in_agent "$fp"; then
+    echo "SSH $(basename "$key"): loaded"
+    continue
+  fi
+  if try_add_key "$key"; then
+    echo "SSH $(basename "$key"): loaded"
+  else
+    missing+=("$(basename "$key")")
+    echo "SSH $(basename "$key"): not loaded" >&2
+  fi
+done
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "Load missing keys once in an interactive terminal, for example:" >&2
+  echo "  ssh-add ~/.ssh/<key-name>" >&2
+fi
+if gh auth status >/dev/null 2>&1; then
+  echo "GitHub CLI: authenticated"
+else
+  echo "GitHub CLI: run once (persists across rebuilds): gh auth login" >&2
+fi

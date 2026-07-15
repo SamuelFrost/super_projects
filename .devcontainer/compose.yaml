@@ -52,7 +52,7 @@ services:
     ports:
       - "6080:6080"   # noVNC  — browser GUI for VNC
       # - "5900:5900" # VNC raw port (optional, for native VNC clients)
-      - "9223:9223"   # Chrome remote debugging — host-side npx chrome-devtools-mcp connects here
+      # - "9223:9223"   # Chrome remote debugging — (optional for host-side npx chrome-devtools-mcp to connect)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Chrome requires more shared memory than Docker's default 64 MB.

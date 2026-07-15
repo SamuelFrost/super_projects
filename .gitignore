@@ -14,9 +14,13 @@
 !.vscode/**
 !README.md
 !LICENSE
-!AGENTS.md
-!agents.md
 !.mise.toml
+!.agents/
+!.agents/**
+
+# Always ignore local-only files, including under otherwise whitelisted dirs.
+**/local_only/
+**/local_only/**
 
 # Ignore generated/persisted files even though the parent dirs are whitelisted above
 .devcontainer/.env

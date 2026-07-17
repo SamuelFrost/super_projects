@@ -1,19 +1,3 @@
-# Expected coding behavior
-
-Use informative variable and function names. Do not omit important context just to make names shorter.
-```
-
-`enforce_git_commit_hooks_and_formatters.md`
-```markdown
-# Tool interaction guideline for git commit
-
- Never skip commit hooks without explicit approval. Ensure relevant formatters and linters run for modified files before a commit is made.
-```
-
-#### Complex example
-
-`meaningful_pull_request_content_guidelines.md`
-```markdown
 # Pull request content guidelines
 
 Adhere to project guidelines for pull requests. Start by referencing the project's pull request template if available. In general a pull request body should contain the following sections:

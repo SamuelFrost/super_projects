@@ -2,6 +2,8 @@
 
 These files are atomic attributes that can be used to encourage or discourage specific behaviors from the agent.
 
+See the [attribute index](index.md) for all available attributes organized by category.
+
 ## How to use
 
 ### Method 1: Create an agent profile comprised of the attributes

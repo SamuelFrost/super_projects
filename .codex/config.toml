@@ -1,0 +1,16 @@
+# Project-scoped MCP servers for OpenAI Codex.
+# Requires trusting this directory in Codex before project config loads.
+# Docs: https://openai-codex.mintlify.app/configuration/mcp-servers
+
+[mcp_servers.chrome-devtools]
+command = "docker"
+args = ["exec", "-i", "super_projects-devcontainer-1", "mise", "exec", "-C", "/workspaces", "--", "chrome-devtools-mcp", "--browser-url=http://127.0.0.1:9223"]
+enabled = true
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+
+[mcp_servers.figma]
+url = "https://mcp.figma.com/mcp"
+enabled = true
+startup_timeout_sec = 30
+tool_timeout_sec = 120

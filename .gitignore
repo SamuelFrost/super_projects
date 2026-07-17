@@ -10,8 +10,13 @@
 !.cursor/**
 !.claude/
 !.claude/**
+!.codex/
+!.codex/**
+!.gemini/
+!.gemini/**
 !.vscode/
 !.vscode/**
+!.mcp.json
 !README.md
 !LICENSE
 !.mise.toml

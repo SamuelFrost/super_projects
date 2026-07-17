@@ -36,18 +36,21 @@ Use the attributes directly in your prompts when relevant. This will give the st
 
 #### Simple examples
 
+`avoid_unnecessary_complexity.md`
 ```markdown
 # Expected coding behavior
 
 Avoid unnecessary complexity.
 ```
 
+`use_informative_variable_and_function_names.md`
 ```markdown
 # Expected coding behavior
 
 Use informative variable and function names. Do not omit important context just to make names shorter.
 ```
 
+`enforce_git_commit_hooks_and_formatters.md`
 ```markdown
 # Tool interaction guideline for git commit
 
@@ -56,6 +59,7 @@ Use informative variable and function names. Do not omit important context just 
 
 #### Complex example
 
+`meaningful_pull_request_content_guidelines.md`
 ```markdown
 # Pull request content guidelines
 

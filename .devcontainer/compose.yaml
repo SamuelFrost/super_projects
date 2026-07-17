@@ -43,14 +43,17 @@ services:
         if [ -S "$$AGENT_SOCK" ]; then
           ssh-add -l >/dev/null 2>&1 || rm -f "$$AGENT_SOCK"
         fi
-        exec ssh-agent -a "$$AGENT_SOCK" bash -c 'ensure-auth; print-cursor-worker-hint; grep -q mise-shell-init.sh ~/.bashrc 2>/dev/null || echo "[ -r /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh ] && . /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh" >> ~/.bashrc; start-vnc && cd /workspaces && mise trust /workspaces/.mise.toml && mise install && exec tail -f /dev/null'
+        if [ ! -S "$$AGENT_SOCK" ]; then
+          eval "$$(ssh-agent -a "$$AGENT_SOCK")"
+        fi
+        exec bash -c 'ensure-auth; print-cursor-worker-hint; grep -q mise-shell-init.sh ~/.bashrc 2>/dev/null || echo "[ -r /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh ] && . /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh" >> ~/.bashrc; start-vnc && cd /workspaces && mise trust /workspaces/.mise.toml && mise install && exec tail -f /dev/null'
     hostname: super_projects
     user: developer
     environment:
       UID: ${DEVELOPER_UID:-501}
       SSH_AUTH_SOCK: /home/developer/.ssh/agent.sock
     ports:
-      - "6080:6080"   # noVNC  — browser GUI for VNC
+      - "6080-6089:6080"   # noVNC  — browser GUI for VNC
       # - "5900:5900" # VNC raw port (optional, for native VNC clients)
       # - "9223:9223"   # Chrome remote debugging — (optional for host-side npx chrome-devtools-mcp to connect)
     extra_hosts:

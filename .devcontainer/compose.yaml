@@ -13,6 +13,11 @@ services:
       - ../:/workspaces:cached
       # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
       - /var/run/docker.sock:/var/run/docker.sock
+      # TODO: consider if we just should persist the /home/developer directory instead of individual files and directories
+      # - user-data:/home/developer/
+      # TODO: make .gitconfig persist across rebuilds
+      # - .gitconfig:/home/developer/.gitconfig (doesn't work because it's a file, not a directory)
+
       # Gemini CLI: .devcontainer/gemini-data -> ~/.gemini (persists across rebuilds)
       - ./gemini-data:/home/developer/.gemini
       # GitHub CLI auth tokens (gh auth login); survives rebuilds.
@@ -25,11 +30,11 @@ services:
       # across rebuilds so `mise install` only re-runs for new/changed tool versions.
       # Lost only on `docker volume rm super_projects_mise-data`.
       - mise-data:/home/developer/.local/share/mise
-      # SSH keys: bind-mounted from host home directory for continuity with non-devcontainer shells.
-      # Note: this increases the risk of SSH key exposure if the container is compromised.
-      # HOST_HOME_DIR comes from initializeCommand (.devcontainer/.env); avoids empty ${HOME} when IDE runs compose.
+      # SSH keys: bind-mounted from host home directory for continuity with non-devcontainer shells
+      # Note: this increases the risk of SSH key exposure such as in the case the container is compromised.
+      # HOST_HOME_DIR comes from initializeCommand (.devcontainer/.env); avoids empty ${HOME} when IDE runs compose. TODO: may work without the special HOST_HOME_DIR treatment, just need to test it out on different machines (mac/wsl/linux).
       - ${HOST_HOME_DIR:-${HOME}}/.ssh:/home/developer/.ssh:cached
-      # Bash history: mounts from host home directory for continuity with non-devcontainer shells.
+      # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       # - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
     # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
     # fast and tool installs persist in the mise-data volume across rebuilds.
@@ -53,7 +58,7 @@ services:
       UID: ${DEVELOPER_UID:-501}
       SSH_AUTH_SOCK: /home/developer/.ssh/agent.sock
     ports:
-      - "6080-6089:6080"   # noVNC  — browser GUI for VNC
+      - "6080:6080"   # noVNC  — browser GUI for VNC
       # - "5900:5900" # VNC raw port (optional, for native VNC clients)
       # - "9223:9223"   # Chrome remote debugging — (optional for host-side npx chrome-devtools-mcp to connect)
     extra_hosts:
@@ -73,6 +78,8 @@ volumes:
   mise-data: {}
   # GitHub CLI auth (gh auth login). Lost only on `docker volume rm super_projects_gh-data`.
   gh-data: {}
+  # git config: persists across rebuilds. Lost only on `docker volume rm super_projects_git-config`.
+  git-config: {}
 
 networks:
   super_projects_default:

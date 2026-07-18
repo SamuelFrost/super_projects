@@ -22,7 +22,9 @@ Use the attributes directly in your prompts when relevant. This will give the st
 
 ### Writing guidelines
 
-- Name the file based on the attribute's classification, such as rule, constraint, tool interaction guideline, behavior guideline, communication guideline, or domain context.
+- Name the file from the attribute’s subject (snake_case), not from a vague umbrella term.
+- Use an H1 of the form `# <classification> — <specific subject>` so the header alone characterizes the attribute.
+- Prefer these classifications: constraint, coding behavior guideline, testing behavior guideline, git workflow guideline, tool interaction guideline, tool installation guideline, communication guideline, documentation preference, pull request content guidelines, domain context, profile composition.
 - Keep each attribute atomic: it should express one behavior, decision rule, or closely related set of actions.
 - Include the conditions under which the attribute applies. Avoid absolute language such as “always” or “never” unless there are genuinely no exceptions.
 - Prefer project-specific facts and concrete commands, paths, or examples over vague advice, but avoid details likely to become stale.
@@ -31,7 +33,7 @@ Use the attributes directly in your prompts when relevant. This will give the st
 ### Suggested attribute structure
 
 ```markdown
-# <classification>
+# <classification> — <specific subject>
 
 <description of the attribute>
 ```
@@ -40,21 +42,21 @@ Use the attributes directly in your prompts when relevant. This will give the st
 
 `avoid_unnecessary_complexity.md`
 ```markdown
-# Expected coding behavior
+# Coding behavior guideline — avoid unnecessary complexity
 
 Avoid unnecessary complexity.
 ```
 
 `use_informative_variable_and_function_names.md`
 ```markdown
-# Expected coding behavior
+# Coding behavior guideline — use informative variable and function names
 
 Use informative variable and function names. Do not omit important context just to make names shorter.
 ```
 
 `enforce_git_commit_hooks_and_formatters.md`
 ```markdown
-# Tool interaction guideline for git commit
+# Tool interaction guideline — enforce git commit hooks and formatters
 
  Never skip commit hooks without explicit approval. Ensure relevant formatters and linters run for modified files before a commit is made.
 ```
@@ -63,7 +65,7 @@ Use informative variable and function names. Do not omit important context just 
 
 `meaningful_pull_request_content_guidelines.md`
 ```markdown
-# Pull request content guidelines
+# Pull request content guidelines — write meaningful PR titles and bodies
 
 Adhere to project guidelines for pull requests. Start by referencing the project's pull request template if available. In general a pull request body should contain the following sections:
 

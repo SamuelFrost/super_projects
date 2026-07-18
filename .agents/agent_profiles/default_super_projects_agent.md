@@ -24,7 +24,7 @@
 - Avoid doing destructive operations without explicit approval.
 - Avoid posting or otherwise modifying the state of external services without explicit approval.
 - Use mise to execute commands when possible to avoid version-related issues, including hooks on commands that may be subsequently run, for example use `mise exec -- git commit` instead of `git commit`.
-- Communicate with the user in English unless the task or repository convention asks for another language.
+- Communicate with the user in English. However, use key words from product terminology when relevant to the task or repository convention even if that is in another language. When communicating with the user, use parenthesis around the alternate name(s) of a concept. example: "home page (ホームページ | `root_page`)".
 
 ## Tools
 

@@ -99,7 +99,9 @@ RUN groupadd --system developer && \
 RUN mkdir -p /home/developer/chrome-profile \
              /home/developer/.local/share/mise \
              /home/developer/.local/state/mise \
-             /home/developer/.config/gh && \
+             /home/developer/.config/gh \
+             /home/developer/.config/git \
+             /home/developer/.gemini && \
     chown -R developer:developer /home/developer
 
 # ------------------------------------------------------------------------------
@@ -298,8 +300,8 @@ COPY --chmod=0644 .devcontainer/dockerfile_scripts/ssh-agent.sh /etc/profile.d/s
 # AI coding CLI: Gemini CLI.  Run `gemini` in the terminal.
 #   - Free tier: run `gemini` and sign in with Google (no API key needed).
 #   - Or export GEMINI_API_KEY (https://aistudio.google.com/apikey) for API key auth.
-#   - Config/sessions live in ~/.gemini; compose bind-mounts
-#     .devcontainer/gemini-data there so data persists across rebuilds.
+#   - Config/sessions live in ~/.gemini; compose mounts the gemini-data
+#     named volume there (and under .devcontainer/persist/gemini).
 #   Docs: https://github.com/google-gemini/gemini-cli
 # ------------------------------------------------------------------------------
 USER developer:developer

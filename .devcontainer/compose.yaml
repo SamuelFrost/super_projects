@@ -13,23 +13,28 @@ services:
       - ../:/workspaces:cached
       # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
       - /var/run/docker.sock:/var/run/docker.sock
-      # TODO: consider if we just should persist the /home/developer directory instead of individual files and directories
-      # - user-data:/home/developer/
-      # TODO: make .gitconfig persist across rebuilds
-      # - .gitconfig:/home/developer/.gitconfig (doesn't work because it's a file, not a directory)
 
-      # Gemini CLI: .devcontainer/gemini-data -> ~/.gemini (persists across rebuilds)
-      - ./gemini-data:/home/developer/.gemini
-      # GitHub CLI auth tokens (gh auth login); survives rebuilds.
+      # Named volumes for tool state (macOS-friendly I/O). Each volume is mounted twice:
+      # once at the conventional home path, once under .devcontainer/persist/ for discoverability.
+      # See .devcontainer/persist/README.md. Do not mount whole /home/developer — that freezes
+      # image-owned installs (Gemini, agent, .bashrc) after the first volume create.
+
+      # Gemini CLI sessions/config
+      - gemini-data:/home/developer/.gemini
+      - gemini-data:/workspaces/.devcontainer/persist/gemini
+      # GitHub CLI auth tokens (gh auth login)
       - gh-data:/home/developer/.config/gh
+      - gh-data:/workspaces/.devcontainer/persist/gh
+      # Git XDG config (~/.config/git/config)
+      - git-config:/home/developer/.config/git
+      - git-config:/workspaces/.devcontainer/persist/git
       # Chrome profile: named volume so Docker initialises it from the image
       # (a bind-mount would create the parent dir as root, crashing Chrome).
-      # Data survives container stop/start and is only lost on `docker volume rm`.
       - chrome-devtools-mcp-profile:/home/developer/chrome-profile
-      # mise tool cache: persists downloaded archives and compiled/pre-built installs
-      # across rebuilds so `mise install` only re-runs for new/changed tool versions.
-      # Lost only on `docker volume rm super_projects_mise-data`.
+      - chrome-devtools-mcp-profile:/workspaces/.devcontainer/persist/chrome
+      # mise tool cache: persists downloads/installs across rebuilds
       - mise-data:/home/developer/.local/share/mise
+      - mise-data:/workspaces/.devcontainer/persist/mise
       # SSH keys: bind-mounted from host home directory for continuity with non-devcontainer shells
       # Note: this increases the risk of SSH key exposure such as in the case the container is compromised.
       # HOST_HOME_DIR comes from initializeCommand (.devcontainer/.env); avoids empty ${HOME} when IDE runs compose. TODO: may work without the special HOST_HOME_DIR treatment, just need to test it out on different machines (mac/wsl/linux).
@@ -69,6 +74,8 @@ services:
       - super_projects_default
 
 volumes:
+  # Gemini CLI sessions/config. Lost only on `docker volume rm super_projects_gemini-data`.
+  gemini-data: {}
   # Chrome profile data: logins, cookies, extensions, history.
   # Survives container stop/start and rebuilds; lost only on `docker volume rm super_projects_chrome-devtools-mcp-profile`.
   chrome-devtools-mcp-profile: {}
@@ -78,7 +85,7 @@ volumes:
   mise-data: {}
   # GitHub CLI auth (gh auth login). Lost only on `docker volume rm super_projects_gh-data`.
   gh-data: {}
-  # git config: persists across rebuilds. Lost only on `docker volume rm super_projects_git-config`.
+  # git XDG config (~/.config/git). Lost only on `docker volume rm super_projects_git-config`.
   git-config: {}
 
 networks:

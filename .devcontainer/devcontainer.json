@@ -12,8 +12,8 @@
   // Populate .devcontainer/.env with host UID and docker.sock GID before the image is built.
   // Docker Compose resolves ${VAR} substitutions from the .env file in the same directory as
   // the compose file (.devcontainer/), so the file must live there — not at the workspace root.
-  // Also pre-create the gemini-data bind-mount dir so Docker doesn't create it as root.
-  "initializeCommand": "sh -c 'printf \"DEVELOPER_UID=$(id -u)\\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\\nHOST_HOME_DIR=$HOME\\n\" > .devcontainer/.env && mkdir -p .devcontainer/gemini-data'",
+  // Pre-create persist/ shortcut dirs so Docker does not create mount points as root.
+  "initializeCommand": "sh -c 'printf \"DEVELOPER_UID=$(id -u)\\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\\nHOST_HOME_DIR=$HOME\\n\" > .devcontainer/.env && mkdir -p .devcontainer/persist/gemini .devcontainer/persist/gh .devcontainer/persist/git .devcontainer/persist/mise .devcontainer/persist/chrome'",
 
   // Expose localWorkspaceFolder so tools inside the container can reference the host path
   "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },
@@ -61,7 +61,17 @@
         "ms-vscode.remote-explorer"
       ],
       "settings": {
-        "autoOpenWorkspace.enableAutoOpenAlwaysFirst": true
+        "autoOpenWorkspace.enableAutoOpenAlwaysFirst": true,
+        // Named-volume shortcuts under persist/ can be huge (mise installs, Chrome profile).
+        // Keep them out of the workspace file watcher and search index.
+        "files.watcherExclude": {
+          "**/.devcontainer/persist/mise/**": true,
+          "**/.devcontainer/persist/chrome/**": true
+        },
+        "search.exclude": {
+          "**/.devcontainer/persist/mise": true,
+          "**/.devcontainer/persist/chrome": true
+        }
       }
     }
   }

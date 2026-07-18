@@ -72,15 +72,18 @@ The VNC/Chrome stack starts automatically when the container starts and can be r
 
 ### Persisted data
 
-| Volume | Container path | Purpose |
-|--------|---------------|---------|
-| `.devcontainer/gemini-data/` (bind) | `~/.gemini` | Gemini CLI sessions/config (gitignored) |
-| `~/.bash_history` (host bind) | `~/.bash_history` | Shell history continuity |
-| `~/.ssh` (host bind) | `~/.ssh` | SSH key forwarding |
-| `super_projects_chrome-devtools-mcp-profile` (named volume) | `~/chrome-profile` | Chrome logins, cookies, extensions |
-| `super_projects_mise-data` (named volume) | `~/.local/share/mise` | mise downloads and tool installs |
+Tool state uses **named Docker volumes** (macOS-friendly I/O). Each volume is also mounted under `.devcontainer/persist/` as a discoverability shortcut — see [`.devcontainer/persist/README.md`](.devcontainer/persist/README.md).
 
-The Chrome profile is stored in a named Docker volume so it survives container rebuilds. It is only lost if you explicitly remove the volume:
+| Volume | Home path | Persist shortcut | Purpose |
+|--------|-----------|------------------|---------|
+| `super_projects_gemini-data` | `~/.gemini` | `persist/gemini` | Gemini CLI sessions/config |
+| `super_projects_gh-data` | `~/.config/gh` | `persist/gh` | GitHub CLI auth |
+| `super_projects_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
+| `super_projects_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
+| `super_projects_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
+| host `~/.ssh` (bind) | `~/.ssh` | — | SSH keys (host continuity; not a project volume) |
+
+Named volumes survive container rebuilds. Remove one explicitly if you need a clean slate, for example:
 ```sh
 docker volume rm super_projects_chrome-devtools-mcp-profile
 ```

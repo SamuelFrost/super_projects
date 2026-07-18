@@ -29,4 +29,7 @@
 
 # Ignore generated/persisted files even though the parent dirs are whitelisted above
 .devcontainer/.env
-.devcontainer/gemini-data/
+
+# Persist shortcut dirs are Docker mount points on the host (often empty); keep README tracked
+.devcontainer/persist/*
+!.devcontainer/persist/README.md

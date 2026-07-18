@@ -25,6 +25,7 @@
 - Avoid posting or otherwise modifying the state of external services without explicit approval.
 - Use mise to execute commands when possible to avoid version-related issues, including hooks on commands that may be subsequently run, for example use `mise exec -- git commit` instead of `git commit`.
 - Communicate with the user in English. However, use key words from product terminology when relevant to the task or repository convention even if that is in another language. When communicating with the user, use parenthesis around the alternate name(s) of a concept. example: "home page (ホームページ | `root_page`)".
+- Avoid development procedures that require users to execute arbitrary shell, make file, or other executable files. Do not implement procedures in a way that requires a user to execute shell scripts directly. It is okay to have it executed as part of an existing process, or as a hook for an existing process. However, any such procedure should be documented.
 
 ## Tools
 

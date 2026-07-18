@@ -10,10 +10,10 @@ Copy the profile you want to use from the `.agents/agent_profiles` directory to 
 cp .agents/agent_profiles/default_super_projects_agent.md agents.md
 ```
 
-If you have an uncommitted profile currently in use in `agents.md`, move it to the `local_only` directory first so you do not lose it:
+If you have an uncommitted profile currently in use in `agents.md`, move it to the `.local_only` directory first so you do not lose it:
 
 ```bash
-cp agents.md .agents/agent_profiles/local_only/descriptive_name_of_the_profile.md
+cp agents.md .agents/agent_profiles/.local_only/descriptive_name_of_the_profile.md
 ```
 
 - language preference note: after copying the profile, ask your AI agent to translate the profile to your preferred language for best results.
@@ -24,5 +24,5 @@ cp agents.md .agents/agent_profiles/local_only/descriptive_name_of_the_profile.m
 - **Gemini CLI:** auto-loads `agents.md` from the project root; optional override in `.gemini/settings.json`
 - **VS Code:** set `"chat.useAgentsMdFile": true` in `.vscode/settings.json`
 
-## If you have profiles that are not yet ready to share, you can keep them in the .agents/agent_profiles/local_only
+## If you have profiles that are not yet ready to share, you can keep them in the .agents/agent_profiles/.local_only
 directory and they will not be included in the shared profiles. These are .gitignored.

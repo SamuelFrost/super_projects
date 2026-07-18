@@ -1,4 +1,4 @@
-# Pull request content guidelines
+# Pull request content guidelines — write meaningful PR titles and bodies
 
 Adhere to project guidelines for pull requests. Start by referencing the project's pull request template if available. In general a pull request body should contain the following sections:
 

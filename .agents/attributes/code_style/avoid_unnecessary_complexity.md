@@ -1,3 +1,3 @@
-# Expected coding behavior
+# Coding behavior guideline — avoid unnecessary complexity
 
 Avoid unnecessary complexity.

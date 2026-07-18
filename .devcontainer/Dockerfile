@@ -278,15 +278,8 @@ RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
   && apt-get update -qq && apt-get install -y --no-install-recommends mise \
   && rm -rf /var/lib/apt/lists/*
 
-# Trust workspace mise configs without interactive `mise trust`.
-# trusted_config_paths only works in global config (not project .mise.toml).
+# Trust any mise config under /workspaces without interactive `mise trust`.
 ENV MISE_TRUSTED_CONFIG_PATHS=/workspaces
-RUN mkdir -p /home/developer/.config/mise && \
-    printf '%s\n' \
-      '[settings]' \
-      'trusted_config_paths = ["/workspaces"]' \
-      > /home/developer/.config/mise/config.toml && \
-    chown -R developer:developer /home/developer/.config
 
 # Activate mise for interactive terminals so they pick up mise-managed tools.
 RUN echo '[ -r /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh ] && . /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh || eval "$(mise activate bash)"' >> /home/developer/.bashrc \

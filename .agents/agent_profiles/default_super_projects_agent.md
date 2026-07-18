@@ -69,6 +69,19 @@
 
 The devcontainer installs or configures these tools through `.devcontainer/Dockerfile`, `.devcontainer/compose.yaml`, `.devcontainer/devcontainer.json`, and workspace mise config.
 
+#### Docker Compose
+
+- One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/workspaces`, Docker socket mounted for docker-outside-of-docker.
+- Startup runs ssh-agent, `ensure-auth`, VNC, then `mise install`; noVNC on host port `6080`.
+- Do not mount whole `/home/developer` — that freezes image-owned installs after the first named-volume create.
+
+#### Persisted files
+
+- Tool **state** (auth, config, caches, profiles) uses named Docker volumes; tool **binaries** stay in the image.
+- Each volume is dual-mounted: conventional home path + shortcut under `.devcontainer/persist/` (browse inside the container; host dirs are often empty mount points). See `.devcontainer/persist/README.md`.
+- Volumes: `gemini-data` → `~/.gemini`, `gh-data` → `~/.config/gh`, `git-config` → `~/.config/git`, `mise-data` → `~/.local/share/mise`, `chrome-devtools-mcp-profile` → `~/chrome-profile`.
+- `~/.ssh` is a host home bind (not a project volume). It is possible to wipe a store with `docker volume rm super_projects_<name>`.
+
 #### Base Terminal And System Tools
 
 - `bash`: default shell used by the image, compose command, helper scripts, and devcontainer startup.

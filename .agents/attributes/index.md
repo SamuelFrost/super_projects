@@ -23,11 +23,6 @@ This index lists the available agent attributes by category. Link text uses each
 
 - [Documentation preference — create directory information files often](documentation/create_directory_information_files_often.md)
 
-## Profiles
-
-- [Profile composition — attribute set for the super projects basic agent](profiles/basic_super_projects_attribute_set.md)
-- [Profile composition — structure for the super projects basic agent](profiles/basic_super_projects_profile_structure.md)
-
 ## Tools
 
 ### Available tools

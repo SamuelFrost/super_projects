@@ -4,7 +4,17 @@ Agent profiles present in this directory are used as templates for individual us
 
 ## How to use
 
-Copy the profile you want to use from the .agents/agent_profiles directory to the workspace root directory and rename it to agents.md and edit the file to your needs. `cp .agents/agent_profiles/profile_name.md agents.md`. If you have an uncommitted profile currently in use in the agents.md you may want to move it to the local_only directory before copying it to the workspace root directory to avoid losing it `cp .agents/agent_profiles/profile_name.md .agents/agent_profiles/local_only/descriptive_name_of_the_profile.md`.
+Copy the profile you want to use from the `.agents/agent_profiles` directory to the workspace root directory and rename it to `agents.md`, then edit the file to your needs. For example, to start from the basic profile:
+
+```bash
+cp .agents/agent_profiles/default_super_projects_agent.md agents.md
+```
+
+If you have an uncommitted profile currently in use in `agents.md`, move it to the `local_only` directory first so you do not lose it:
+
+```bash
+cp agents.md .agents/agent_profiles/local_only/descriptive_name_of_the_profile.md
+```
 
 - language preference note: after copying the profile, ask your AI agent to translate the profile to your preferred language for best results.
 

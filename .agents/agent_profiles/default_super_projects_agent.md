@@ -56,15 +56,16 @@
 
 ### Git And SSH
 
-- The devcontainer runs an ssh-agent at `~/.ssh/agent.sock`; `ensure-auth` can load available host-mounted SSH keys into that agent.
-- GitHub CLI auth persists in the `gh-data` volume. Run `gh auth login` once when needed.
-- If Git fails with `Permission denied`, check `ssh-add -l` and load the needed key in an interactive terminal.
+- Private keys stay on the host. The host ssh-agent is forwarded at `/ssh-agent.sock`; `ensure-auth` reports whether identities are loaded.
+- Passphrase unlock runs in host `initializeCommand` (VS Code / Cursor / `devcontainer up`) — not a separate user-run script. Prefer Keychain, 1Password, or `gh auth login` (HTTPS) to reduce prompts.
+- GitHub CLI auth persists in the `gh-data` volume (`~/.config/gh` / `persist/gh`). Run `gh auth login` **inside the container** once when needed.
+- If Git fails with `Permission denied`, check `ssh-add -l` in the container; if empty, reopen in the container (re-runs initializeCommand) or use HTTPS.
 - Integrated terminals should prefer mise shims so `node`, `ruby`, `python`, and similar tools resolve from the nearest `.mise.toml` or `.tool-versions`.
 
 ### Devcontainer
 
-- We are typically working within a devcontainer when doing work in this project, so assume the system is configured as described in the `.devcontainer/` Dockerfile, compose.yaml, and devcontainer.json configurations.
-- When installing new tools, prefer modifying the Dockerfile or using mise so that the tools persist across devcontainer restarts and can be shared with other developers.
+- We are typically working within a devcontainer when doing work in this project, so assume the system is configured as described under `.devcontainer/` (`Dockerfile`, `compose.yaml`, `devcontainer.json`, `scripts/`, `persist/`).
+- When installing new tools/binaries, prefer modifying the Dockerfile or using mise. User state (auth, caches, profiles) belongs in the named volumes documented under `.devcontainer/persist/`.
 
 ### Other available tools
 
@@ -73,7 +74,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 #### Docker Compose
 
 - One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/workspaces`, Docker socket mounted for docker-outside-of-docker.
-- Startup runs ssh-agent, `ensure-auth`, VNC, then `mise install`; noVNC on host port `6080`.
+- Host `initializeCommand` (`scripts/initialize/ensure-host-ssh-agent`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6080`.
 - Do not mount whole `/home/developer` — that freezes image-owned installs after the first named-volume create.
 
 #### Persisted files
@@ -81,7 +82,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - Tool **state** (auth, config, caches, profiles) uses named Docker volumes; tool **binaries** stay in the image.
 - Each volume is dual-mounted: conventional home path + shortcut under `.devcontainer/persist/` (browse inside the container; host dirs are often empty mount points). See `.devcontainer/persist/README.md`.
 - Volumes: `gemini-data` → `~/.gemini`, `gh-data` → `~/.config/gh`, `git-config` → `~/.config/git`, `mise-data` → `~/.local/share/mise`, `chrome-devtools-mcp-profile` → `~/chrome-profile`.
-- `~/.ssh` is a host home bind (not a project volume). It is possible to wipe a store with `docker volume rm super_projects_<name>`.
+- SSH: host agent socket only; passphrase unlock via `initializeCommand` (IDE / `devcontainer up`). Prefer Keychain, 1Password, or `gh auth login`. `known_hosts` is a read-only host file bind.
 
 #### Base Terminal And System Tools
 

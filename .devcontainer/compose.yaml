@@ -35,33 +35,23 @@ services:
       # mise tool cache: persists downloads/installs across rebuilds
       - mise-data:/home/developer/.local/share/mise
       - mise-data:/workspaces/.devcontainer/persist/mise
-      # SSH keys: bind-mounted from host home directory for continuity with non-devcontainer shells
-      # Note: this increases the risk of SSH key exposure such as in the case the container is compromised.
-      # HOST_HOME_DIR comes from initializeCommand (.devcontainer/.env); avoids empty ${HOME} when IDE runs compose. TODO: may work without the special HOST_HOME_DIR treatment, just need to test it out on different machines (mac/wsl/linux).
-      - ${HOST_HOME_DIR:-${HOME}}/.ssh:/home/developer/.ssh:cached
+      # Host ssh-agent only (private keys never enter the container).
+      # HOST_SSH_AUTH_SOCK is ensured by initializeCommand → ensure-host-ssh-agent.
+      - ${HOST_SSH_AUTH_SOCK}:/ssh-agent.sock
+      # Shared known_hosts (file bind; created on host by ensure-host-ssh-agent).
+      - ${HOST_HOME_DIR:-${HOME}}/.ssh/known_hosts:/home/developer/.ssh/known_hosts:ro
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       # - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
     # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
     # fast and tool installs persist in the mise-data volume across rebuilds.
-    # ssh-agent runs for the container lifetime; ensure-auth (postStartCommand) loads keys.
+    # SSH uses the host-forwarded agent at /ssh-agent.sock (ensure-auth reports status).
     command:
       - bash
       - -c
       - |
-        AGENT_SOCK=/home/developer/.ssh/agent.sock
-        export SSH_AUTH_SOCK=$$AGENT_SOCK
-        if [ -S "$$AGENT_SOCK" ]; then
-          ssh-add -l >/dev/null 2>&1 || rm -f "$$AGENT_SOCK"
-        fi
-        if [ ! -S "$$AGENT_SOCK" ]; then
-          eval "$$(ssh-agent -a "$$AGENT_SOCK")"
-        fi
+        export SSH_AUTH_SOCK=/ssh-agent.sock
         ensure-auth
         print-cursor-worker-hint
-        if ! grep -q mise-shell-init.sh ~/.bashrc 2>/dev/null; then
-          MISE_SHELL_INIT=/workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh
-          echo "[ -r $$MISE_SHELL_INIT ] && . $$MISE_SHELL_INIT" >> ~/.bashrc
-        fi
         start-vnc
         cd /workspaces
         mise install
@@ -70,7 +60,7 @@ services:
     user: developer
     environment:
       UID: ${DEVELOPER_UID:-501}
-      SSH_AUTH_SOCK: /home/developer/.ssh/agent.sock
+      SSH_AUTH_SOCK: /ssh-agent.sock
     ports:
       - "6080:6080"   # noVNC  — browser GUI for VNC
       # - "5900:5900" # VNC raw port (optional, for native VNC clients)

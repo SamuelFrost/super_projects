@@ -9,19 +9,17 @@
   // "remoteUser": "developer",
   // "updateRemoteUserUID": true,
 
-  // Populate .devcontainer/.env with host UID and docker.sock GID before the image is built.
-  // Docker Compose resolves ${VAR} substitutions from the .env file in the same directory as
-  // the compose file (.devcontainer/), so the file must live there — not at the workspace root.
-  // Pre-create persist/ shortcut dirs so Docker does not create mount points as root.
-  "initializeCommand": "sh -c 'printf \"DEVELOPER_UID=$(id -u)\\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\\nHOST_HOME_DIR=$HOME\\n\" > .devcontainer/.env && mkdir -p .devcontainer/persist/gemini .devcontainer/persist/gh .devcontainer/persist/git .devcontainer/persist/mise .devcontainer/persist/chrome'",
+  // Host-side hook before the container starts (VS Code, Cursor, and `devcontainer up` etc.).
+  // ensure-host-ssh-agent writes .devcontainer/.env (DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR,
+  // HOST_SSH_AUTH_SOCK), forwards only the ssh-agent socket, and may prompt once to unlock keys.
+  "initializeCommand": "sh .devcontainer/scripts/initialize/ensure-host-ssh-agent && mkdir -p .devcontainer/persist/gemini .devcontainer/persist/gh .devcontainer/persist/git .devcontainer/persist/mise .devcontainer/persist/chrome",
 
   // Expose localWorkspaceFolder so tools inside the container can reference the host path
   "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },
 
   "containerEnv": {
     "EDITOR": "code",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "SSH_AUTH_SOCK": "/home/developer/.ssh/agent.sock"
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
 
   "postStartCommand": "ensure-auth && print-cursor-worker-hint",

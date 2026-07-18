@@ -5,6 +5,7 @@ This index lists the available agent attributes by category. Link text uses each
 ## Behavior
 
 - [Constraint — avoid destructive operations without approval](behavior/avoid_destructive_operations_without_approval.md)
+- [Constraint — avoid development procedures that require users to execute arbitrary shell commands](behavior/avoid_development_procedures_that_require_users_to_execute_arbitrary_shell_commands.md)
 - [Constraint — avoid modifying external services without approval](behavior/avoid_modifying_external_services_without_approval.md)
 
 ## Code style

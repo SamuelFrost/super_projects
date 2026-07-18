@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Install core development tools and mise build dependencies.
 # curl:           downloading packages and general HTTP from the terminal
 # git:            version control
-# openssh-client: share host SSH credentials (needed for git operations over SSH)
+# openssh-client: Git/SSH via host-forwarded ssh-agent (private keys stay on the host)
 # vim:            quick terminal edits when SSH'd in
 # procps:         top, free, ps — system monitoring
 # ripgrep:        fast recursive search via the `rg` command
@@ -66,8 +66,8 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   autoconf \
   && rm -rf /var/lib/apt/lists/*
 
-# Route ssh/git clients to the container ssh-agent even when SSH_AUTH_SOCK is unset.
-RUN printf '%s\n' 'Host *' '  IdentityAgent /home/developer/.ssh/agent.sock' \
+# Route ssh/git clients to the host-forwarded agent even when SSH_AUTH_SOCK is unset.
+RUN printf '%s\n' 'Host *' '  IdentityAgent /ssh-agent.sock' \
   > /etc/ssh/ssh_config.d/99-shared-agent.conf \
   && chmod 644 /etc/ssh/ssh_config.d/99-shared-agent.conf
 
@@ -96,12 +96,16 @@ RUN groupadd --system developer && \
 # Pre-create directories that will be backed by named volumes so Docker
 # initialises those volumes with developer ownership rather than root
 # (Docker creates missing mount-point directories as root if they don't exist).
+# ~/.ssh holds only known_hosts (host file bind); private keys are not mounted.
 RUN mkdir -p /home/developer/chrome-profile \
              /home/developer/.local/share/mise \
              /home/developer/.local/state/mise \
              /home/developer/.config/gh \
              /home/developer/.config/git \
-             /home/developer/.gemini && \
+             /home/developer/.gemini \
+             /home/developer/.ssh && \
+    touch /home/developer/.ssh/known_hosts && \
+    chmod 700 /home/developer/.ssh && \
     chown -R developer:developer /home/developer
 
 # ------------------------------------------------------------------------------
@@ -242,7 +246,7 @@ RUN install -m 0755 -d /etc/apt/keyrings \
 # forward it to the host, allowing host-side MCP clients to connect via npx.
 # --remote-allow-origins=* lets chrome-devtools-mcp open the CDP WebSocket
 # (Chrome 111+ rejects cross-origin upgrades without this flag).
-COPY --chmod=0755 .devcontainer/dockerfile_scripts/chrome /usr/local/bin/chrome
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/chrome /usr/local/bin/chrome
 
 # Point the XFCE application menu launcher at the wrapper so it also picks up
 # all the flags above (including remote-debugging-port for MCP connectivity).
@@ -281,13 +285,11 @@ RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
 # Trust any mise config under /workspaces without interactive `mise trust`.
 ENV MISE_TRUSTED_CONFIG_PATHS=/workspaces
 
-# Activate mise for interactive terminals so they pick up mise-managed tools.
-RUN echo '[ -r /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh ] && . /workspaces/.devcontainer/dockerfile_scripts/mise-shell-init.sh || eval "$(mise activate bash)"' >> /home/developer/.bashrc \
-  && echo '[ -r /etc/profile.d/ssh-agent.sh ] && . /etc/profile.d/ssh-agent.sh' >> /home/developer/.bashrc \
-  && echo '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' >> /home/developer/.bashrc
-
-# Ensure ssh-agent is running at ~/.ssh/agent.sock (bind-mounted with keys).
-COPY --chmod=0644 .devcontainer/dockerfile_scripts/ssh-agent.sh /etc/profile.d/ssh-agent.sh
+# Source mise-shell-init for interactive terminals; report auth status on TTYs.
+RUN printf '%s\n' \
+  '[ -r /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh ] && . /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh' \
+  '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' \
+  >> /home/developer/.bashrc
 
 # ------------------------------------------------------------------------------
 # AI coding CLI: Gemini CLI.  Run `gemini` in the terminal.
@@ -306,7 +308,7 @@ RUN npm config set prefix /home/developer/.npm-global && \
 #   Docs: https://cursor.com/docs/cloud-agent/my-machines
 # ------------------------------------------------------------------------------
 RUN curl https://cursor.com/install -fsS | bash
-ENV PATH="/home/developer/.local/bin:${PATH}"
+ENV PATH="/home/developer/.npm-global/bin:/home/developer/.local/bin:${PATH}"
 USER root
 
 # ------------------------------------------------------------------------------
@@ -314,15 +316,15 @@ USER root
 #   Safe to call repeatedly — kills stale processes first.
 #   Uses nohup so background processes survive when postStartCommand's shell exits.
 # ------------------------------------------------------------------------------
-COPY --chmod=0755 .devcontainer/dockerfile_scripts/start-vnc /usr/local/bin/start-vnc
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/start-vnc /usr/local/bin/start-vnc
 
 
-# ensure-auth: keep a container-local ssh-agent available and load common SSH keys.
-# Passphrase-protected keys prompt in interactive terminals; loaded keys persist until the container stops.
-COPY --chmod=0755 .devcontainer/dockerfile_scripts/ensure-auth /usr/local/bin/ensure-auth
+# ensure-auth: report host-forwarded SSH agent + GitHub CLI status (keys stay on the host).
+# Passphrase-protected keys: ssh-add once on the host against HOST_SSH_AUTH_SOCK.
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/ensure-auth
 
 # print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
-COPY --chmod=0755 .devcontainer/dockerfile_scripts/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
 
 # ------------------------------------------------------------------------------
 # Claude Code CLI (commented out; uncomment and rebuild to enable)

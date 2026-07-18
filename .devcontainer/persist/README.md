@@ -28,6 +28,10 @@ docker volume rm super_projects_mise-data
 docker volume rm super_projects_chrome-devtools-mcp-profile
 ```
 
-## SSH (not a project volume)
+## SSH (host agent — keys not in the container)
 
-`~/.ssh` is bind-mounted from the **host** home directory (`HOST_HOME_DIR` / `$HOME`), not a Docker volume and not stored under this tree. That keeps the same keys available outside the container; it also means host private keys are visible inside the container if it is compromised.
+Private keys are **not** mounted. Compose forwards a host `ssh-agent` socket to `/ssh-agent.sock`.
+
+`initializeCommand` runs `scripts/initialize/ensure-host-ssh-agent`, which also writes `.devcontainer/.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`). Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts.
+
+`known_hosts` is bind-mounted read-only from the host.

@@ -1,0 +1,160 @@
+#!/bin/sh
+# Run on the host from devcontainer initializeCommand (before the container starts).
+# VS Code, Cursor, and `devcontainer up` all invoke this automatically.
+#
+# Ensures a host ssh-agent socket (private keys stay on the host), writes
+# .devcontainer/.env, and loads default SSH keys when possible:
+# - Reuse an already-unlocked agent (desktop session, 1Password, prior Keychain).
+# - macOS Keychain / quiet add when no prompt is needed.
+# - If still empty: prompt via TTY or platform askpass/Keychain UI (still during initializeCommand).
+set -eu
+
+cd "$(dirname "$0")/../../.."
+
+ENV_FILE=.devcontainer/.env
+STABLE_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock"
+mkdir -p "$(dirname "$STABLE_SOCK")"
+mkdir -p "$HOME/.ssh"
+touch "$HOME/.ssh/known_hosts"
+chmod 700 "$HOME/.ssh" 2>/dev/null || true
+
+OS=$(uname -s 2>/dev/null || echo unknown)
+
+DEFAULT_KEYS="
+$HOME/.ssh/id_ed25519
+$HOME/.ssh/id_rsa
+$HOME/.ssh/id_ecdsa
+$HOME/.ssh/id_ed25519_sk
+$HOME/.ssh/id_ecdsa_sk
+"
+
+agent_has_identities() {
+  _sock=$1
+  [ -S "$_sock" ] || return 1
+  SSH_AUTH_SOCK="$_sock" ssh-add -l >/dev/null 2>&1
+}
+
+agent_reachable() {
+  _sock=$1
+  [ -S "$_sock" ] || return 1
+  _out=$(SSH_AUTH_SOCK="$_sock" ssh-add -l 2>&1) && return 0
+  echo "$_out" | grep -qi 'no identities' && return 0
+  return 1
+}
+
+# Prefer an agent that already has unlocked keys (zero prompt).
+AGENT_SOCK=
+if [ -n "${SSH_AUTH_SOCK:-}" ] && agent_has_identities "$SSH_AUTH_SOCK"; then
+  AGENT_SOCK=$SSH_AUTH_SOCK
+fi
+if [ -z "$AGENT_SOCK" ]; then
+  set -- \
+    "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" \
+    "$HOME/.1password/agent.sock"
+  for _op in "$@"; do
+    if agent_has_identities "$_op"; then
+      AGENT_SOCK=$_op
+      break
+    fi
+  done
+fi
+if [ -z "$AGENT_SOCK" ] && agent_has_identities "$STABLE_SOCK"; then
+  AGENT_SOCK=$STABLE_SOCK
+fi
+
+# No unlocked keys yet: use our stable socket so loads go to the path we forward.
+if [ -z "$AGENT_SOCK" ]; then
+  if agent_reachable "$STABLE_SOCK"; then
+    AGENT_SOCK=$STABLE_SOCK
+  else
+    rm -f "$STABLE_SOCK"
+    ssh-agent -a "$STABLE_SOCK" >/dev/null
+    AGENT_SOCK=$STABLE_SOCK
+  fi
+fi
+
+export SSH_AUTH_SOCK=$AGENT_SOCK
+
+add_one_quiet() {
+  _key=$1
+  [ -f "$_key" ] || return 0
+  if [ "$OS" = Darwin ]; then
+    ssh-add --apple-use-keychain "$_key" </dev/null >/dev/null 2>&1 || true
+  else
+    ssh-add -q "$_key" </dev/null >/dev/null 2>&1 || true
+  fi
+}
+
+add_one_prompt() {
+  _key=$1
+  [ -f "$_key" ] || return 0
+  if [ "$OS" = Darwin ]; then
+    echo "SSH: unlock $_key (macOS Keychain)..." >&2
+    ssh-add --apple-use-keychain "$_key" || true
+  else
+    echo "SSH: unlock $_key..." >&2
+    ssh-add "$_key" || true
+  fi
+}
+
+# 1) Non-interactive / Keychain cache hits
+for _key in $DEFAULT_KEYS; do
+  add_one_quiet "$_key"
+done
+
+# 2) Still empty: prompt as part of initializeCommand (not a separate user-run script)
+if ! agent_has_identities "$AGENT_SOCK"; then
+  _has_default_key=0
+  for _key in $DEFAULT_KEYS; do
+    [ -f "$_key" ] || continue
+    _has_default_key=1
+    break
+  done
+
+  if [ "$_has_default_key" -eq 1 ]; then
+    if [ -t 0 ] || [ -t 1 ]; then
+      echo "SSH: no identities in the host agent yet; unlock keys for this devcontainer..." >&2
+      for _key in $DEFAULT_KEYS; do
+        add_one_prompt "$_key"
+      done
+    elif [ "$OS" = Darwin ]; then
+      # Cursor/VS Code initializeCommand often has no TTY; Keychain may still present UI.
+      echo "SSH: attempting Keychain unlock (may show a system prompt)..." >&2
+      for _key in $DEFAULT_KEYS; do
+        [ -f "$_key" ] || continue
+        ssh-add --apple-use-keychain "$_key" 2>/dev/null || true
+      done
+    else
+      _askpass=
+      if command -v ssh-askpass >/dev/null 2>&1; then
+        _askpass=$(command -v ssh-askpass)
+      elif command -v ksshaskpass >/dev/null 2>&1; then
+        _askpass=$(command -v ksshaskpass)
+      elif command -v lxqt-openssh-askpass >/dev/null 2>&1; then
+        _askpass=$(command -v lxqt-openssh-askpass)
+      fi
+      if [ -n "$_askpass" ] && { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; then
+        echo "SSH: unlocking keys via askpass (system prompt)..." >&2
+        for _key in $DEFAULT_KEYS; do
+          [ -f "$_key" ] || continue
+          SSH_ASKPASS=$_askpass SSH_ASKPASS_REQUIRE=force ssh-add "$_key" </dev/null 2>/dev/null || true
+        done
+      fi
+    fi
+  fi
+fi
+
+{
+  printf 'DEVELOPER_UID=%s\n' "$(id -u)"
+  printf 'DOCKER_GID=%s\n' "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || stat -f '%g' /var/run/docker.sock)"
+  printf 'HOST_HOME_DIR=%s\n' "$HOME"
+  printf 'HOST_SSH_AUTH_SOCK=%s\n' "$AGENT_SOCK"
+} >"$ENV_FILE"
+
+if agent_has_identities "$AGENT_SOCK"; then
+  echo "SSH: host agent ready ($(SSH_AUTH_SOCK=$AGENT_SOCK ssh-add -l 2>/dev/null | wc -l | tr -d ' ') key(s))" >&2
+elif [ -n "${SSH_AUTH_SOCK:-}" ]; then
+  echo "SSH: host agent has no identities yet." >&2
+  echo "  Reopen/rebuild may prompt again, or enable 1Password SSH agent / macOS Keychain." >&2
+  echo "  GitHub HTTPS alternative: gh auth login (inside the container)." >&2
+fi

@@ -1,21 +1,18 @@
 {
   "mcpServers": {
     "chrome-devtools": {
+      "type": "stdio",
       "command": "docker",
       "args": [
-        "exec",
-        "-i",
+        "exec", "-i",
         "super_projects-devcontainer-1",
-        "mise",
-        "exec",
-        "-C",
-        "/workspaces",
-        "--",
+        "mise", "exec", "-C", "/workspaces", "--",
         "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"
       ]
     },
     "figma": {
+      "type": "http",
       "url": "https://mcp.figma.com/mcp"
     }
   }

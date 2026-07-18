@@ -10,14 +10,26 @@
 !.cursor/**
 !.claude/
 !.claude/**
+!.codex/
+!.codex/**
+!.gemini/
+!.gemini/**
 !.vscode/
 !.vscode/**
+!.mcp.json
 !README.md
 !LICENSE
-!AGENTS.md
-!agents.md
 !.mise.toml
+!.agents/
+!.agents/**
+
+# Always ignore local-only files, including under otherwise whitelisted dirs.
+**/.local_only/
+**/.local_only/**
 
 # Ignore generated/persisted files even though the parent dirs are whitelisted above
 .devcontainer/.env
-.devcontainer/gemini-data/
+
+# Persist shortcut dirs are Docker mount points on the host (often empty); keep README tracked
+.devcontainer/persist/*
+!.devcontainer/persist/README.md

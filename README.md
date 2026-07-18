@@ -30,7 +30,7 @@ git clone git@github.com:samuelfrost/super_projects.git
 ### Option A — CLI (no IDE required)
 
 ```sh
-# Build and start (runs initializeCommand to generate .env, then builds + starts)
+# Build and start (runs initializeCommand → ensure-host-ssh-agent to write .env, then builds + starts)
 devcontainer up --remove-existing-container
 
 # Open a shell inside the container
@@ -52,6 +52,24 @@ The VNC desktop and Chrome start automatically with the container — no extra s
 2. When prompted, click **Reopen in Container** (or run the _Dev Containers: Reopen in Container_ command).
 3. The container builds once; subsequent opens are fast.
 
+### SSH setup (passphrase-protected keys)
+
+Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
+
+Unlocking happens automatically in **`initializeCommand`** (`ensure-host-ssh-agent`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script also writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, and `HOST_SSH_AUTH_SOCK` (used by Compose/Dockerfile for the `developer` user, `docker.sock` access, `known_hosts`, and the agent mount). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
+
+**Still useful:**
+
+- **macOS:** add to `~/.ssh/config` so later opens often skip prompts:
+  ```
+  Host *
+    AddKeysToAgent yes
+    UseKeychain yes
+  ```
+- **1Password SSH agent:** enable and unlock 1Password; initializeCommand reuses that agent when it already has identities.
+- **GitHub without SSH:** `gh auth login` and HTTPS remotes (inside the container after start).
+- **WSL:** use WSL end-to-end (`dev.containers.executeInWSL`); native Windows is not supported for this SSH flow.
+
 ## Devcontainer details
 
 The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.devcontainer/Dockerfile`. It includes:
@@ -70,17 +88,23 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
+Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image), `initialize/` (host `initializeCommand`), and `shell/` (sourced from the workspace bind at runtime).
+
 ### Persisted data
 
-| Volume | Container path | Purpose |
-|--------|---------------|---------|
-| `.devcontainer/gemini-data/` (bind) | `~/.gemini` | Gemini CLI sessions/config (gitignored) |
-| `~/.bash_history` (host bind) | `~/.bash_history` | Shell history continuity |
-| `~/.ssh` (host bind) | `~/.ssh` | SSH key forwarding |
-| `super_projects_chrome-devtools-mcp-profile` (named volume) | `~/chrome-profile` | Chrome logins, cookies, extensions |
-| `super_projects_mise-data` (named volume) | `~/.local/share/mise` | mise downloads and tool installs |
+Tool state uses **named Docker volumes** (macOS-friendly I/O). Each volume is also mounted under `.devcontainer/persist/` as a discoverability shortcut — see [`.devcontainer/persist/README.md`](.devcontainer/persist/README.md).
 
-The Chrome profile is stored in a named Docker volume so it survives container rebuilds. It is only lost if you explicitly remove the volume:
+| Volume | Home path | Persist shortcut | Purpose |
+|--------|-----------|------------------|---------|
+| `super_projects_gemini-data` | `~/.gemini` | `persist/gemini` | Gemini CLI sessions/config |
+| `super_projects_gh-data` | `~/.config/gh` | `persist/gh` | GitHub CLI auth |
+| `super_projects_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
+| `super_projects_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
+| `super_projects_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
+| host ssh-agent socket | `/ssh-agent.sock` | — | Host-forwarded agent (private keys stay on the host) |
+| host `known_hosts` (ro bind) | `~/.ssh/known_hosts` | — | Shared SSH host keys |
+
+Named volumes survive container rebuilds. Remove one explicitly if you need a clean slate, for example:
 ```sh
 docker volume rm super_projects_chrome-devtools-mcp-profile
 ```

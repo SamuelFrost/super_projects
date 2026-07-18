@@ -1,0 +1,34 @@
+#!/bin/bash
+# Report SSH agent + GitHub CLI status. Private keys are not available in the
+# container; the host ssh-agent is forwarded at SSH_AUTH_SOCK (/ssh-agent.sock).
+set -euo pipefail
+
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-/ssh-agent.sock}"
+
+if [ ! -S "$SSH_AUTH_SOCK" ]; then
+  echo "SSH agent socket missing at $SSH_AUTH_SOCK (host agent not forwarded)." >&2
+  echo "Reopen the folder in the container (runs initializeCommand on the host)." >&2
+else
+  set +e
+  ssh_add_out=$(ssh-add -l 2>&1)
+  ssh_add_rc=$?
+  set -e
+  if [ "$ssh_add_rc" -eq 0 ]; then
+    key_count=$(printf '%s\n' "$ssh_add_out" | wc -l | tr -d ' ')
+    echo "SSH agent: ${key_count} key(s) available (host-forwarded)"
+    printf '%s\n' "$ssh_add_out" | sed 's/^/  /'
+  elif printf '%s\n' "$ssh_add_out" | grep -qi 'no identities'; then
+    echo "SSH agent: reachable but empty." >&2
+    echo "  Reopen in Container / rerun initializeCommand to unlock keys on the host," >&2
+    echo "  or use HTTPS: gh auth login" >&2
+  else
+    echo "SSH agent: socket present but not usable at $SSH_AUTH_SOCK" >&2
+    printf '%s\n' "$ssh_add_out" >&2
+  fi
+fi
+
+if gh auth status >/dev/null 2>&1; then
+  echo "GitHub CLI: authenticated"
+else
+  echo "GitHub CLI: run once (persists across rebuilds): gh auth login" >&2
+fi

@@ -20,8 +20,12 @@ auto_install = true
 ruby.compile = false
 
 [tools]
+# Fallback when no nearer .tool-versions exists (e.g. workspace root scripts).
+# Subrepositories pin node via their own .tool-versions.
 ruby    = "4.0"
-# node    = "22"
+node    = "22"
+# chrome-devtools MCP server (pinned version for agent configs: .cursor/, .vscode/, .mcp.json, .codex/, .gemini/).
+"npm:chrome-devtools-mcp" = "1.6.0"
 # python  = "3.13"
 # go      = "1.22"
 # java    = "temurin-21"

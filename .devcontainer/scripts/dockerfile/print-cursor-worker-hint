@@ -1,0 +1,6 @@
+#!/bin/bash
+echo ""
+echo "Cursor Cloud Agent (My Machines):"
+echo "  agent login"
+echo "  agent worker start --name \"super_projects_devcontainer\""
+echo ""

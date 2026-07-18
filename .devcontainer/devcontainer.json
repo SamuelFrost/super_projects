@@ -9,20 +9,20 @@
   // "remoteUser": "developer",
   // "updateRemoteUserUID": true,
 
-  // Populate .devcontainer/.env with host UID and docker.sock GID before the image is built.
-  // Docker Compose resolves ${VAR} substitutions from the .env file in the same directory as
-  // the compose file (.devcontainer/), so the file must live there — not at the workspace root.
-  // Also pre-create the gemini-data bind-mount dir so Docker doesn't create it as root.
-  "initializeCommand": "sh -c 'printf \"DEVELOPER_UID=$(id -u)\\nDOCKER_GID=$(stat -c \"%g\" /var/run/docker.sock)\\nHOST_HOME_DIR=$HOME\\n\" > .devcontainer/.env && mkdir -p .devcontainer/gemini-data'",
+  // Host-side hook before the container starts (VS Code, Cursor, and `devcontainer up` etc.).
+  // ensure-host-ssh-agent writes .devcontainer/.env (DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR,
+  // HOST_SSH_AUTH_SOCK), forwards only the ssh-agent socket, and may prompt once to unlock keys.
+  "initializeCommand": "sh .devcontainer/scripts/initialize/ensure-host-ssh-agent && mkdir -p .devcontainer/persist/gemini .devcontainer/persist/gh .devcontainer/persist/git .devcontainer/persist/mise .devcontainer/persist/chrome",
 
   // Expose localWorkspaceFolder so tools inside the container can reference the host path
   "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },
 
   "containerEnv": {
     "EDITOR": "code",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "MISE_TRUSTED_CONFIG_PATHS": "/workspaces"
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
+
+  "postStartCommand": "ensure-auth && print-cursor-worker-hint",
 
   "otherPortsAttributes": {
     "onAutoForward": "ignore"
@@ -46,6 +46,8 @@
         "eamodio.gitlens",
         "marcoroth.herb-lsp",
         "marcoroth.stimulus-lsp",
+        "biomejs.biome",
+        "vitest.explorer",
         "zoma.vscode-auto-open-workspace",
         "ms-azuretools.vscode-containers",
         "ms-vscode-remote.remote-containers",
@@ -56,7 +58,17 @@
         "ms-vscode.remote-explorer"
       ],
       "settings": {
-        "autoOpenWorkspace.enableAutoOpenAlwaysFirst": true
+        "autoOpenWorkspace.enableAutoOpenAlwaysFirst": true,
+        // Named-volume shortcuts under persist/ can be huge (mise installs, Chrome profile).
+        // Keep them out of the workspace file watcher and search index.
+        "files.watcherExclude": {
+          "**/.devcontainer/persist/mise/**": true,
+          "**/.devcontainer/persist/chrome/**": true
+        },
+        "search.exclude": {
+          "**/.devcontainer/persist/mise": true,
+          "**/.devcontainer/persist/chrome": true
+        }
       }
     }
   }

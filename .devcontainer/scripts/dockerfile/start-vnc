@@ -1,0 +1,19 @@
+#!/bin/bash
+pkill Xvfb 2>/dev/null
+pkill x11vnc 2>/dev/null
+pkill websockify 2>/dev/null
+pkill -f xfce4-session 2>/dev/null
+pkill -f google-chrome 2>/dev/null
+sleep 0.3
+nohup Xvfb :99 -screen 0 "${NOVNC_RESOLUTION:-1920x1080}x24" \
+  +extension GLX +extension RENDER -noreset >/tmp/xvfb.log 2>&1 &
+sleep 0.5
+nohup env DISPLAY=:99 startxfce4 >/tmp/xfce4.log 2>&1 &
+setsid x11vnc -display :99 -nopw -forever -shared \
+  -rfbport "${VNC_PORT:-5900}" >/tmp/x11vnc.log 2>&1 &
+sleep 0.5
+nohup websockify --web /usr/share/novnc \
+  "${NOVNC_PORT:-6080}" "localhost:${VNC_PORT:-5900}" >/tmp/websockify.log 2>&1 &
+chrome
+echo "noVNC ready:  http://localhost:${NOVNC_PORT:-6080}/vnc.html"
+echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"

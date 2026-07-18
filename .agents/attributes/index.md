@@ -32,12 +32,7 @@ This index lists the available agent attributes by category. Link text uses each
 
 ### Available tools
 
-- [Domain context — how the devcontainer installs and configures tools](tools/available_tools/devcontainer_configuration_explanation.md)
-- [Domain context — base terminal and system tools](tools/available_tools/base_terminal_and_system_tools.md)
-- [Domain context — build dependencies for mise-managed runtimes](tools/available_tools/build_dependencies_for_mise_managed_runtimes.md)
-- [Domain context — CLIs and package managers](tools/available_tools/clis_and_package_managers.md)
-- [Domain context — mise-managed workspace runtimes](tools/available_tools/mise_managed_workspace_runtimes.md)
-- [Domain context — browser, GUI, and VNC stack](tools/available_tools/browser_gui_and_vnc_stack.md)
+- [Domain context — available tools installed by the devcontainer](tools/available_tools/devcontainer_available_tools.md)
 
 ### Browser
 

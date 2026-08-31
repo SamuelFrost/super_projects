@@ -61,6 +61,32 @@ Match the toolset to your company's stack (details in [Customising for your team
 
 Commit and push these changes to your fork, then have your team clone it and follow [Getting started](#getting-started).
 
+### Pulling in upstream changes
+
+Your fork can keep receiving improvements from the original project. Add the upstream repository as a remote once:
+
+```sh
+git remote add upstream git@github.com:SamuelFrost/super_projects.git
+```
+
+Then, whenever you want to sync:
+
+```sh
+git fetch upstream
+git checkout main
+git merge upstream/main
+```
+
+A merge is preferred over a rebase because your fork's `main` is shared history that your whole team pulls from.
+
+Things to watch for when merging:
+
+- **The rename.** Upstream still uses the `super_projects` name, so incoming changes will either conflict with your renamed files or quietly reintroduce the old name. Resolve conflicts in favor of your name, then re-run the rename command from [step 1](#1-rename-the-container-do-this-first) and check `git diff` to catch occurrences in newly added upstream files. Remember that a reintroduced default name means shared volumes — and potential credential leakage — with any other fork on the machine.
+- **Your customizations.** Changes you made to the Dockerfile, `.mise.toml`, agent profiles, and MCP configs (steps 2 and 3) may conflict with upstream edits to the same files; keep your company's version and port over anything useful from upstream.
+- **Rebuild after merging.** If `.devcontainer/` changed, everyone should rebuild (_Dev Containers: Rebuild Container_, or `devcontainer up --remove-existing-container`) to pick up the new image and settings.
+
+Push the merged result to your fork so the whole team receives the update.
+
 ## Getting started
 
 ### Prerequisites

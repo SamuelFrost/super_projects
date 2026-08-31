@@ -25,21 +25,26 @@ The intended way to use this project is one fork per company (or team). Your for
 
 The Docker Compose project name — `name: "super_projects"` in `.devcontainer/compose.yaml` — determines the container name (`super_projects-devcontainer-1`), the Docker network name, and the prefix of every named volume. If your fork keeps the default name, it will collide with any other fork or copy of this project on the same machine, and Docker will silently **share the named volumes** between them. With the current setup that is usually not a big deal, but those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), and git config — so a name collision can leak state and credentials between unrelated projects. Rename as soon as you fork, before anyone starts the container.
 
-Replace `super_projects` with your company's project name (for example `acme_projects`) everywhere outside `LICENSE`:
+Pick your company's project name (`acme_projects` is used as the example below) and apply it consistently — the container name in the MCP configs is derived from the Compose project name, so they must be changed together.
 
-```sh
-git grep -l super_projects -- ':!LICENSE' | xargs sed -i 's/super_projects/acme_projects/g'
-# macOS: use sed -i '' 's/super_projects/acme_projects/g'
-```
+**Required — Docker and the MCP configs use these names directly:**
 
-Review the diff before committing (and revert any replacements in attribution or license text that should keep referring to the original project). The name appears in:
+- `.devcontainer/compose.yaml`
+  - `name: "super_projects"` → `name: "acme_projects"` — the Compose project name. This is the name that matters most: it determines the container name (`acme_projects-devcontainer-1`) and the named-volume prefix (`acme_projects_gh-data`, `acme_projects_chrome-devtools-mcp-profile`, …), which is what prevents volume sharing between forks.
+  - `hostname: super_projects` → `hostname: acme_projects` — the container's hostname.
+  - `super_projects_default` → `acme_projects_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`. Project compose files that join this network (like the [example below](#simple-example-project-create-a-new-rails-project-inside-your-fork)) must reference the same name.
+  - While editing, also update the comments quoting `docker volume rm super_projects_…` so they stay copy-pasteable.
+- `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`
+  - Replace the container name `super_projects-devcontainer-1` with `acme_projects-devcontainer-1` (one occurrence in each file). These configs `docker exec` into the container by name, so a mismatch with the Compose project name breaks the chrome-devtools MCP server.
+- `.devcontainer/devcontainer.json`
+  - `"name": "super_projects"` → `"name": "acme_projects"` — the label VS Code / Cursor shows for the devcontainer.
 
-- `.devcontainer/compose.yaml` — compose project `name` (drives the container and volume names), `hostname`, and the `super_projects_default` network
-- `.devcontainer/devcontainer.json` — devcontainer `name`
-- `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml` — the container name (`super_projects-devcontainer-1`) that MCP servers exec into
-- `.devcontainer/scripts/initialize/ensure-host-ssh-agent` — the host ssh-agent socket filename
-- `.devcontainer/scripts/dockerfile/print-cursor-worker-hint` — the suggested Cursor worker name
-- `README.md` and `.devcontainer/persist/README.md` — volume names in documentation
+**Recommended — host-side helper scripts:**
+
+- `.devcontainer/scripts/initialize/ensure-host-ssh-agent` — rename the `super_projects-ssh-agent.sock` socket filename so your fork keeps its own stable ssh-agent socket on the host instead of sharing one with other forks.
+- `.devcontainer/scripts/dockerfile/print-cursor-worker-hint` — rename the suggested Cursor worker name `super_projects_devcontainer`.
+
+**Documentation mentions — no rush.** Every other occurrence (volume names quoted in this README and in `.devcontainer/persist/README.md`, the `.directory_information.md` files, the agent profile template under `.agents/`) is documentation with no functional effect; update them whenever convenient — `git grep super_projects` lists them all. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
 
 If a container was already started under the old name, remove it first with `docker compose -f .devcontainer/compose.yaml down` (add `-v` to also remove the old volumes).
 
@@ -81,7 +86,7 @@ A merge is preferred over a rebase because your fork's `main` is shared history 
 
 Things to watch for when merging:
 
-- **The rename.** Upstream still uses the `super_projects` name, so incoming changes will either conflict with your renamed files or quietly reintroduce the old name. Resolve conflicts in favor of your name, then re-run the rename command from [step 1](#1-rename-the-container-do-this-first) and check `git diff` to catch occurrences in newly added upstream files. Remember that a reintroduced default name means shared volumes — and potential credential leakage — with any other fork on the machine.
+- **The rename.** Upstream still uses the `super_projects` name, so incoming changes will either conflict with your renamed files or quietly reintroduce the old name. Resolve conflicts in favor of your name, then run `git grep super_projects` over the files listed in [step 1](#1-rename-the-container-do-this-first) to catch reintroduced occurrences in merged or newly added files. Remember that a reintroduced default name means shared volumes — and potential credential leakage — with any other fork on the machine.
 - **Your customizations.** Changes you made to the Dockerfile, `.mise.toml`, agent profiles, and MCP configs (steps 2 and 3) may conflict with upstream edits to the same files; keep your company's version and port over anything useful from upstream.
 - **Rebuild after merging.** If `.devcontainer/` changed, everyone should rebuild (_Dev Containers: Rebuild Container_, or `devcontainer up --remove-existing-container`) to pick up the new image and settings.
 
@@ -238,7 +243,7 @@ When reusing or redistributing super_projects scaffold files, you must:
 
 
 ## Simple example project: create a new Rails project inside your fork
-<!-- note: the project is created as an untracked subdirectory of this repo (the parent-directory pattern). Using this repo as a monorepo is no longer a recommended pattern. If you renamed your fork, the super_projects names below will already reflect your project name. -->
+<!-- note: the project is created as an untracked subdirectory of this repo (the parent-directory pattern). Using this repo as a monorepo is no longer a recommended pattern. If you renamed your fork, use your project's network name (e.g. acme_projects_default) in place of super_projects_default below. -->
 
 ```bash
 docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'

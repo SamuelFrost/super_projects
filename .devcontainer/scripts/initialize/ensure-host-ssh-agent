@@ -13,6 +13,9 @@ cd "$(dirname "$0")/../../.."
 
 ENV_FILE=.devcontainer/.env
 STABLE_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock"
+# Docker bind-mounts create a directory at a missing source path; if compose ever
+# ran before the agent socket existed, clear that directory so ssh-agent can bind.
+[ -d "$STABLE_SOCK" ] && rm -rf "$STABLE_SOCK"
 mkdir -p "$(dirname "$STABLE_SOCK")"
 mkdir -p "$HOME/.ssh"
 touch "$HOME/.ssh/known_hosts"

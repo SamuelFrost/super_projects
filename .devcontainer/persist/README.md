@@ -2,6 +2,8 @@
 
 Durable tool state lives in **named Docker volumes** (good I/O on macOS). Each volume is mounted twice: at the conventional path under `/home/developer`, and again here as a shortcut so you can browse everything from one tree **inside the container**.
 
+Volume names are prefixed with the Docker Compose project name (`name:` in `compose.yaml`, `super_projects` by default). Because these volumes hold credentials and other tool state, forks must rename the project so two forks on the same machine don't silently share them — see "Forking for your company" in the root README.
+
 On the **host**, these shortcut directories are mount points and often look empty. Inspect data with:
 
 ```sh

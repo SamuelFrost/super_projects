@@ -37,7 +37,9 @@ services:
       - mise-data:/workspaces/.devcontainer/persist/mise
       # Host ssh-agent only (private keys never enter the container).
       # HOST_SSH_AUTH_SOCK is ensured by initializeCommand → ensure-host-ssh-agent.
-      - ${HOST_SSH_AUTH_SOCK}:/ssh-agent.sock
+      # The default mirrors STABLE_SOCK in that script so manual `docker compose`
+      # commands (down, ps, ...) work without .env being populated first.
+      - ${HOST_SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-${HOME}/.cache}/super_projects-ssh-agent.sock}:/ssh-agent.sock
       # Shared known_hosts (file bind; created on host by ensure-host-ssh-agent).
       - ${HOST_HOME_DIR:-${HOME}}/.ssh/known_hosts:/home/developer/.ssh/known_hosts:ro
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells

@@ -2,13 +2,95 @@
 
 A containerized parent-directory environment for software development teams.
 
-Fork this repository, place it where you would normally keep your projects directory, and open it in VS Code or Cursor to get a fully configured development container your whole team can share.
+Fork this repository for your company, place your fork where you would normally keep your projects directory, and open it in VS Code or Cursor to get a fully configured development container your whole team can share.
 
 ## What this is
 
 `super_projects` is designed to be your projects' parent directory. Rather than configuring each developer's machine individually, the dev environment (Docker, IDE settings, AI tooling) is codified here and shared via git.
 
-Teams fork this repo and maintain their own version of the Docker image, devcontainer settings, and IDE extensions — so every developer gets an identical, reproducible environment.
+It is a template meant to be forked once per company (or team), customized, and shared across the organization:
+
+1. **Fork** this repo for your company.
+2. **Rename** the container and related identifiers immediately — see [Forking for your company](#forking-for-your-company).
+3. **Customize** the agent setups and tools to match your company's needs.
+4. Developers clone the company fork where they keep their projects; individual project repositories live inside it as untracked subdirectories.
+
+Each company maintains its own version of the Docker image, devcontainer settings, agent setups, and IDE extensions — so every developer gets an identical, reproducible environment. Using the repo as a monorepo (tracking project code directly in it) is no longer a recommended pattern; keep projects as separate repositories cloned inside your fork.
+
+## Forking for your company
+
+The intended way to use this project is one fork per company (or team). Your fork becomes your organization's shared development environment: customize it, commit the changes, and every developer gets them on the next pull and container rebuild.
+
+### 1. Rename the container (do this first)
+
+The Docker Compose project name — `name: "super_projects"` in `.devcontainer/compose.yaml` — determines the container name (`super_projects-devcontainer-1`), the Docker network name, and the prefix of every named volume. If your fork keeps the default name, it will collide with any other fork or copy of this project on the same machine, and Docker will silently **share the named volumes** between them. With the current setup that is usually not a big deal, but those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), and git config — so a name collision can leak state and credentials between unrelated projects. Rename as soon as you fork, before anyone starts the container.
+
+Pick your company's project name (`acme_projects` is used as the example below) and apply it consistently — the container name in the MCP configs is derived from the Compose project name, so they must be changed together.
+
+**Required — Docker and the MCP configs use these names directly:**
+
+- `.devcontainer/compose.yaml`
+  - `name: "super_projects"` → `name: "acme_projects"` — the Compose project name. This is the name that matters most: it determines the container name (`acme_projects-devcontainer-1`) and the named-volume prefix (`acme_projects_gh-data`, `acme_projects_chrome-devtools-mcp-profile`, …), which is what prevents volume sharing between forks.
+  - `hostname: super_projects` → `hostname: acme_projects` — the container's hostname.
+  - `super_projects_default` → `acme_projects_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`. Project compose files that join this network (like the [example below](#simple-example-project-create-a-new-rails-project-inside-your-fork)) must reference the same name.
+  - While editing, also update the comments quoting `docker volume rm super_projects_…` so they stay copy-pasteable.
+- `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`
+  - Replace the container name `super_projects-devcontainer-1` with `acme_projects-devcontainer-1` (one occurrence in each file). These configs `docker exec` into the container by name, so a mismatch with the Compose project name breaks the chrome-devtools MCP server.
+- `.devcontainer/devcontainer.json`
+  - `"name": "super_projects"` → `"name": "acme_projects"` — the label VS Code / Cursor shows for the devcontainer.
+
+**Recommended — host-side helper scripts:**
+
+- `.devcontainer/scripts/initialize/ensure-host-ssh-agent` — rename the `super_projects-ssh-agent.sock` socket filename so your fork keeps its own stable ssh-agent socket on the host instead of sharing one with other forks.
+- `.devcontainer/scripts/dockerfile/print-cursor-worker-hint` — rename the suggested Cursor worker name `super_projects_devcontainer`.
+
+**Documentation mentions — no rush.** Every other occurrence (volume names quoted in this README and in `.devcontainer/persist/README.md`, the `.directory_information.md` files, the agent profile template under `.agents/`) is documentation with no functional effect; update them whenever convenient — `git grep super_projects` lists them all. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
+
+If a container was already started under the old name, remove it first with `docker compose -f .devcontainer/compose.yaml down` (add `-v` to also remove the old volumes).
+
+### 2. Customize the agent setups
+
+Adapt the AI agent configuration to your company's workflows:
+
+- Shared agent profiles and reusable behavior attributes live under `.agents/` — see [`.agents/agent_profiles/README.md`](.agents/agent_profiles/README.md). Each developer copies a profile to the untracked root `agents.md`; keep the shared templates in your fork up to date with your team's conventions.
+- MCP server wiring lives in `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, and `.codex/config.toml` — add the servers your company uses and remove the ones it doesn't.
+
+### 3. Add or remove tools
+
+Match the toolset to your company's stack (details in [Customising for your team](#customising-for-your-team)):
+
+- Language runtimes and versions: `.mise.toml`.
+- System packages and CLIs: `.devcontainer/Dockerfile`.
+- IDE extensions: `customizations.vscode.extensions` in `.devcontainer/devcontainer.json`.
+- **Company-internal tools:** prefer installing them via Docker — bake them into `.devcontainer/Dockerfile`, or run them as additional services in `.devcontainer/compose.yaml` — so every developer gets them automatically instead of following manual setup steps.
+
+Commit and push these changes to your fork, then have your team clone it and follow [Getting started](#getting-started).
+
+### Pulling in upstream changes
+
+Your fork can keep receiving improvements from the original project. Add the upstream repository as a remote once:
+
+```sh
+git remote add upstream git@github.com:SamuelFrost/super_projects.git
+```
+
+Then, whenever you want to sync:
+
+```sh
+git fetch upstream
+git checkout main
+git merge upstream/main
+```
+
+A merge is preferred over a rebase because your fork's `main` is shared history that your whole team pulls from.
+
+Things to watch for when merging:
+
+- **The rename.** Upstream still uses the `super_projects` name, so incoming changes will either conflict with your renamed files or quietly reintroduce the old name. Resolve conflicts in favor of your name, then run `git grep super_projects` over the files listed in [step 1](#1-rename-the-container-do-this-first) to catch reintroduced occurrences in merged or newly added files. Remember that a reintroduced default name means shared volumes — and potential credential leakage — with any other fork on the machine.
+- **Your customizations.** Changes you made to the Dockerfile, `.mise.toml`, agent profiles, and MCP configs (steps 2 and 3) may conflict with upstream edits to the same files; keep your company's version and port over anything useful from upstream.
+- **Rebuild after merging.** If `.devcontainer/` changed, everyone should rebuild (_Dev Containers: Rebuild Container_, or `devcontainer up --remove-existing-container`) to pick up the new image and settings.
+
+Push the merged result to your fork so the whole team receives the update.
 
 ## Getting started
 
@@ -20,9 +102,9 @@ Teams fork this repo and maintain their own version of the Docker image, devcont
   - [VS Code](https://code.visualstudio.com/download) (with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers))
   - [Cursor](https://cursor.com/download) (with the Dev Containers extension)
 
-Clone this repo where you keep your projects; you can make it the parent directory of all your projects, for a few select projects, or use it as a monorepo. It's recommended you fork this repo and keep your own version for your team.
+Fork this repo for your company and rename it first (see [Forking for your company](#forking-for-your-company)), then clone your fork where you keep your projects — it can be the parent directory of all your projects or just a few select ones.
 ```sh
-git clone git@github.com:samuelfrost/super_projects.git
+git clone git@github.com:<your-company>/<your-fork>.git
 ```
 
 ---
@@ -123,7 +205,11 @@ The Claude Code CLI setup is included but commented out in the Dockerfile. To en
 
 ## Customising for your team
 
-- **Add/modify tools:** edit `.devcontainer/Dockerfile` and rebuild.
+These customizations belong in your company fork (see [Forking for your company](#forking-for-your-company)) so they are shared with the whole team via git:
+
+- **Add/modify tools:** edit `.devcontainer/Dockerfile` and rebuild, or pin versions in `.mise.toml`.
+- **Company-internal tools:** install them via Docker — bake them into `.devcontainer/Dockerfile`, or run them as additional services in `.devcontainer/compose.yaml` — rather than relying on manual per-developer setup.
+- **Agent setups:** edit the shared profiles and attributes under `.agents/` and the MCP configs (`.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`).
 - **Add/modify extensions:** add extension IDs to the `customizations.vscode.extensions` array in `.devcontainer/devcontainer.json`.
 - **Add/modify environment variables:** use `containerEnv` in `devcontainer.json` for variables that should always be set inside the container.
 - **Project-specific services** take advantage of the GUI and add emulators / browsers / other gui tools to the dockerfile build.
@@ -135,12 +221,14 @@ The `.gitignore` is configured to ignore everything **except** the files that de
 | Path | Purpose |
 |------|---------|
 | `.devcontainer/` | Dockerfile, compose, and devcontainer config |
-| `.cursor/` | Cursor IDE rules, settings, and skills |
-| `.claude/` | Claude project config |
-| `.vscode/` | VS Code settings and extension recommendations |
+| `.agents/` | Shared agent profiles and behavior attributes (templates for `agents.md`) |
+| `.cursor/` / `.vscode/` / `.claude/` / `.codex/` / `.gemini/` | IDE and AI tool config (rules, settings, MCP wiring) |
+| `.mcp.json` | Shared MCP server config |
+| `.mise.toml` | Workspace-root tool versions |
 | `README.md` | This file |
-| `SUPER_PROJECTS_LICENSE` | Super Projects SUPER_PROJECTS_LICENSE (attribution required when reusing) |
-| `AGENTS.md` / `agents.md` | AI agent context for tools like Claude Code, Gemini CLI |
+| `LICENSE` | Super Projects License (attribution required when reusing) |
+
+The root `agents.md` is **not tracked**: each developer copies a shared profile from `.agents/agent_profiles/` and customizes it locally (see [`.agents/agent_profiles/README.md`](.agents/agent_profiles/README.md)).
 
 Individual project directories cloned inside here are **not tracked** by this repo.
 
@@ -150,12 +238,12 @@ This project is licensed under the [Super Projects License](LICENSE). The licens
 
 When reusing or redistributing super_projects scaffold files, you must:
 
-- Include a copy of [SUPER_PROJECTS_LICENSE](SUPER_PROJECTS_LICENSE) in any repository or distribution that incorporates that scaffold
+- Include a copy of the [Super Projects License](LICENSE) in any repository or distribution that incorporates that scaffold
 - Give credit to **Samuel Anthony Frost** with a web URL to a page he manages that includes a way to contact him (for example [GitHub](https://github.com/SamuelFrost), [LinkedIn](https://www.linkedin.com/in/samuel-frost-0a8711a3), or [X](https://x.com/Samuelfrost7)). (Including the SUPER PROJECTS LICENSE satisfies this requirement; the readme and such may be modified as needed)
 
 
-## Simple example project: To create a new rails project monorepo
-<!-- note: Using this as a monorepo is a recommended pattern of this (if you plan to use it as a monorepo, you would want to fork and rename the repo, and remove the git ignores in this case), if you want to instead use it as a parent directory for this example, simply create the subdirectory and run the command and put the docker compose file inside it as desired. -->
+## Simple example project: create a new Rails project inside your fork
+<!-- note: the project is created as an untracked subdirectory of this repo (the parent-directory pattern). Using this repo as a monorepo is no longer a recommended pattern. If you renamed your fork, use your project's network name (e.g. acme_projects_default) in place of super_projects_default below. -->
 
 ```bash
 docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'

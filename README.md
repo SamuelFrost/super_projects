@@ -166,8 +166,8 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - Node.js + npm
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini` command; free tier available)
 - `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
-- Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
-- Google Chrome, launched with remote debugging on port 9223 (accessible from the desktop GUI and via MCP)
+- Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6081/vnc.html` (host port offset +1 vs `super_projects` on 6080)
+- Google Chrome, launched with remote debugging on container port 9223 (accessible from the desktop GUI and via MCP inside the container; optional host mapping 9224→9223 in compose)
 - `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `docker compose … exec` into the `devcontainer` service and `mise`, so the MCP server connects to Chrome at `127.0.0.1:9223` inside the container. Optional host publication of the debugging port is disabled by default in Compose.
 - [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, Java, and more
 - Recommended extensions and settings for VS Code and Cursor

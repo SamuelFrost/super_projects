@@ -12,12 +12,12 @@ set -eu
 cd "$(dirname "$0")/../../.."
 
 DEVCONTAINER_ENV_FILE=.devcontainer/.env
-MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock"
+MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects_development-ssh-agent.sock"
 
 # WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
 case "${XDG_RUNTIME_DIR:-}" in
-  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/super_projects-ssh-agent.sock" ;;
-  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock" ;;
+  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/super_projects_development-ssh-agent.sock" ;;
+  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects_development-ssh-agent.sock" ;;
 esac
 
 mkdir -p "$HOME/.ssh"

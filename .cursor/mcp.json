@@ -5,7 +5,7 @@
       "args": [
         "exec",
         "-i",
-        "super_projects-devcontainer-1",
+        "super_projects_development-devcontainer-1",
         "mise",
         "exec",
         "-C",

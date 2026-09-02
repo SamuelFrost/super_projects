@@ -5,7 +5,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 #### Docker Compose
 
 - One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/workspaces`, Docker socket mounted for docker-outside-of-docker.
-- Host `initializeCommand` (`scripts/initialize/ensure-host-ssh-agent`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6080`.
+- Host `initializeCommand` (`scripts/initialize/ensure-host-ssh-agent`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6081` (+1 vs `super_projects` on 6080).
 - Do not mount whole `/home/developer` — that freezes image-owned installs after the first named-volume create.
 
 #### Persisted files
@@ -92,5 +92,5 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `websockify`: WebSocket-to-TCP bridge for noVNC.
 - `x11-xserver-utils`: X11 utilities.
 - `xterm`: lightweight fallback terminal.
-- noVNC is published on host port `6080` when the compose port mapping is enabled (by default).
-- Chrome remote debugging is configured for container port `9223`; host publication is optional in compose (off by default).
+- noVNC is published on host port `6081` when the compose port mapping is enabled (by default; container internal 6080).
+- Chrome remote debugging is configured for container port `9223`; optional host publication on `9224` in compose (off by default).

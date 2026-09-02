@@ -62,9 +62,10 @@ services:
       UID: ${DEVELOPER_UID:-501}
       SSH_AUTH_SOCK: /ssh-agent.sock
     ports:
-      - "6080:6080"   # noVNC  — browser GUI for VNC
-      # - "5900:5900" # VNC raw port (optional, for native VNC clients)
-      # - "9223:9223"   # Chrome remote debugging — (optional for host-side npx chrome-devtools-mcp to connect)
+      # Host ports offset +1 vs super_projects (6080/5900/9223) so both stacks can run together.
+      - "6081:6080"   # noVNC  — browser GUI for VNC (host http://localhost:6081/vnc.html)
+      # - "5901:5900" # VNC raw port (optional, for native VNC clients)
+      # - "9224:9223"   # Chrome remote debugging — (optional for host-side npx chrome-devtools-mcp to connect)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Chrome requires more shared memory than Docker's default 64 MB.

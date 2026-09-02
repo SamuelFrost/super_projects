@@ -271,6 +271,14 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
   && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
+# Dev Containers CLI (devcontainer)
+#   Create, build, and run dev containers from the terminal (up, exec, build, …).
+#   Uses the host Docker daemon via the mounted socket.
+#   Docs: https://github.com/devcontainers/cli
+# ------------------------------------------------------------------------------
+RUN npm install -g @devcontainers/cli
+
+# ------------------------------------------------------------------------------
 # mise — universal version manager for Ruby, Node, Python, Go, Java, etc.
 #   Installed system-wide via apt; each developer's tool installs go in ~/.local.
 #   Docs: https://mise.jdx.dev

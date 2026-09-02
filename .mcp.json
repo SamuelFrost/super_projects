@@ -5,7 +5,7 @@
       "command": "docker",
       "args": [
         "exec", "-i",
-        "super_projects-devcontainer-1",
+        "super_projects_development-devcontainer-1",
         "mise", "exec", "-C", "/workspaces", "--",
         "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"

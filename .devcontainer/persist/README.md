@@ -2,7 +2,7 @@
 
 Durable tool state lives in **named Docker volumes** (good I/O on macOS). Each volume is mounted twice: at the conventional path under `/home/developer`, and again here as a shortcut so you can browse everything from one tree **inside the container**.
 
-Volume names are prefixed with the Docker Compose project name (`name:` in `compose.yaml`, `super_projects` by default). Because these volumes hold credentials and other tool state, forks must rename the project so two forks on the same machine don't silently share them — see "Forking for your company" in the root README.
+Volume names are prefixed with the Docker Compose project name (`name:` in `compose.yaml`, `super_projects_development` by default). Because these volumes hold credentials and other tool state, forks must rename the project so two forks on the same machine don't silently share them — see "Forking for your company" in the root README.
 
 On the **host**, these shortcut directories are mount points and often look empty. Inspect data with:
 
@@ -12,22 +12,22 @@ devcontainer exec --workspace-folder . -- ls -la /workspaces/.devcontainer/persi
 
 | Shortcut | Docker volume | Home path | Purpose |
 |----------|---------------|-----------|---------|
-| `gemini/` | `super_projects_gemini-data` | `~/.gemini` | Gemini CLI sessions/config |
-| `gh/` | `super_projects_gh-data` | `~/.config/gh` | GitHub CLI auth |
-| `git/` | `super_projects_git-config` | `~/.config/git` | Git XDG config (`config`, etc.) |
-| `mise/` | `super_projects_mise-data` | `~/.local/share/mise` | mise downloads and tool installs |
-| `chrome/` | `super_projects_chrome-devtools-mcp-profile` | `~/chrome-profile` | Chrome profile (logins, cookies, extensions) |
+| `gemini/` | `super_projects_development_gemini-data` | `~/.gemini` | Gemini CLI sessions/config |
+| `gh/` | `super_projects_development_gh-data` | `~/.config/gh` | GitHub CLI auth |
+| `git/` | `super_projects_development_git-config` | `~/.config/git` | Git XDG config (`config`, etc.) |
+| `mise/` | `super_projects_development_mise-data` | `~/.local/share/mise` | mise downloads and tool installs |
+| `chrome/` | `super_projects_development_chrome-devtools-mcp-profile` | `~/chrome-profile` | Chrome profile (logins, cookies, extensions) |
 
 ## Reset a store
 
 Stop the container, then remove the volume:
 
 ```sh
-docker volume rm super_projects_gemini-data
-docker volume rm super_projects_gh-data
-docker volume rm super_projects_git-config
-docker volume rm super_projects_mise-data
-docker volume rm super_projects_chrome-devtools-mcp-profile
+docker volume rm super_projects_development_gemini-data
+docker volume rm super_projects_development_gh-data
+docker volume rm super_projects_development_git-config
+docker volume rm super_projects_development_mise-data
+docker volume rm super_projects_development_chrome-devtools-mcp-profile
 ```
 
 ## SSH (host agent — keys not in the container)

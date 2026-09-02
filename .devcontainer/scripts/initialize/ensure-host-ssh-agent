@@ -12,7 +12,7 @@ set -eu
 cd "$(dirname "$0")/../../.."
 
 ENV_FILE=.devcontainer/.env
-STABLE_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock"
+STABLE_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects_development-ssh-agent.sock"
 mkdir -p "$(dirname "$STABLE_SOCK")"
 mkdir -p "$HOME/.ssh"
 touch "$HOME/.ssh/known_hosts"

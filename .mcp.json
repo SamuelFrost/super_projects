@@ -6,7 +6,7 @@
       "args": [
         "exec", "-i",
         "super_projects_development-devcontainer-1",
-        "mise", "exec", "-C", "/workspaces", "--",
+        "mise", "exec", "-C", "/super_projects_development", "--",
         "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"
       ]

@@ -7,7 +7,7 @@ Volume names are prefixed with the Docker Compose project name (`name:` in `comp
 On the **host**, these shortcut directories are mount points and often look empty. Inspect data with:
 
 ```sh
-devcontainer exec --workspace-folder . -- ls -la /workspaces/.devcontainer/persist
+devcontainer exec --workspace-folder . -- ls -la /super_projects_development/.devcontainer/persist
 ```
 
 | Shortcut | Docker volume | Home path | Purpose |

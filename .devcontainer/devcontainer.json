@@ -3,7 +3,7 @@
   "name": "super_projects_development",
   "dockerComposeFile": "compose.yaml",
   "service": "devcontainer",
-  "workspaceFolder": "/workspaces/",
+  "workspaceFolder": "/super_projects_development/",
   "shutdownAction": "none",
 
   // "remoteUser": "developer",

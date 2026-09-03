@@ -3,8 +3,8 @@
 # This is the workspace-root fallback config. Each sub-project should carry its
 # own .mise.toml (or .tool-versions) so its versions are pinned independently:
 #
-#   /workspaces/project-a/.mise.toml  →  ruby = "3.4"
-#   /workspaces/project-b/.mise.toml  →  ruby = "4.0"
+#   /super_projects_development/project-a/.mise.toml  →  ruby = "3.4"
+#   /super_projects_development/project-b/.mise.toml  →  ruby = "4.0"
 #
 # mise picks up the nearest config file when you cd into a directory and
 # switches tool versions automatically. Multiple versions of the same tool

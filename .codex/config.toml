@@ -4,7 +4,7 @@
 
 [mcp_servers.chrome-devtools]
 command = "docker"
-args = ["exec", "-i", "super_projects_development-devcontainer-1", "mise", "exec", "-C", "/workspaces", "--", "chrome-devtools-mcp", "--browser-url=http://127.0.0.1:9223"]
+args = ["exec", "-i", "super_projects_development-devcontainer-1", "mise", "exec", "-C", "/super_projects_development", "--", "chrome-devtools-mcp", "--browser-url=http://127.0.0.1:9223"]
 enabled = true
 startup_timeout_sec = 60
 tool_timeout_sec = 120

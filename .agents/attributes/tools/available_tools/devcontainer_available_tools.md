@@ -4,7 +4,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 
 #### Docker Compose
 
-- One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/workspaces`, Docker socket mounted for docker-outside-of-docker.
+- One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/super_projects_development`, Docker socket mounted for docker-outside-of-docker.
 - Host `initializeCommand` (`scripts/initialize/ensure-host-ssh-agent`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6081` (+1 vs `super_projects` on 6080).
 - Do not mount whole `/home/developer` — that freezes image-owned installs after the first named-volume create.
 

@@ -10,7 +10,7 @@ services:
         DOCKER_GID: ${DOCKER_GID:-1}
     pull_policy: never
     volumes:
-      - ../:/workspaces:cached
+      - ../:/super_projects_development:cached
       # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -21,20 +21,20 @@ services:
 
       # Gemini CLI sessions/config
       - gemini-data:/home/developer/.gemini
-      - gemini-data:/workspaces/.devcontainer/persist/gemini
+      - gemini-data:/super_projects_development/.devcontainer/persist/gemini
       # GitHub CLI auth tokens (gh auth login)
       - gh-data:/home/developer/.config/gh
-      - gh-data:/workspaces/.devcontainer/persist/gh
+      - gh-data:/super_projects_development/.devcontainer/persist/gh
       # Git XDG config (~/.config/git/config)
       - git-config:/home/developer/.config/git
-      - git-config:/workspaces/.devcontainer/persist/git
+      - git-config:/super_projects_development/.devcontainer/persist/git
       # Chrome profile: named volume so Docker initialises it from the image
       # (a bind-mount would create the parent dir as root, crashing Chrome).
       - chrome-devtools-mcp-profile:/home/developer/chrome-profile
-      - chrome-devtools-mcp-profile:/workspaces/.devcontainer/persist/chrome
+      - chrome-devtools-mcp-profile:/super_projects_development/.devcontainer/persist/chrome
       # mise tool cache: persists downloads/installs across rebuilds
       - mise-data:/home/developer/.local/share/mise
-      - mise-data:/workspaces/.devcontainer/persist/mise
+      - mise-data:/super_projects_development/.devcontainer/persist/mise
       # Host ssh-agent only (private keys never enter the container).
       # HOST_SSH_AUTH_SOCK is ensured by initializeCommand → ensure-host-ssh-agent.
       - ${HOST_SSH_AUTH_SOCK}:/ssh-agent.sock
@@ -53,7 +53,7 @@ services:
         ensure-auth
         print-cursor-worker-hint
         start-vnc
-        cd /workspaces
+        cd /super_projects_development
         mise install
         exec tail -f /dev/null
     hostname: super_projects_development

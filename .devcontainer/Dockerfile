@@ -1,7 +1,7 @@
 ARG UBUNTU_VERSION=24.04
 FROM ubuntu:${UBUNTU_VERSION}
 
-WORKDIR /workspaces
+WORKDIR /super_projects_development
 
 # Prevent interactive prompts during apt installs
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -290,12 +290,12 @@ RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
   && apt-get update -qq && apt-get install -y --no-install-recommends mise \
   && rm -rf /var/lib/apt/lists/*
 
-# Trust any mise config under /workspaces without interactive `mise trust`.
-ENV MISE_TRUSTED_CONFIG_PATHS=/workspaces
+# Trust any mise config under /super_projects_development without interactive `mise trust`.
+ENV MISE_TRUSTED_CONFIG_PATHS=/super_projects_development
 
 # Source mise-shell-init for interactive terminals; report auth status on TTYs.
 RUN printf '%s\n' \
-  '[ -r /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh ] && . /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh' \
+  '[ -r /super_projects_development/.devcontainer/scripts/shell/mise-shell-init.sh ] && . /super_projects_development/.devcontainer/scripts/shell/mise-shell-init.sh' \
   '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' \
   >> /home/developer/.bashrc
 

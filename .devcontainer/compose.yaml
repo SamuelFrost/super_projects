@@ -44,7 +44,7 @@ services:
       # Host ssh-agent only (private keys never enter the container).
       # HOST_SSH_AUTH_SOCK is set by initializeCommand → shell/initializeCommand.sh.
       # The default allows manual `docker compose` (down, ps, ...) before .env exists.
-      # On WSLg it may differ from ensure-host-ssh-agent (~/.cache); see ssh_agent_in_devcontainer.md.
+      # On WSLg it may differ from ensure-host-ssh-agent (~/.cache); see wslg_ssh_agent_socket_path.md.
       - ${HOST_SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-${HOME}/.cache}/super_projects-ssh-agent.sock}:/ssh-agent.sock
       # Shared known_hosts (file bind; created on host by shell/ensure-host-ssh-agent when writable).
       - ${HOST_HOME_DIR:-${HOME}}/.ssh/known_hosts:/home/developer/.ssh/known_hosts:ro

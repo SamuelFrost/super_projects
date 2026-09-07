@@ -7,13 +7,4 @@ Private keys stay on the host. `initializeCommand` runs `.devcontainer/scripts/s
 
 Compose mounts the host agent at `/ssh-agent.sock` and `known_hosts` read-only. `ensure-auth` (inside the container) only reports whether identities are loaded. If the agent is empty, reopen in the container (re-runs initializeCommand) or use `gh auth login` (HTTPS).
 
-### WSLg socket path
-
-On WSLg, `XDG_RUNTIME_DIR` is often `/mnt/wslg/runtime-dir`. Two paths can appear for the managed agent socket:
-
-| When | Typical path |
-|------|----------------|
-| Manual `docker compose` **before** `.env` exists (compose default) | `$XDG_RUNTIME_DIR/super_projects-ssh-agent.sock` (e.g. `/mnt/wslg/runtime-dir/...`) |
-| After `initializeCommand` (`.env` / normal devcontainer flow) | `$HOME/.cache/super_projects-ssh-agent.sock` |
-
-`ensure-host-ssh-agent` deliberately uses `~/.cache/...` on WSLg because WSLg’s runtime dir can leave a **directory** at the socket path, which breaks `ssh-agent`. The compose default without `.env` still uses `$XDG_RUNTIME_DIR` so manual `docker compose down` / `ps` do not fail (PR #18); once initialize runs, `.env` records the `~/.cache` path and that is what devcontainer uses. Both paths are valid; no action needed unless you hand-edit `.env`.
+On WSLg, the managed agent socket path may differ between manual compose and the normal initialize flow — see [WSLg ssh-agent socket path](wslg_ssh_agent_socket_path.md).

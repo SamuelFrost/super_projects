@@ -9,7 +9,7 @@
 # - macOS Keychain / quiet add when no prompt is needed.
 # - If still empty: prompt via TTY or platform askpass/Keychain UI (still during initializeCommand).
 #
-# Writes .devcontainer/.host-ssh-agent.env for write-devcontainer-env (run next).
+# Writes .devcontainer/.host-ssh-agent.env for write-devcontainer-env (parsed, not sourced).
 set -eu
 
 cd "$(dirname "$0")/../../.."
@@ -176,6 +176,7 @@ if ! agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
 fi
 
 mkdir -p .devcontainer
+# Parsed by write-devcontainer-env (env_file_var); values may contain spaces (e.g. 1Password).
 {
   printf 'SELECTED_AGENT_SOCK=%s\n' "$SELECTED_AGENT_SOCK"
 } >"$HOST_SSH_AGENT_ENV"

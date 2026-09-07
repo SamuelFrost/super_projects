@@ -25,34 +25,33 @@ env_file_var() {
   grep "^${_key}=" "$_file" | cut -d= -f2-
 }
 
-known_hosts_writable() {
-  [ -e "$HOME/.ssh/known_hosts" ] && [ ! -w "$HOME/.ssh/known_hosts" ] && return 1
-  return 0
-}
-
+# True when initializeCommand runs inside a devcontainer (nested) or the agent
+# socket is the in-container forward at /ssh-agent.sock. Do not use
+# known_hosts writability — standalone hosts may have a read-only known_hosts.
 needs_docker_host_paths() {
-  if ! known_hosts_writable; then
-    return 0
-  fi
   case "$1" in
     /ssh-agent.sock) return 0 ;;
   esac
+  [ -f /.dockerenv ] && return 0
   return 1
 }
 
 # Docker Compose bind mounts need host-side paths. When initializeCommand runs
-# where ~/.ssh/known_hosts is not writable (outer devcontainer) or the selected
-# agent is a forwarded socket, reuse recorded host paths from .env.
+# inside an outer devcontainer, $HOME and the agent socket may be container-local;
+# reuse recorded host paths from a prior .env.
 resolve_compose_bind_paths() {
   _agent_sock=$1
   _repo_root=$(pwd)
 
   if needs_docker_host_paths "$_agent_sock"; then
-    if ! known_hosts_writable; then
-      echo "devcontainer env: resolving Docker host bind paths from .env ($HOME/.ssh/known_hosts is read-only)" >&2
-    else
-      echo "devcontainer env: resolving Docker host bind paths from .env (agent socket is forwarded at $_agent_sock)" >&2
-    fi
+    case "$_agent_sock" in
+      /ssh-agent.sock)
+        echo "devcontainer env: resolving Docker host bind paths from .env (agent socket is forwarded at $_agent_sock)" >&2
+        ;;
+      *)
+        echo "devcontainer env: resolving Docker host bind paths from .env (running inside a devcontainer)" >&2
+        ;;
+    esac
 
     for _env_file in "$PARENT_ENV" "$DEVCONTAINER_ENV_FILE"; do
       [ -f "$_env_file" ] || continue
@@ -85,10 +84,12 @@ if [ ! -f "$HOST_SSH_AGENT_ENV" ]; then
   exit 1
 fi
 
-# shellcheck disable=SC1090
-. "$HOST_SSH_AGENT_ENV"
+SELECTED_AGENT_SOCK=$(env_file_var "$HOST_SSH_AGENT_ENV" SELECTED_AGENT_SOCK) || {
+  echo "devcontainer env: SELECTED_AGENT_SOCK missing in $HOST_SSH_AGENT_ENV" >&2
+  exit 1
+}
 
-if [ -z "${SELECTED_AGENT_SOCK:-}" ]; then
+if [ -z "$SELECTED_AGENT_SOCK" ]; then
   echo "devcontainer env: SELECTED_AGENT_SOCK is empty in $HOST_SSH_AGENT_ENV" >&2
   exit 1
 fi

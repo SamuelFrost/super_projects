@@ -112,7 +112,7 @@ git clone git@github.com:<your-company>/<your-fork>.git
 ### Option A — CLI (no IDE required)
 
 ```sh
-# Build and start (runs initializeCommand → shell/initializeCommand.sh, then builds + starts)
+# Build and start (runs initializeCommand → .devcontainer/scripts/shell/initializeCommand.sh, then builds + starts)
 devcontainer up --remove-existing-container
 
 # Open a shell inside the container
@@ -138,7 +138,7 @@ The VNC desktop and Chrome start automatically with the container — no extra s
 
 Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
 
-Unlocking happens automatically in **`initializeCommand`** (`shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, and `HOST_WORKSPACE_DIR` for Compose/Dockerfile bind mounts). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
+Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, and `HOST_WORKSPACE_DIR` for Compose/Dockerfile bind mounts). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
 
 **Still useful:**
 
@@ -151,7 +151,6 @@ Unlocking happens automatically in **`initializeCommand`** (`shell/initializeCom
 - **1Password SSH agent:** enable and unlock 1Password; initializeCommand reuses that agent when it already has identities.
 - **GitHub without SSH:** `gh auth login` and HTTPS remotes (inside the container after start).
 - **WSL:** use WSL end-to-end (`dev.containers.executeInWSL`); native Windows is not supported for this SSH flow.
-- **WSLg:** socket path may differ before vs after initialize — see [`.agents/attributes/tools/git/wslg_ssh_agent_socket_path.md`](.agents/attributes/tools/git/wslg_ssh_agent_socket_path.md).
 
 ## Devcontainer details
 
@@ -164,7 +163,7 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
 - Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
 - Google Chrome, launched with remote debugging on port 9223 (accessible from the desktop GUI and via MCP)
-- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `npx` — Cursor connects to Chrome through the forwarded port.
+- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `docker exec` and `mise`, so the MCP server connects to Chrome at `127.0.0.1:9223` inside the container. Optional host publication of the debugging port is disabled by default in Compose.
 - [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, Java, and more
 - Recommended extensions and settings for VS Code and Cursor
 - TODO: add ruby-lsp, stimulus-lsp, and herb-lsp for language servers
@@ -173,7 +172,7 @@ The VNC/Chrome stack starts automatically when the container starts and can be r
 
 Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
 
-`.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. It sits in the workspace tree, so a process inside the container can rewrite bind-mount paths before a manual `docker compose up`. VS Code, Cursor, and `devcontainer up` regenerate it each time; if you run Compose by hand, re-run `scripts/shell/initializeCommand.sh` on the host first.
+`.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. It sits in the workspace tree, so a process inside the container can rewrite bind-mount paths before a manual `docker compose up`. VS Code, Cursor, and `devcontainer up` regenerate it each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first.
 
 ### Persisted data
 
@@ -186,6 +185,7 @@ Tool state uses **named Docker volumes** (macOS-friendly I/O). Each volume is al
 | `super_projects_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
 | `super_projects_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
 | `super_projects_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
+| `super_projects_cursor-data` | `~/.cursor` | `persist/cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
 | host ssh-agent socket | `/ssh-agent.sock` | — | Host-forwarded agent (private keys stay on the host) |
 | host `known_hosts` (ro bind) | `~/.ssh/known_hosts` | — | Shared SSH host keys |
 

@@ -12,7 +12,7 @@ services:
     volumes:
       # HOST_WORKSPACE_DIR comes from .devcontainer/.env (gitignored, container-writable via
       # this mount). IDE/devcontainer up regenerate it via initializeCommand; before manual
-      # `docker compose up`, re-run scripts/shell/initializeCommand.sh on the host.
+      # `docker compose up`, re-run .devcontainer/scripts/shell/initializeCommand.sh on the host.
       - ${HOST_WORKSPACE_DIR:-../}:/workspaces:cached
       # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
       - /var/run/docker.sock:/var/run/docker.sock
@@ -42,7 +42,7 @@ services:
       - cursor-data:/home/developer/.cursor
       - cursor-data:/workspaces/.devcontainer/persist/cursor
       # Host ssh-agent only (private keys never enter the container).
-      # HOST_SSH_AUTH_SOCK is set by initializeCommand → shell/initializeCommand.sh.
+      # HOST_SSH_AUTH_SOCK is set by initializeCommand → .devcontainer/scripts/shell/initializeCommand.sh.
       # The default allows manual `docker compose` (down, ps, ...) before .env exists.
       # On WSLg it may differ from ensure-host-ssh-agent (~/.cache); see wslg_ssh_agent_socket_path.md.
       - ${HOST_SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-${HOME}/.cache}/super_projects-ssh-agent.sock}:/ssh-agent.sock

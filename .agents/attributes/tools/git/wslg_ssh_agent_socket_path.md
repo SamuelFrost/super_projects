@@ -13,4 +13,4 @@ After initialize, `write-devcontainer-env` copies the selected socket from `.dev
 
 If an already-unlocked agent is reused instead (desktop `SSH_AUTH_SOCK`, 1Password, or a prior session), `.env` records that agent’s path and the table above may not apply.
 
-When the two managed paths differ on WSLg, treat that as expected. If SSH fails after manual compose without re-running initialize, run `scripts/shell/initializeCommand.sh` on the host before starting the container again.
+When the two managed paths differ on WSLg, treat that as expected. If SSH fails after manual compose without re-running initialize, run `.devcontainer/scripts/shell/initializeCommand.sh` on the host before starting the container again.

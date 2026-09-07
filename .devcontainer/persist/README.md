@@ -53,6 +53,6 @@ After that, `~/.cursor` (agent-transcripts, CLI chats, MCP config, skills) survi
 
 Private keys are **not** mounted. Compose forwards a host `ssh-agent` socket to `/ssh-agent.sock`.
 
-`initializeCommand` runs `scripts/shell/initializeCommand.sh` (which calls `ensure-host-ssh-agent` and `write-devcontainer-env`) to write `.devcontainer/.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, `HOST_WORKSPACE_DIR`). Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts.
+`initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `ensure-host-ssh-agent` and `write-devcontainer-env`) to write `.devcontainer/.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, `HOST_WORKSPACE_DIR`). Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts.
 
 `known_hosts` is bind-mounted read-only from the host.

@@ -138,7 +138,7 @@ The VNC desktop and Chrome start automatically with the container — no extra s
 
 Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
 
-Unlocking happens automatically in **`initializeCommand`** (`shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, and `HOST_SSH_AUTH_SOCK` for Compose/Dockerfile bind mounts). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
+Unlocking happens automatically in **`initializeCommand`** (`shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, and `HOST_WORKSPACE_DIR` for Compose/Dockerfile bind mounts). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
 
 **Still useful:**
 

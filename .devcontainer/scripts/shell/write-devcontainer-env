@@ -16,7 +16,7 @@ cd "$(dirname "$0")/../../.."
 
 DEVCONTAINER_ENV_FILE=.devcontainer/.env
 PARENT_ENV="../.devcontainer/.env"
-HOST_SSH_AGENT_ENV=.devcontainer/.host-ssh-agent.env
+SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
 
 env_file_var() {
   _file=$1
@@ -79,18 +79,18 @@ resolve_compose_bind_paths() {
   HOST_WORKSPACE_DIR=$_repo_root
 }
 
-if [ ! -f "$HOST_SSH_AGENT_ENV" ]; then
-  echo "devcontainer env: missing $HOST_SSH_AGENT_ENV; run ensure-host-ssh-agent first" >&2
+if [ ! -f "$SELECTED_SSH_AGENT_ENV_FILE" ]; then
+  echo "devcontainer env: missing $SELECTED_SSH_AGENT_ENV_FILE; run ensure-host-ssh-agent first" >&2
   exit 1
 fi
 
-SELECTED_AGENT_SOCK=$(env_file_var "$HOST_SSH_AGENT_ENV" SELECTED_AGENT_SOCK) || {
-  echo "devcontainer env: SELECTED_AGENT_SOCK missing in $HOST_SSH_AGENT_ENV" >&2
+SELECTED_AGENT_SOCK=$(env_file_var "$SELECTED_SSH_AGENT_ENV_FILE" SELECTED_AGENT_SOCK) || {
+  echo "devcontainer env: SELECTED_AGENT_SOCK missing in $SELECTED_SSH_AGENT_ENV_FILE" >&2
   exit 1
 }
 
 if [ -z "$SELECTED_AGENT_SOCK" ]; then
-  echo "devcontainer env: SELECTED_AGENT_SOCK is empty in $HOST_SSH_AGENT_ENV" >&2
+  echo "devcontainer env: SELECTED_AGENT_SOCK is empty in $SELECTED_SSH_AGENT_ENV_FILE" >&2
   exit 1
 fi
 

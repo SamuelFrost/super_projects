@@ -9,12 +9,12 @@
 # - macOS Keychain / quiet add when no prompt is needed.
 # - If still empty: prompt via TTY or platform askpass/Keychain UI (still during initializeCommand).
 #
-# Writes .devcontainer/.host-ssh-agent.env for write-devcontainer-env (parsed, not sourced).
+# Writes .devcontainer/.selected-ssh-agent.env for write-devcontainer-env (parsed, not sourced).
 set -eu
 
 cd "$(dirname "$0")/../../.."
 
-HOST_SSH_AGENT_ENV=.devcontainer/.host-ssh-agent.env
+SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
 MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock"
 
 # WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
@@ -176,10 +176,12 @@ if ! agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
 fi
 
 mkdir -p .devcontainer
+# Drop legacy bridge filename from an earlier PR revision.
+[ -f .devcontainer/.host-ssh-agent.env ] && rm -f .devcontainer/.host-ssh-agent.env
 # Parsed by write-devcontainer-env (env_file_var); values may contain spaces (e.g. 1Password).
 {
   printf 'SELECTED_AGENT_SOCK=%s\n' "$SELECTED_AGENT_SOCK"
-} >"$HOST_SSH_AGENT_ENV"
+} >"$SELECTED_SSH_AGENT_ENV_FILE"
 
 if agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
   echo "SSH: host agent ready ($(SSH_AUTH_SOCK=$SELECTED_AGENT_SOCK ssh-add -l 2>/dev/null | wc -l | tr -d ' ') key(s))" >&2

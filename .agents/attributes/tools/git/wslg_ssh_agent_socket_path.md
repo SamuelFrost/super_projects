@@ -1,12 +1,16 @@
 # Domain context — WSLg ssh-agent socket path
 
-When developing on **WSLg** (`XDG_RUNTIME_DIR` often `/mnt/wslg/runtime-dir`), two different host paths can appear for the managed agent socket (`super_projects-ssh-agent.sock` in a fork; rename per fork guidelines):
+When **WSLg** sets `XDG_RUNTIME_DIR` under `/mnt/wslg/` (often `/mnt/wslg/runtime-dir`), the **managed** agent socket path used by `ensure-host-ssh-agent` can differ from the compose fallback when `.devcontainer/.env` is missing. Forks rename `super_projects-ssh-agent.sock` per fork guidelines.
 
-| When | Typical path |
-|------|----------------|
-| Manual `docker compose` before `.devcontainer/.env` exists (compose default) | `$XDG_RUNTIME_DIR/super_projects-ssh-agent.sock` |
-| After `initializeCommand` (normal VS Code / Cursor / `devcontainer up` flow) | `$HOME/.cache/super_projects-ssh-agent.sock` |
+| When | Typical managed-socket path |
+|------|----------------------------|
+| Manual `docker compose` before `.env` exists (compose `${HOST_SSH_AUTH_SOCK:-...}` default) | `$XDG_RUNTIME_DIR/super_projects-ssh-agent.sock` |
+| After `initializeCommand` when the managed socket is selected | `$HOME/.cache/super_projects-ssh-agent.sock` |
 
-`ensure-host-ssh-agent` uses `~/.cache/...` on WSLg because WSLg’s runtime directory can leave a **directory** at the socket path, which breaks `ssh-agent`. The compose default without `.env` still uses `$XDG_RUNTIME_DIR` so manual `docker compose down` / `ps` succeed when `.env` has not been generated yet. Once initialize runs, `.env` records the `~/.cache` path and devcontainer uses that for the bind mount.
+`ensure-host-ssh-agent` uses `~/.cache/...` on WSLg because the runtime-dir path can be occupied by a **directory**, which prevents `ssh-agent` from binding a socket. Compose keeps the `$XDG_RUNTIME_DIR` default so manual `docker compose down`, `ps`, and `config` work before initialize has run.
 
-When both paths differ, treat this as expected on WSLg — no action needed unless `.env` was hand-edited. If SSH fails after a manual compose command, re-run `scripts/shell/initializeCommand.sh` on the host before starting the container again.
+After initialize, `write-devcontainer-env` copies the selected socket from `.devcontainer/.selected-ssh-agent.env` into `HOST_SSH_AUTH_SOCK` in `.env`; devcontainer then bind-mounts that path to `/ssh-agent.sock`.
+
+If an already-unlocked agent is reused instead (desktop `SSH_AUTH_SOCK`, 1Password, or a prior session), `.env` records that agent’s path and the table above may not apply.
+
+When the two managed paths differ on WSLg, treat that as expected. If SSH fails after manual compose without re-running initialize, run `scripts/shell/initializeCommand.sh` on the host before starting the container again.

@@ -1,4 +1,4 @@
-name: Host initialize
+name: Devcontainer
 
 on:
   push:
@@ -41,3 +41,26 @@ jobs:
 
       - name: Run host initialize CI tests
         run: sh .devcontainer/scripts/test/host-initialize-ci.sh "${{ matrix.unlock_mode }}"
+
+  # GitHub-hosted macOS runners cannot start Docker Desktop/Colima, so this job is Linux-only.
+  # First image build is slow (full Dockerfile); later runs still rebuild unless the runner has layers.
+  # needs both host-initialize matrix legs so a broken initializeCommand does not pay for an image build.
+  devcontainer-up:
+    name: devcontainer up (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: host-initialize
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Install Dev Containers CLI
+        run: npm install -g @devcontainers/cli@0.89.0
+
+      - name: Run devcontainer up CI test
+        run: sh .devcontainer/scripts/test/devcontainer-up-ci.sh

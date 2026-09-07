@@ -11,10 +11,14 @@ on:
       - '.devcontainer/**'
       - '.github/workflows/host-initialize.yml'
 
+permissions:
+  contents: read
+
 jobs:
   host-initialize:
     name: host initialize (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -25,7 +29,9 @@ jobs:
             unlock_mode: macos-agent
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'

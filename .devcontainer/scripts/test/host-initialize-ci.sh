@@ -15,11 +15,32 @@ cd "$REPO_ROOT"
 UNLOCK_MODE=${1:-all}
 HOST_OS=$(uname -s)
 
+ENV_BACKUP_DIR=$(mktemp -d /tmp/spci-env-XXXXXX)
+ENV_HAD_DOTENV=0
+ENV_HAD_SELECTED=0
+ENV_HAD_LEGACY=0
+if [ -f .devcontainer/.env ]; then
+  cp .devcontainer/.env "$ENV_BACKUP_DIR/.env"
+  ENV_HAD_DOTENV=1
+fi
+if [ -f .devcontainer/.selected-ssh-agent.env ]; then
+  cp .devcontainer/.selected-ssh-agent.env "$ENV_BACKUP_DIR/.selected-ssh-agent.env"
+  ENV_HAD_SELECTED=1
+fi
+if [ -f .devcontainer/.host-ssh-agent.env ]; then
+  cp .devcontainer/.host-ssh-agent.env "$ENV_BACKUP_DIR/.host-ssh-agent.env"
+  ENV_HAD_LEGACY=1
+fi
+
 # Isolated HOME so runner ssh state does not affect results. Keep paths short:
-# macOS limits Unix socket paths to 104 bytes, and mktemp under /var/folders can exceed that.
-export HOME="/tmp/spci-$$"
+# macOS limits Unix socket paths to 104 bytes; use /tmp/spci-XXXXXX, not $TMPDIR mktemp.
+TEST_HOME=$(mktemp -d /tmp/spci-XXXXXX)
+export HOME="$TEST_HOME"
 export XDG_RUNTIME_DIR="$HOME/.cache"
 mkdir -p "$HOME/.ssh" "$XDG_RUNTIME_DIR" "$HOME/bin"
+
+AGENT_PIDS=
+AGENT_SOCKS=
 
 log() {
   printf '==> %s\n' "$*"
@@ -34,6 +55,80 @@ env_var() {
   _file=$1
   _key=$2
   grep -m1 "^${_key}=" "$_file" | cut -d= -f2-
+}
+
+kill_agent_at_socket() {
+  _sock=$1
+  [ -n "$_sock" ] || return 0
+
+  _pids=$(pgrep -f "ssh-agent -a $_sock" 2>/dev/null) || _pids=
+  if [ -z "$_pids" ] && [ -e "$_sock" ]; then
+    if [ "$HOST_OS" = Darwin ]; then
+      _pids=$(lsof -t -U "$_sock" 2>/dev/null) || _pids=
+    else
+      _pids=$(fuser "$_sock" 2>/dev/null) || _pids=
+    fi
+  fi
+  for _pid in $_pids; do
+    kill "$_pid" 2>/dev/null || true
+  done
+  rm -f "$_sock"
+}
+
+restore_generated_env_files() {
+  if [ "$ENV_HAD_DOTENV" -eq 1 ]; then
+    cp "$ENV_BACKUP_DIR/.env" .devcontainer/.env
+  else
+    rm -f .devcontainer/.env
+  fi
+  if [ "$ENV_HAD_SELECTED" -eq 1 ]; then
+    cp "$ENV_BACKUP_DIR/.selected-ssh-agent.env" .devcontainer/.selected-ssh-agent.env
+  else
+    rm -f .devcontainer/.selected-ssh-agent.env
+  fi
+  if [ "$ENV_HAD_LEGACY" -eq 1 ]; then
+    cp "$ENV_BACKUP_DIR/.host-ssh-agent.env" .devcontainer/.host-ssh-agent.env
+  else
+    rm -f .devcontainer/.host-ssh-agent.env
+  fi
+}
+
+cleanup() {
+  _status=$?
+
+  for _pid in $AGENT_PIDS; do
+    [ -n "$_pid" ] && kill "$_pid" 2>/dev/null || true
+  done
+  for _sock in $AGENT_SOCKS "$HOME/.cache/super_projects-ssh-agent.sock" "$HOME/preloaded-agent.sock"; do
+    kill_agent_at_socket "$_sock"
+  done
+
+  restore_generated_env_files
+  rm -rf "$TEST_HOME" "$ENV_BACKUP_DIR"
+
+  exit "$_status"
+}
+
+trap cleanup EXIT INT TERM
+
+register_agent_pid() {
+  _pid=$1
+  [ -n "$_pid" ] || return 0
+  AGENT_PIDS="$AGENT_PIDS $_pid"
+}
+
+register_agent_socket() {
+  _sock=$1
+  [ -n "$_sock" ] || return 0
+  AGENT_SOCKS="$AGENT_SOCKS $_sock"
+}
+
+start_test_agent() {
+  _sock=$1
+  eval "$(ssh-agent -a "$_sock" -s)"
+  register_agent_pid "$SSH_AGENT_PID"
+  register_agent_socket "$_sock"
+  export SSH_AUTH_SOCK="$_sock"
 }
 
 is_nested_devcontainer() {
@@ -63,6 +158,13 @@ generate_ed25519_key() {
 
 require_docker() {
   command -v docker >/dev/null 2>&1 || fail "docker not found (required for compose config and .env generation)"
+}
+
+register_selected_agent_from_bridge() {
+  if [ -f .devcontainer/.selected-ssh-agent.env ]; then
+    _sock=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK) || _sock=
+    register_agent_socket "$_sock"
+  fi
 }
 
 assert_env_contract() {
@@ -121,6 +223,7 @@ phase_initialize_contract() {
   reset_init_state
   unset SSH_AUTH_SOCK
   sh .devcontainer/scripts/shell/initializeCommand.sh
+  register_selected_agent_from_bridge
   assert_env_contract
 }
 
@@ -136,11 +239,11 @@ phase_reuse_loaded_agent() {
   _key="$HOME/.ssh/id_ed25519"
   generate_ed25519_key "$_key" ""
   _agent_sock="$HOME/preloaded-agent.sock"
-  ssh-agent -a "$_agent_sock" >/dev/null
-  export SSH_AUTH_SOCK="$_agent_sock"
+  start_test_agent "$_agent_sock"
   ssh-add "$_key" >/dev/null
 
   sh .devcontainer/scripts/shell/ensure-host-ssh-agent
+  register_selected_agent_from_bridge
 
   _selected=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK)
   [ "$_selected" = "$_agent_sock" ] || fail "expected reuse of preloaded agent (got $_selected)"
@@ -182,6 +285,7 @@ EOF
   export DISPLAY=:1
 
   sh .devcontainer/scripts/shell/ensure-host-ssh-agent
+  register_selected_agent_from_bridge
   sh .devcontainer/scripts/shell/write-devcontainer-env
 
   _sock=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK)
@@ -203,6 +307,7 @@ phase_passphrase_quiet_load() {
   generate_ed25519_key "$_key" ""
 
   sh .devcontainer/scripts/shell/ensure-host-ssh-agent
+  register_selected_agent_from_bridge
   if [ "${AGENT_ONLY_TESTS:-0}" = 1 ]; then
     _sock=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK)
     SSH_AUTH_SOCK="$_sock" ssh-add -l | grep -qi ed25519 || fail "unencrypted default key not loaded"

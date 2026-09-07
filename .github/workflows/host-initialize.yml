@@ -33,5 +33,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y openssh-client
 
+      - name: Set up Docker (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install colima docker docker-compose
+          colima start --cpu 2 --memory 4 --disk 20
+          sudo mkdir -p /var/run
+          sudo ln -sf "$HOME/.colima/default/docker.sock" /var/run/docker.sock
+          docker info
+
       - name: Run host initialize CI tests
         run: sh .devcontainer/scripts/test/host-initialize-ci.sh "${{ matrix.unlock_mode }}"

@@ -42,6 +42,25 @@ reset_init_state() {
   rm -f .devcontainer/.env .devcontainer/.selected-ssh-agent.env .devcontainer/.host-ssh-agent.env
   rm -rf "$HOME/.cache/super_projects-ssh-agent.sock" "$HOME/xdg-runtime/super_projects-ssh-agent.sock"
   find "$HOME" -maxdepth 1 -name '*.sock' -exec rm -rf {} + 2>/dev/null || true
+  rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub" \
+    "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub" \
+    "$HOME/.ssh/id_ecdsa" "$HOME/.ssh/id_ecdsa.pub"
+  unset SSH_AUTH_SOCK
+}
+
+generate_ed25519_key() {
+  _key=$1
+  _pass=$2
+  rm -f "$_key" "${_key}.pub"
+  if [ -n "$_pass" ]; then
+    ssh-keygen -t ed25519 -N "$_pass" -f "$_key" -q
+  else
+    ssh-keygen -t ed25519 -N "" -f "$_key" -q
+  fi
+}
+
+require_docker() {
+  command -v docker >/dev/null 2>&1 || fail "docker not found (required for compose config and .env generation)"
 }
 
 assert_env_contract() {
@@ -90,6 +109,7 @@ assert_env_contract() {
 
 phase_compose_without_env() {
   log "phase: compose config without .devcontainer/.env"
+  require_docker
   reset_init_state
   docker compose -f .devcontainer/compose.yaml config >/dev/null
 }
@@ -112,7 +132,7 @@ phase_reuse_loaded_agent() {
   reset_init_state
 
   _key="$HOME/.ssh/id_ed25519"
-  ssh-keygen -t ed25519 -N "" -f "$_key" -q
+  generate_ed25519_key "$_key" ""
   _agent_sock="$HOME/preloaded-agent.sock"
   ssh-agent -a "$_agent_sock" >/dev/null
   export SSH_AUTH_SOCK="$_agent_sock"
@@ -143,7 +163,7 @@ phase_passphrase_unlock_linux_askpass() {
 
   _pass=ci-test-passphrase
   _key="$HOME/.ssh/id_ed25519"
-  ssh-keygen -t ed25519 -N "$_pass" -f "$_key" -q
+  generate_ed25519_key "$_key" "$_pass"
 
   cat >"$HOME/bin/ssh-askpass" <<EOF
 #!/bin/sh
@@ -172,7 +192,7 @@ phase_passphrase_quiet_load() {
   unset SSH_AUTH_SOCK
 
   _key="$HOME/.ssh/id_ed25519"
-  ssh-keygen -t ed25519 -N "" -f "$_key" -q
+  generate_ed25519_key "$_key" ""
 
   sh .devcontainer/scripts/shell/ensure-host-ssh-agent
   sh .devcontainer/scripts/shell/write-devcontainer-env

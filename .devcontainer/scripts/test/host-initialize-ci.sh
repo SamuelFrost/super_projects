@@ -15,9 +15,10 @@ cd "$REPO_ROOT"
 UNLOCK_MODE=${1:-all}
 HOST_OS=$(uname -s)
 
-# Isolated HOME so runner ssh state does not affect results.
-export HOME=$(mktemp -d)
-export XDG_RUNTIME_DIR="$HOME/xdg-runtime"
+# Isolated HOME so runner ssh state does not affect results. Keep paths short:
+# macOS limits Unix socket paths to 104 bytes, and mktemp under /var/folders can exceed that.
+export HOME="/tmp/spci-$$"
+export XDG_RUNTIME_DIR="$HOME/.cache"
 mkdir -p "$HOME/.ssh" "$XDG_RUNTIME_DIR" "$HOME/bin"
 
 log() {
@@ -41,7 +42,7 @@ is_nested_devcontainer() {
 
 reset_init_state() {
   rm -f .devcontainer/.env .devcontainer/.selected-ssh-agent.env .devcontainer/.host-ssh-agent.env
-  rm -rf "$HOME/.cache/super_projects-ssh-agent.sock" "$HOME/xdg-runtime/super_projects-ssh-agent.sock"
+  rm -rf "$HOME/.cache/super_projects-ssh-agent.sock" "$XDG_RUNTIME_DIR/super_projects-ssh-agent.sock"
   find "$HOME" -maxdepth 1 -name '*.sock' -exec rm -rf {} + 2>/dev/null || true
   rm -f "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub" \
     "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub" \

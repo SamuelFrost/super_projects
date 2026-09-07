@@ -1,0 +1,37 @@
+name: Host initialize
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.devcontainer/**'
+      - '.github/workflows/host-initialize.yml'
+  pull_request:
+    paths:
+      - '.devcontainer/**'
+      - '.github/workflows/host-initialize.yml'
+
+jobs:
+  host-initialize:
+    name: host initialize (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            unlock_mode: askpass
+          - os: macos-latest
+            unlock_mode: quiet
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client
+
+      - name: Run host initialize CI tests
+        run: sh .devcontainer/scripts/test/host-initialize-ci.sh "${{ matrix.unlock_mode }}"

@@ -17,7 +17,7 @@ devcontainer exec --workspace-folder . -- ls -la /workspaces/.devcontainer/persi
 | `git/` | `super_projects_git-config` | `~/.config/git` | Git XDG config (`config`, etc.) |
 | `mise/` | `super_projects_mise-data` | `~/.local/share/mise` | mise downloads and tool installs |
 | `chrome/` | `super_projects_chrome-devtools-mcp-profile` | `~/chrome-profile` | Chrome profile (logins, cookies, extensions) |
-| `cursor/` | `super_projects_cursor-data` | `~/.cursor` | Agent transcripts, CLI sessions, MCP config, skills |
+| `cursor/` | `super_projects_cursor-data` | `~/.cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
 
 ## Reset a store
 
@@ -44,6 +44,8 @@ cp -a ~/.cursor /workspaces/.devcontainer/cursor-migration-backup
 cp -a /workspaces/.devcontainer/cursor-migration-backup/. ~/.cursor/
 rm -rf /workspaces/.devcontainer/cursor-migration-backup
 ```
+
+The backup directory is gitignored but lives on the host workspace disk and includes Cursor CLI auth/session state — remove it after a successful restore; do not leave it in the repo directory.
 
 After that, `~/.cursor` (agent-transcripts, CLI chats, MCP config, skills) survives container rebuilds. IDE sidebar chat index on the Cursor host app is separate; this volume covers container-side state only.
 

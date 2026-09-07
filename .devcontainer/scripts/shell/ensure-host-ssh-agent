@@ -36,7 +36,7 @@ known_hosts_writable() {
 prepare_ssh_config_dir() {
   mkdir -p "$HOME/.ssh"
   touch "$HOME/.ssh/known_hosts"
-  chmod 700 "$HOME/.ssh"
+  chmod 700 "$HOME/.ssh" 2>/dev/null || true
 }
 
 if known_hosts_writable; then

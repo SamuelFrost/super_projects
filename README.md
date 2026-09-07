@@ -23,7 +23,7 @@ The intended way to use this project is one fork per company (or team). Your for
 
 ### 1. Rename the container (do this first)
 
-The Docker Compose project name — `name: "super_projects"` in `.devcontainer/compose.yaml` — determines the container name (`super_projects-devcontainer-1`), the Docker network name, and the prefix of every named volume. If your fork keeps the default name, it will collide with any other fork or copy of this project on the same machine, and Docker will silently **share the named volumes** between them. With the current setup that is usually not a big deal, but those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), and git config — so a name collision can leak state and credentials between unrelated projects. Rename as soon as you fork, before anyone starts the container.
+The Docker Compose project name — `name: "super_projects"` in `.devcontainer/compose.yaml` — determines the container name (`super_projects-devcontainer-1`), the Docker network name, and the prefix of every named volume. If your fork keeps the default name, it will collide with any other fork or copy of this project on the same machine, and Docker will silently **share the named volumes** between them. With the current setup that is usually not a big deal, but those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state (`cursor-data`), and git config — so a name collision can leak state and credentials between unrelated projects. Rename as soon as you fork, before anyone starts the container.
 
 Pick your company's project name (`acme_projects` is used as the example below) and apply it consistently — the container name in the MCP configs is derived from the Compose project name, so they must be changed together.
 
@@ -172,6 +172,8 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
 Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
+
+`.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. It sits in the workspace tree, so a process inside the container can rewrite bind-mount paths before a manual `docker compose up`. VS Code, Cursor, and `devcontainer up` regenerate it each time; if you run Compose by hand, re-run `scripts/shell/initializeCommand.sh` on the host first.
 
 ### Persisted data
 

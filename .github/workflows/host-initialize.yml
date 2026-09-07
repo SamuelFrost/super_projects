@@ -1,0 +1,43 @@
+name: Host initialize
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.devcontainer/**'
+      - '.github/workflows/host-initialize.yml'
+  pull_request:
+    paths:
+      - '.devcontainer/**'
+      - '.github/workflows/host-initialize.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  host-initialize:
+    name: host initialize (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            unlock_mode: askpass
+          - os: macos-latest
+            unlock_mode: macos-agent
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client
+
+      - name: Run host initialize CI tests
+        run: sh .devcontainer/scripts/test/host-initialize-ci.sh "${{ matrix.unlock_mode }}"

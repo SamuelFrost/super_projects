@@ -10,7 +10,7 @@ services:
         DOCKER_GID: ${DOCKER_GID:-1}
     pull_policy: never
     volumes:
-      - ../:/workspaces:cached
+      - ${HOST_WORKSPACE_DIR:-../}:/workspaces:cached
       # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -35,10 +35,15 @@ services:
       # mise tool cache: persists downloads/installs across rebuilds
       - mise-data:/home/developer/.local/share/mise
       - mise-data:/workspaces/.devcontainer/persist/mise
+      # Cursor agent state: transcripts, CLI sessions, MCP config, skills
+      - cursor-data:/home/developer/.cursor
+      - cursor-data:/workspaces/.devcontainer/persist/cursor
       # Host ssh-agent only (private keys never enter the container).
-      # HOST_SSH_AUTH_SOCK is ensured by initializeCommand → ensure-host-ssh-agent.
-      - ${HOST_SSH_AUTH_SOCK}:/ssh-agent.sock
-      # Shared known_hosts (file bind; created on host by ensure-host-ssh-agent).
+      # HOST_SSH_AUTH_SOCK is set by initializeCommand → shell/initializeCommand.sh.
+      # The default mirrors MANAGED_AGENT_SOCK in ensure-host-ssh-agent so manual
+      # `docker compose` commands (down, ps, ...) work without .env being populated first.
+      - ${HOST_SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-${HOME}/.cache}/super_projects-ssh-agent.sock}:/ssh-agent.sock
+      # Shared known_hosts (file bind; created on host by shell/ensure-host-ssh-agent when writable).
       - ${HOST_HOME_DIR:-${HOME}}/.ssh/known_hosts:/home/developer/.ssh/known_hosts:ro
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       # - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
@@ -86,6 +91,9 @@ volumes:
   gh-data: {}
   # git XDG config (~/.config/git). Lost only on `docker volume rm super_projects_git-config`.
   git-config: {}
+  # Cursor agent state (~/.cursor): agent-transcripts, CLI chats, MCP config, skills.
+  # Lost only on `docker volume rm super_projects_cursor-data`.
+  cursor-data: {}
 
 networks:
   super_projects_default:

@@ -41,7 +41,7 @@ Pick your company's project name (`acme_projects` is used as the example below) 
 
 **Recommended — host-side helper scripts:**
 
-- `.devcontainer/scripts/initialize/ensure-host-ssh-agent` — rename the `super_projects-ssh-agent.sock` socket filename so your fork keeps its own stable ssh-agent socket on the host instead of sharing one with other forks.
+- `.devcontainer/scripts/shell/ensure-host-ssh-agent` — rename the `super_projects-ssh-agent.sock` socket filename so your fork keeps its own stable ssh-agent socket on the host instead of sharing one with other forks.
 - `.devcontainer/scripts/dockerfile/print-cursor-worker-hint` — rename the suggested Cursor worker name `super_projects_devcontainer`.
 
 **Documentation mentions — no rush.** Every other occurrence (volume names quoted in this README and in `.devcontainer/persist/README.md`, the `.directory_information.md` files, the agent profile template under `.agents/`) is documentation with no functional effect; update them whenever convenient — `git grep super_projects` lists them all. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
@@ -112,7 +112,7 @@ git clone git@github.com:<your-company>/<your-fork>.git
 ### Option A — CLI (no IDE required)
 
 ```sh
-# Build and start (runs initializeCommand → ensure-host-ssh-agent to write .env, then builds + starts)
+# Build and start (runs initializeCommand → shell/initializeCommand.sh, then builds + starts)
 devcontainer up --remove-existing-container
 
 # Open a shell inside the container
@@ -138,7 +138,7 @@ The VNC desktop and Chrome start automatically with the container — no extra s
 
 Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
 
-Unlocking happens automatically in **`initializeCommand`** (`ensure-host-ssh-agent`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script also writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, and `HOST_SSH_AUTH_SOCK` (used by Compose/Dockerfile for the `developer` user, `docker.sock` access, `known_hosts`, and the agent mount). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
+Unlocking happens automatically in **`initializeCommand`** (`shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, and `HOST_SSH_AUTH_SOCK` for Compose/Dockerfile bind mounts). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
 
 **Still useful:**
 
@@ -170,7 +170,7 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
-Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image), `initialize/` (host `initializeCommand`), and `shell/` (sourced from the workspace bind at runtime).
+Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
 
 ### Persisted data
 

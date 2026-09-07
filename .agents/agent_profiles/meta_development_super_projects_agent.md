@@ -1,4 +1,22 @@
-# Super project basic agent profile
+# Super projects meta-development workspace agent profile
+
+## Domain context — super_projects_development meta-development workspace
+
+The workspace root (`/super_projects_development`) is a **development wrapper** around the primary `super_projects` template. It is a renamed fork of `super_projects` used while developing features for the template itself. This outer repository tracks the `meta-development/main` branch.
+
+**Purpose:** Provide a fully containerized development environment without colliding with a normal `super_projects` install on the same machine. The wrapper renames Docker Compose project names, container hostnames, workspace mount paths, named volumes, MCP `docker exec` targets, ssh-agent socket filenames, and host port mappings (for example noVNC on host port `6081` instead of `6080`) so both stacks can run side by side.
+
+**Layout:**
+
+- **Wrapper (this workspace):** `/super_projects_development` — the active devcontainer, root `.devcontainer/` config, and development-only customizations. Open this directory in the IDE. Git branch: `meta-development/main`.
+- **Primary template (nested repo):** `/super_projects_development/super_projects/` — the `super_projects` git repository being modified. Feature work on the template belongs here unless the change is wrapper-specific (namespace/port isolation or other development ergonomics).
+
+**When editing:**
+
+- The standard workflow for modifying the primary template: make changes in `super_projects/`, confirm and push them from that repository. After everything is finalized (confirmed and pushed to main) the `meta-development/main` branch should be rebased to pick up those changes. Never modify the `meta-development/main` branch without consulting the user first.
+- Changes intended for end users of `super_projects` → edit files under `super_projects/` and commit from that repository.
+- Changes that only affect the development wrapper → edit the workspace root on `meta-development/main`.
+- Do not assume the nested `super_projects/.devcontainer/` is the running container; the wrapper's `.devcontainer/` at the root is what the IDE uses when this workspace is open.
 
 ## Strong rules
 
@@ -16,7 +34,7 @@
 ## Guidelines
 
 - Before branching, fetch and pull the latest base branch for every repository you touch.
-- When creating a feature branch, use a clear `feature/<short-description>` name unless the project has a more specific convention.
+- When creating a feature branch, use a clear `feature/<short-description>` name unless the project has a more specific convention. The meta-development outer repository uses the `meta-development/main` branch rather than `feature/` branches.
 - Split commits into meaningful chunks. Commit messages should explain the reason for the change, not only the files touched.
 - Prefer existing project patterns, helper APIs, and local conventions over introducing new abstractions.
 - Consider refactoring shared behavior before adding a similar feature, but avoid abstractions that make the implementation harder to follow.
@@ -73,8 +91,8 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 
 #### Docker Compose
 
-- One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/workspaces`, Docker socket mounted for docker-outside-of-docker.
-- Host `initializeCommand` (`scripts/shell/initializeCommand.sh`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6080`.
+- One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/super_projects_development`, Docker socket mounted for docker-outside-of-docker.
+- Host `initializeCommand` (`scripts/shell/initializeCommand.sh`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6081` (+1 vs `super_projects` on 6080).
 - Do not mount whole `/home/developer` — that freezes image-owned installs after the first named-volume create.
 
 #### Persisted files
@@ -161,5 +179,5 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `websockify`: WebSocket-to-TCP bridge for noVNC.
 - `x11-xserver-utils`: X11 utilities.
 - `xterm`: lightweight fallback terminal.
-- noVNC is published on host port `6080` when the compose port mapping is enabled (by default).
-- Chrome remote debugging is configured for container port `9223`; host publication is optional in compose (off by default).
+- noVNC is published on host port `6081` when the compose port mapping is enabled (by default; container internal 6080).
+- Chrome remote debugging is configured for container port `9223`; optional host publication on `9224` in compose (off by default).

@@ -1,0 +1,110 @@
+#!/bin/sh
+# Run from initializeCommand.sh (before the container starts), after
+# ensure-host-ssh-agent. VS Code, Cursor, and `devcontainer up` invoke this on
+# the host or from an outer devcontainer that manages nested devcontainers via
+# docker.sock.
+#
+# Writes .devcontainer/.env for Compose/Dockerfile:
+# DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, HOST_WORKSPACE_DIR.
+#
+# Bind-mount sources must be paths on the Docker host. When initializeCommand
+# runs inside an outer devcontainer, container-local paths are resolved from a
+# prior .env when needed.
+set -eu
+
+cd "$(dirname "$0")/../../.."
+
+DEVCONTAINER_ENV_FILE=.devcontainer/.env
+PARENT_ENV="../.devcontainer/.env"
+HOST_SSH_AGENT_ENV=.devcontainer/.host-ssh-agent.env
+
+env_file_var() {
+  _file=$1
+  _key=$2
+  [ -f "$_file" ] || return 1
+  grep "^${_key}=" "$_file" | cut -d= -f2-
+}
+
+known_hosts_writable() {
+  [ -e "$HOME/.ssh/known_hosts" ] && [ ! -w "$HOME/.ssh/known_hosts" ] && return 1
+  return 0
+}
+
+needs_docker_host_paths() {
+  if ! known_hosts_writable; then
+    return 0
+  fi
+  case "$1" in
+    /ssh-agent.sock) return 0 ;;
+  esac
+  return 1
+}
+
+# Docker Compose bind mounts need host-side paths. When initializeCommand runs
+# where ~/.ssh/known_hosts is not writable (outer devcontainer) or the selected
+# agent is a forwarded socket, reuse recorded host paths from .env.
+resolve_compose_bind_paths() {
+  _agent_sock=$1
+  _repo_root=$(pwd)
+
+  if needs_docker_host_paths "$_agent_sock"; then
+    if ! known_hosts_writable; then
+      echo "devcontainer env: resolving Docker host bind paths from .env ($HOME/.ssh/known_hosts is read-only)" >&2
+    else
+      echo "devcontainer env: resolving Docker host bind paths from .env (agent socket is forwarded at $_agent_sock)" >&2
+    fi
+
+    for _env_file in "$PARENT_ENV" "$DEVCONTAINER_ENV_FILE"; do
+      [ -f "$_env_file" ] || continue
+      _home=$(env_file_var "$_env_file" HOST_HOME_DIR) || continue
+      _sock=$(env_file_var "$_env_file" HOST_SSH_AUTH_SOCK) || continue
+      _workspace=$(env_file_var "$_env_file" HOST_WORKSPACE_DIR) || continue
+      [ -n "$_home" ] && [ -n "$_sock" ] && [ -n "$_workspace" ] || continue
+      _parent_root=$(CDPATH= cd -- "$(dirname "$_env_file")/.." && pwd)
+      _rel=${_repo_root#"${_parent_root}/"}
+      if [ "$_rel" = "$_repo_root" ] || [ -z "$_rel" ]; then
+        continue
+      fi
+      echo "devcontainer env: using Docker host paths from $_env_file" >&2
+      COMPOSE_HOST_HOME=$_home
+      COMPOSE_SSH_AUTH_SOCK=$_sock
+      HOST_WORKSPACE_DIR="$_workspace/$_rel"
+      return
+    done
+    echo "devcontainer env: cannot resolve Docker host bind paths; expected $PARENT_ENV (with HOST_WORKSPACE_DIR) or $DEVCONTAINER_ENV_FILE" >&2
+    exit 1
+  fi
+
+  COMPOSE_HOST_HOME=$HOME
+  COMPOSE_SSH_AUTH_SOCK=$_agent_sock
+  HOST_WORKSPACE_DIR=$_repo_root
+}
+
+if [ ! -f "$HOST_SSH_AGENT_ENV" ]; then
+  echo "devcontainer env: missing $HOST_SSH_AGENT_ENV; run ensure-host-ssh-agent first" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+. "$HOST_SSH_AGENT_ENV"
+
+if [ -z "${SELECTED_AGENT_SOCK:-}" ]; then
+  echo "devcontainer env: SELECTED_AGENT_SOCK is empty in $HOST_SSH_AGENT_ENV" >&2
+  exit 1
+fi
+
+resolve_compose_bind_paths "$SELECTED_AGENT_SOCK"
+
+HOST_OS=$(uname -s)
+case "$HOST_OS" in
+  Darwin) _docker_gid=$(stat -f '%g' /var/run/docker.sock) ;;
+  *) _docker_gid=$(stat -c '%g' /var/run/docker.sock) ;;
+esac
+
+{
+  printf 'DEVELOPER_UID=%s\n' "$(id -u)"
+  printf 'DOCKER_GID=%s\n' "$_docker_gid"
+  printf 'HOST_HOME_DIR=%s\n' "$COMPOSE_HOST_HOME"
+  printf 'HOST_SSH_AUTH_SOCK=%s\n' "$COMPOSE_SSH_AUTH_SOCK"
+  printf 'HOST_WORKSPACE_DIR=%s\n' "$HOST_WORKSPACE_DIR"
+} >"$DEVCONTAINER_ENV_FILE"

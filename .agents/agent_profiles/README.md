@@ -10,6 +10,12 @@ Copy the profile you want to use from the `.agents/agent_profiles` directory to 
 cp .agents/agent_profiles/default_super_projects_agent.md agents.md
 ```
 
+For the meta-development workspace (outer repo on `meta-development/main`, nested `super_projects/` clone):
+
+```bash
+cp .agents/agent_profiles/meta_development_super_projects_agent.md agents.md
+```
+
 If you have an uncommitted profile currently in use in `agents.md`, move it to the `.local_only` directory first so you do not lose it:
 
 ```bash

@@ -83,37 +83,36 @@ resolve_compose_bind_paths() {
         ;;
     esac
 
-    _env_candidates=
-    if parent_env_trusted; then
-      _env_candidates="$_env_candidates $PARENT_ENV"
-    elif [ -f "$PARENT_ENV" ]; then
-      echo "devcontainer env: ignoring $PARENT_ENV (no $PARENT_COMPOSE; not an outer devcontainer scaffold)" >&2
-    fi
-    _env_candidates="$_env_candidates $DEVCONTAINER_ENV_FILE"
-
-    for _env_file in $_env_candidates; do
-      [ -f "$_env_file" ] || continue
-      _home=$(env_file_var "$_env_file" HOST_HOME_DIR) || continue
-      _sock=$(env_file_var "$_env_file" HOST_SSH_AUTH_SOCK) || continue
-      _workspace=$(env_file_var "$_env_file" HOST_WORKSPACE_DIR) || continue
-      [ -n "$_home" ] && [ -n "$_sock" ] && [ -n "$_workspace" ] || continue
-      validate_bind_path HOST_HOME_DIR "$_home"
-      validate_bind_path HOST_SSH_AUTH_SOCK "$_sock"
-      validate_bind_path HOST_WORKSPACE_DIR "$_workspace"
-      _parent_root=$(CDPATH= cd -- "$(dirname "$_env_file")/.." && pwd)
-      _rel=${_repo_root#"${_parent_root}/"}
-      if [ "$_rel" = "$_repo_root" ] || [ -z "$_rel" ]; then
-        continue
+    if ! parent_env_trusted; then
+      if [ -f "$PARENT_ENV" ]; then
+        echo "devcontainer env: ignoring $PARENT_ENV (no $PARENT_COMPOSE; not an outer devcontainer scaffold)" >&2
       fi
-      echo "devcontainer env: using Docker host paths from $_env_file" >&2
-      COMPOSE_HOST_HOME=$_home
-      COMPOSE_SSH_AUTH_SOCK=$_sock
-      HOST_WORKSPACE_DIR="$_workspace/$_rel"
-      validate_bind_path HOST_WORKSPACE_DIR "$HOST_WORKSPACE_DIR"
-      return
-    done
-    echo "devcontainer env: cannot resolve Docker host bind paths; expected trusted $PARENT_ENV (with $PARENT_COMPOSE) or $DEVCONTAINER_ENV_FILE" >&2
-    exit 1
+      echo "devcontainer env: cannot resolve Docker host bind paths; expected trusted $PARENT_ENV with $PARENT_COMPOSE" >&2
+      exit 1
+    fi
+
+    _home=$(env_file_var "$PARENT_ENV" HOST_HOME_DIR) || _home=
+    _sock=$(env_file_var "$PARENT_ENV" HOST_SSH_AUTH_SOCK) || _sock=
+    _workspace=$(env_file_var "$PARENT_ENV" HOST_WORKSPACE_DIR) || _workspace=
+    if [ -z "$_home" ] || [ -z "$_sock" ] || [ -z "$_workspace" ]; then
+      echo "devcontainer env: cannot resolve Docker host bind paths; $PARENT_ENV is missing HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, or HOST_WORKSPACE_DIR" >&2
+      exit 1
+    fi
+    validate_bind_path HOST_HOME_DIR "$_home"
+    validate_bind_path HOST_SSH_AUTH_SOCK "$_sock"
+    validate_bind_path HOST_WORKSPACE_DIR "$_workspace"
+    _parent_root=$(CDPATH= cd -- "$(dirname "$PARENT_ENV")/.." && pwd)
+    _rel=${_repo_root#"${_parent_root}/"}
+    if [ "$_rel" = "$_repo_root" ] || [ -z "$_rel" ]; then
+      echo "devcontainer env: cannot resolve Docker host bind paths; $PARENT_ENV workspace root does not contain this repository" >&2
+      exit 1
+    fi
+    echo "devcontainer env: using Docker host paths from $PARENT_ENV" >&2
+    COMPOSE_HOST_HOME=$_home
+    COMPOSE_SSH_AUTH_SOCK=$_sock
+    HOST_WORKSPACE_DIR="$_workspace/$_rel"
+    validate_bind_path HOST_WORKSPACE_DIR "$HOST_WORKSPACE_DIR"
+    return
   fi
 
   COMPOSE_HOST_HOME=$HOME

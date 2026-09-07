@@ -15,7 +15,6 @@ set -eu
 cd "$(dirname "$0")/../../.."
 
 SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
-MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock"
 
 # WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
 case "${XDG_RUNTIME_DIR:-}" in
@@ -94,11 +93,8 @@ if [ -z "$SELECTED_AGENT_SOCK" ]; then
   if agent_is_running "$MANAGED_AGENT_SOCK"; then
     SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
   else
-    if [ -d "$MANAGED_AGENT_SOCK" ]; then
-      rm -rf "$MANAGED_AGENT_SOCK"
-    elif [ -e "$MANAGED_AGENT_SOCK" ]; then
-      rm -f "$MANAGED_AGENT_SOCK"
-    fi
+    # Early cleanup above handles directories; remove other stale non-socket paths.
+    [ -e "$MANAGED_AGENT_SOCK" ] && [ ! -S "$MANAGED_AGENT_SOCK" ] && rm -f "$MANAGED_AGENT_SOCK"
     ssh-agent -a "$MANAGED_AGENT_SOCK" >/dev/null
     SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
   fi

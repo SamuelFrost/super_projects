@@ -2,6 +2,9 @@
 # CI tests for host initializeCommand flow (ensure-host-ssh-agent + write-devcontainer-env).
 # Run on native Linux and macOS GitHub Actions runners.
 #
+# assert_env_contract also checks DEVELOPER_UID/DOCKER_GID, bridge↔.env socket parity
+# (standalone hosts), legacy bridge removal, and compose config with generated .env.
+# assert_initialize_command_artifacts checks persist/ stubs and known_hosts (standalone).
 # Limitations (not run in CI):
 # - macOS Keychain UI unlock (no-TTY Darwin branch) — requires manual IDE verification
 # - Interactive TTY passphrase prompt — use Linux askpass test as the IDE-like proxy
@@ -160,6 +163,14 @@ require_docker() {
   command -v docker >/dev/null 2>&1 || fail "docker not found (required for compose config and .env generation)"
 }
 
+docker_sock_gid() {
+  if [ "$HOST_OS" = Darwin ]; then
+    stat -f '%g' /var/run/docker.sock
+  else
+    stat -c '%g' /var/run/docker.sock
+  fi
+}
+
 register_selected_agent_from_bridge() {
   if [ -f .devcontainer/.selected-ssh-agent.env ]; then
     _sock=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK) || _sock=
@@ -202,12 +213,40 @@ assert_env_contract() {
     [ "$_home" = "$HOME" ] || fail "HOST_HOME_DIR=$_home expected $HOME"
   fi
 
+  _uid=$(env_var "$_env_file" DEVELOPER_UID)
+  [ "$_uid" = "$(id -u)" ] || fail "DEVELOPER_UID=$_uid expected $(id -u)"
+
+  if command -v docker >/dev/null 2>&1 && [ -e /var/run/docker.sock ]; then
+    _gid=$(env_var "$_env_file" DOCKER_GID)
+    _expected_gid=$(docker_sock_gid)
+    [ "$_gid" = "$_expected_gid" ] || fail "DOCKER_GID=$_gid expected $_expected_gid from /var/run/docker.sock"
+  fi
+
   _sock=$(env_var "$_env_file" HOST_SSH_AUTH_SOCK)
+  _selected=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK) || fail "SELECTED_AGENT_SOCK missing from bridge file"
   if is_nested_devcontainer; then
     _parent_sock=$(env_var ../.devcontainer/.env HOST_SSH_AUTH_SOCK) || fail "missing parent HOST_SSH_AUTH_SOCK"
     [ "$_sock" = "$_parent_sock" ] || fail "nested HOST_SSH_AUTH_SOCK=$_sock expected $_parent_sock"
   else
     [ -S "$_sock" ] || fail "HOST_SSH_AUTH_SOCK is not a socket: $_sock"
+    [ "$_sock" = "$_selected" ] || fail "HOST_SSH_AUTH_SOCK=$_sock expected SELECTED_AGENT_SOCK=$_selected"
+  fi
+
+  [ ! -f .devcontainer/.host-ssh-agent.env ] || fail "legacy .devcontainer/.host-ssh-agent.env should be removed"
+
+  if command -v docker >/dev/null 2>&1; then
+    docker compose -f .devcontainer/compose.yaml config >/dev/null \
+      || fail "docker compose config failed with generated .devcontainer/.env"
+  fi
+}
+
+assert_initialize_command_artifacts() {
+  for _dir in gemini gh git mise chrome cursor; do
+    [ -d ".devcontainer/persist/$_dir" ] || fail "missing .devcontainer/persist/$_dir after initializeCommand"
+  done
+
+  if ! is_nested_devcontainer; then
+    [ -f "$HOME/.ssh/known_hosts" ] || fail "missing $HOME/.ssh/known_hosts after initializeCommand"
   fi
 }
 
@@ -225,6 +264,7 @@ phase_initialize_contract() {
   sh .devcontainer/scripts/shell/initializeCommand.sh
   register_selected_agent_from_bridge
   assert_env_contract
+  assert_initialize_command_artifacts
 }
 
 phase_reuse_loaded_agent() {

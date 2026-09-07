@@ -151,6 +151,7 @@ Unlocking happens automatically in **`initializeCommand`** (`shell/initializeCom
 - **1Password SSH agent:** enable and unlock 1Password; initializeCommand reuses that agent when it already has identities.
 - **GitHub without SSH:** `gh auth login` and HTTPS remotes (inside the container after start).
 - **WSL:** use WSL end-to-end (`dev.containers.executeInWSL`); native Windows is not supported for this SSH flow.
+- **WSLg:** before the first `initializeCommand`, manual `docker compose` may default the agent socket to `$XDG_RUNTIME_DIR/super_projects-ssh-agent.sock`; after init, `.env` uses `~/.cache/super_projects-ssh-agent.sock` (see `.agents/attributes/tools/git/ssh_agent_in_devcontainer.md`). Both work.
 
 ## Devcontainer details
 

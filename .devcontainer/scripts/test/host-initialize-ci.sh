@@ -6,6 +6,7 @@
 # - macOS Keychain UI unlock (no-TTY Darwin branch) — requires manual IDE verification
 # - Interactive TTY passphrase prompt — use Linux askpass test as the IDE-like proxy
 # - Nested devcontainer path resolution — covered locally; unlock tests require a standalone host
+# - macOS compose/.env generation — GitHub-hosted macOS runners cannot run Colima/Docker Desktop
 set -eu
 
 REPO_ROOT=$(CDPATH= cd -- "$(dirname "$0")/../../.." && pwd)
@@ -138,11 +139,17 @@ phase_reuse_loaded_agent() {
   export SSH_AUTH_SOCK="$_agent_sock"
   ssh-add "$_key" >/dev/null
 
-  sh .devcontainer/scripts/shell/initializeCommand.sh
+  sh .devcontainer/scripts/shell/ensure-host-ssh-agent
 
   _selected=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK)
   [ "$_selected" = "$_agent_sock" ] || fail "expected reuse of preloaded agent (got $_selected)"
   SSH_AUTH_SOCK="$_selected" ssh-add -l | grep -qi ed25519 || fail "preloaded key missing from selected agent"
+
+  if [ "${AGENT_ONLY_TESTS:-0}" = 1 ]; then
+    return 0
+  fi
+
+  sh .devcontainer/scripts/shell/write-devcontainer-env
   assert_env_contract
 }
 
@@ -195,6 +202,12 @@ phase_passphrase_quiet_load() {
   generate_ed25519_key "$_key" ""
 
   sh .devcontainer/scripts/shell/ensure-host-ssh-agent
+  if [ "${AGENT_ONLY_TESTS:-0}" = 1 ]; then
+    _sock=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK)
+    SSH_AUTH_SOCK="$_sock" ssh-add -l | grep -qi ed25519 || fail "unencrypted default key not loaded"
+    return 0
+  fi
+
   sh .devcontainer/scripts/shell/write-devcontainer-env
 
   _sock=$(env_var .devcontainer/.selected-ssh-agent.env SELECTED_AGENT_SOCK)
@@ -225,8 +238,14 @@ case "$UNLOCK_MODE" in
     phase_reuse_loaded_agent
     phase_passphrase_quiet_load
     ;;
+  macos-agent)
+    AGENT_ONLY_TESTS=1
+    export AGENT_ONLY_TESTS
+    phase_reuse_loaded_agent
+    phase_passphrase_quiet_load
+    ;;
   *)
-    fail "unknown unlock mode: $UNLOCK_MODE (expected all, askpass, or quiet)"
+    fail "unknown unlock mode: $UNLOCK_MODE (expected all, askpass, quiet, or macos-agent)"
     ;;
 esac
 

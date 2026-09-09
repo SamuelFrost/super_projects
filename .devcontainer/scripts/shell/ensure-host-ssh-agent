@@ -1,18 +1,20 @@
 #!/bin/sh
-# Run on the host from devcontainer initializeCommand (before the container starts).
-# VS Code, Cursor, and `devcontainer up` all invoke this automatically.
+# Run from initializeCommand.sh (before the container starts).
+# VS Code, Cursor, and `devcontainer up` invoke this on the host or from an
+# outer devcontainer that manages nested devcontainers via docker.sock.
 #
-# Ensures a host ssh-agent socket (private keys stay on the host), writes
-# .devcontainer/.env, and loads default SSH keys when possible:
+# Ensures a host ssh-agent socket (private keys stay on the host) and loads
+# default SSH keys when possible:
 # - Reuse an already-unlocked agent (desktop session, 1Password, prior Keychain).
 # - macOS Keychain / quiet add when no prompt is needed.
 # - If still empty: prompt via TTY or platform askpass/Keychain UI (still during initializeCommand).
+#
+# Writes .devcontainer/.selected-ssh-agent.env for write-devcontainer-env (parsed, not sourced).
 set -eu
 
 cd "$(dirname "$0")/../../.."
 
-DEVCONTAINER_ENV_FILE=.devcontainer/.env
-MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock"
+SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
 
 # WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
 case "${XDG_RUNTIME_DIR:-}" in
@@ -20,11 +22,29 @@ case "${XDG_RUNTIME_DIR:-}" in
   *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock" ;;
 esac
 
-mkdir -p "$HOME/.ssh"
-touch "$HOME/.ssh/known_hosts"
-chmod 700 "$HOME/.ssh" 2>/dev/null || true
+# Docker bind-mounts create a directory at a missing source path; if compose ever
+# ran before the agent socket existed, clear that directory so ssh-agent can bind.
+[ -d "$MANAGED_AGENT_SOCK" ] && rm -rf "$MANAGED_AGENT_SOCK"
+mkdir -p "$(dirname "$MANAGED_AGENT_SOCK")"
 
-HOST_OS=$(uname -s 2>/dev/null || echo unknown)
+known_hosts_writable() {
+  [ -e "$HOME/.ssh/known_hosts" ] && [ ! -w "$HOME/.ssh/known_hosts" ] && return 1
+  return 0
+}
+
+prepare_ssh_config_dir() {
+  mkdir -p "$HOME/.ssh"
+  touch "$HOME/.ssh/known_hosts"
+  chmod 700 "$HOME/.ssh" 2>/dev/null || true
+}
+
+if known_hosts_writable; then
+  prepare_ssh_config_dir
+else
+  echo "SSH: $HOME/.ssh/known_hosts is read-only; skipping local ssh config setup" >&2
+fi
+
+HOST_OS=$(uname -s)
 
 DEFAULT_KEY_PATHS="
 $HOME/.ssh/id_ed25519
@@ -73,11 +93,8 @@ if [ -z "$SELECTED_AGENT_SOCK" ]; then
   if agent_is_running "$MANAGED_AGENT_SOCK"; then
     SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
   else
-    if [ -d "$MANAGED_AGENT_SOCK" ]; then
-      rm -rf "$MANAGED_AGENT_SOCK"
-    elif [ -e "$MANAGED_AGENT_SOCK" ]; then
-      rm -f "$MANAGED_AGENT_SOCK"
-    fi
+    # Early cleanup above handles directories; remove other stale non-socket paths.
+    [ -e "$MANAGED_AGENT_SOCK" ] && [ ! -S "$MANAGED_AGENT_SOCK" ] && rm -f "$MANAGED_AGENT_SOCK"
     ssh-agent -a "$MANAGED_AGENT_SOCK" >/dev/null
     SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
   fi
@@ -154,12 +171,13 @@ if ! agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
   fi
 fi
 
+mkdir -p .devcontainer
+# Drop legacy bridge filename from an earlier PR revision.
+[ -f .devcontainer/.host-ssh-agent.env ] && rm -f .devcontainer/.host-ssh-agent.env
+# Parsed by write-devcontainer-env (env_file_var); values may contain spaces (e.g. 1Password).
 {
-  printf 'DEVELOPER_UID=%s\n' "$(id -u)"
-  printf 'DOCKER_GID=%s\n' "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || stat -f '%g' /var/run/docker.sock)"
-  printf 'HOST_HOME_DIR=%s\n' "$HOME"
-  printf 'HOST_SSH_AUTH_SOCK=%s\n' "$SELECTED_AGENT_SOCK"
-} >"$DEVCONTAINER_ENV_FILE"
+  printf 'SELECTED_AGENT_SOCK=%s\n' "$SELECTED_AGENT_SOCK"
+} >"$SELECTED_SSH_AGENT_ENV_FILE"
 
 if agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
   echo "SSH: host agent ready ($(SSH_AUTH_SOCK=$SELECTED_AGENT_SOCK ssh-add -l 2>/dev/null | wc -l | tr -d ' ') key(s))" >&2

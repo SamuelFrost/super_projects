@@ -23,7 +23,7 @@ The intended way to use this project is one fork per company (or team). Your for
 
 ### 1. Rename the container (do this first)
 
-The Docker Compose project name — `name: "super_projects"` in `.devcontainer/compose.yaml` — determines the container name (`super_projects-devcontainer-1`), the Docker network name, and the prefix of every named volume. If your fork keeps the default name, it will collide with any other fork or copy of this project on the same machine, and Docker will silently **share the named volumes** between them. With the current setup that is usually not a big deal, but those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), and git config — so a name collision can leak state and credentials between unrelated projects. Rename as soon as you fork, before anyone starts the container.
+The Docker Compose project name — `name: "super_projects"` in `.devcontainer/compose.yaml` — determines the container name (`super_projects-devcontainer-1`), the Docker network name, and the prefix of every named volume. If your fork keeps the default name, it will collide with any other fork or copy of this project on the same machine, and Docker will silently **share the named volumes** between them. With the current setup that is usually not a big deal, but those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state (`cursor-data`), and git config — so a name collision can leak state and credentials between unrelated projects. Rename as soon as you fork, before anyone starts the container.
 
 Pick your company's project name (`acme_projects` is used as the example below) and apply it consistently — the container name in the MCP configs is derived from the Compose project name, so they must be changed together.
 
@@ -41,7 +41,7 @@ Pick your company's project name (`acme_projects` is used as the example below) 
 
 **Recommended — host-side helper scripts:**
 
-- `.devcontainer/scripts/initialize/ensure-host-ssh-agent` — rename the `super_projects-ssh-agent.sock` socket filename so your fork keeps its own stable ssh-agent socket on the host instead of sharing one with other forks.
+- `.devcontainer/scripts/shell/ensure-host-ssh-agent` — rename the `super_projects-ssh-agent.sock` socket filename so your fork keeps its own stable ssh-agent socket on the host instead of sharing one with other forks.
 - `.devcontainer/scripts/dockerfile/print-cursor-worker-hint` — rename the suggested Cursor worker name `super_projects_devcontainer`.
 
 **Documentation mentions — no rush.** Every other occurrence (volume names quoted in this README and in `.devcontainer/persist/README.md`, the `.directory_information.md` files, the agent profile template under `.agents/`) is documentation with no functional effect; update them whenever convenient — `git grep super_projects` lists them all. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
@@ -112,7 +112,7 @@ git clone git@github.com:<your-company>/<your-fork>.git
 ### Option A — CLI (no IDE required)
 
 ```sh
-# Build and start (runs initializeCommand → ensure-host-ssh-agent to write .env, then builds + starts)
+# Build and start (runs initializeCommand → .devcontainer/scripts/shell/initializeCommand.sh, then builds + starts)
 devcontainer up --remove-existing-container
 
 # Open a shell inside the container
@@ -138,7 +138,7 @@ The VNC desktop and Chrome start automatically with the container — no extra s
 
 Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
 
-Unlocking happens automatically in **`initializeCommand`** (`ensure-host-ssh-agent`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script also writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, and `HOST_SSH_AUTH_SOCK` (used by Compose/Dockerfile for the `developer` user, `docker.sock` access, `known_hosts`, and the agent mount). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
+Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with `DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, and `HOST_WORKSPACE_DIR` for Compose/Dockerfile bind mounts). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
 
 **Still useful:**
 
@@ -163,14 +163,16 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
 - Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
 - Google Chrome, launched with remote debugging on port 9223 (accessible from the desktop GUI and via MCP)
-- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `npx` — Cursor connects to Chrome through the forwarded port.
+- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `docker exec` and `mise`, so the MCP server connects to Chrome at `127.0.0.1:9223` inside the container. Optional host publication of the debugging port is disabled by default in Compose.
 - [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, Java, and more
 - Recommended extensions and settings for VS Code and Cursor
 - TODO: add ruby-lsp, stimulus-lsp, and herb-lsp for language servers
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
-Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image), `initialize/` (host `initializeCommand`), and `shell/` (sourced from the workspace bind at runtime).
+Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
+
+`.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. It sits in the workspace tree, so a process inside the container can rewrite bind-mount paths before a manual `docker compose up`. VS Code, Cursor, and `devcontainer up` regenerate it each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first.
 
 ### Persisted data
 
@@ -183,6 +185,7 @@ Tool state uses **named Docker volumes** (macOS-friendly I/O). Each volume is al
 | `super_projects_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
 | `super_projects_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
 | `super_projects_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
+| `super_projects_cursor-data` | `~/.cursor` | `persist/cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
 | host ssh-agent socket | `/ssh-agent.sock` | — | Host-forwarded agent (private keys stay on the host) |
 | host `known_hosts` (ro bind) | `~/.ssh/known_hosts` | — | Shared SSH host keys |
 

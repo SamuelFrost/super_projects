@@ -51,6 +51,7 @@ This index lists the available agent attributes by category. Link text uses each
 - [Tool interaction guideline — recover from Git permission denied](tools/git/recover_from_git_permission_denied.md)
 - [Git workflow guideline — split commits into meaningful chunks](tools/git/split_commits_into_meaningful_chunks.md)
 - [Domain context — SSH agent in the devcontainer](tools/git/ssh_agent_in_devcontainer.md)
+- [Domain context — WSLg ssh-agent socket path](tools/git/wslg_ssh_agent_socket_path.md)
 - [Git workflow guideline — use clear feature branch names](tools/git/use_clear_feature_branch_names.md)
 
 ### Mise

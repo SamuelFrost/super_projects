@@ -9,10 +9,8 @@
   // "remoteUser": "developer",
   // "updateRemoteUserUID": true,
 
-  // Host-side hook before the container starts (VS Code, Cursor, and `devcontainer up` etc.).
-  // ensure-host-ssh-agent writes .devcontainer/.env (DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR,
-  // HOST_SSH_AUTH_SOCK), forwards only the ssh-agent socket, and may prompt once to unlock keys.
-  "initializeCommand": "sh .devcontainer/scripts/initialize/ensure-host-ssh-agent && mkdir -p .devcontainer/persist/gemini .devcontainer/persist/gh .devcontainer/persist/git .devcontainer/persist/mise .devcontainer/persist/chrome",
+  // initializeCommand.sh (host): ssh-agent + key unlock, .devcontainer/.env, persist dirs.
+  "initializeCommand": "sh .devcontainer/scripts/shell/initializeCommand.sh",
 
   // Expose localWorkspaceFolder so tools inside the container can reference the host path
   "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },
@@ -63,11 +61,13 @@
         // Keep them out of the workspace file watcher and search index.
         "files.watcherExclude": {
           "**/.devcontainer/persist/mise/**": true,
-          "**/.devcontainer/persist/chrome/**": true
+          "**/.devcontainer/persist/chrome/**": true,
+          "**/.devcontainer/persist/cursor/**": true
         },
         "search.exclude": {
           "**/.devcontainer/persist/mise": true,
-          "**/.devcontainer/persist/chrome": true
+          "**/.devcontainer/persist/chrome": true,
+          "**/.devcontainer/persist/cursor": true
         }
       }
     }

@@ -17,6 +17,7 @@ devcontainer exec --workspace-folder . -- ls -la /workspaces/.devcontainer/persi
 | `git/` | `super_projects_git-config` | `~/.config/git` | Git XDG config (`config`, etc.) |
 | `mise/` | `super_projects_mise-data` | `~/.local/share/mise` | mise downloads and tool installs |
 | `chrome/` | `super_projects_chrome-devtools-mcp-profile` | `~/chrome-profile` | Chrome profile (logins, cookies, extensions) |
+| `cursor/` | `super_projects_cursor-data` | `~/.cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
 
 ## Reset a store
 
@@ -28,12 +29,30 @@ docker volume rm super_projects_gh-data
 docker volume rm super_projects_git-config
 docker volume rm super_projects_mise-data
 docker volume rm super_projects_chrome-devtools-mcp-profile
+docker volume rm super_projects_cursor-data
 ```
+
+## First-time enable (cursor)
+
+When `cursor-data` is added to an existing devcontainer, Docker creates an **empty** named volume on rebuild. Copy current state to the workspace bind mount first, then restore after rebuild:
+
+```sh
+# 1. Before rebuild (inside the running container):
+cp -a ~/.cursor /workspaces/.devcontainer/cursor-migration-backup
+
+# 2. Rebuild/recreate the devcontainer, then restore:
+cp -a /workspaces/.devcontainer/cursor-migration-backup/. ~/.cursor/
+rm -rf /workspaces/.devcontainer/cursor-migration-backup
+```
+
+The backup directory is gitignored but lives on the host workspace disk and includes Cursor CLI auth/session state — remove it after a successful restore; do not leave it in the repo directory.
+
+After that, `~/.cursor` (agent-transcripts, CLI chats, MCP config, skills) survives container rebuilds. IDE sidebar chat index on the Cursor host app is separate; this volume covers container-side state only.
 
 ## SSH (host agent — keys not in the container)
 
 Private keys are **not** mounted. Compose forwards a host `ssh-agent` socket to `/ssh-agent.sock`.
 
-`initializeCommand` runs `scripts/initialize/ensure-host-ssh-agent`, which also writes `.devcontainer/.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`). Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts.
+`initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `ensure-host-ssh-agent` and `write-devcontainer-env`) to write `.devcontainer/.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, `HOST_WORKSPACE_DIR`). Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts.
 
 `known_hosts` is bind-mounted read-only from the host.

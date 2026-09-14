@@ -40,6 +40,11 @@ This index lists the available agent attributes by category. Link text uses each
 - [Domain context — assume the configured devcontainer environment](tools/devcontainer/assume_devcontainer_system_configuration.md)
 - [Tool installation guideline — prefer Dockerfile or mise for persistent tools](tools/devcontainer/prefer_dockerfile_or_mise_for_persistent_tools.md)
 
+### Host access
+
+- [Domain context — SSH agent in the devcontainer](tools/host_access/ssh_agent_in_devcontainer.md)
+- [Domain context — WSLg ssh-agent socket path](tools/host_access/wslg_ssh_agent_socket_path.md)
+
 ### Git
 
 - [Constraint — do not ignore push hooks without approval](tools/git/do_not_ignore_push_hooks_without_approval.md)
@@ -50,8 +55,6 @@ This index lists the available agent attributes by category. Link text uses each
 - [Constraint — never use git push without approval](tools/git/never_use_git_push_without_approval.md)
 - [Tool interaction guideline — recover from Git permission denied](tools/git/recover_from_git_permission_denied.md)
 - [Git workflow guideline — split commits into meaningful chunks](tools/git/split_commits_into_meaningful_chunks.md)
-- [Domain context — SSH agent in the devcontainer](tools/git/ssh_agent_in_devcontainer.md)
-- [Domain context — WSLg ssh-agent socket path](tools/git/wslg_ssh_agent_socket_path.md)
 - [Git workflow guideline — use clear feature branch names](tools/git/use_clear_feature_branch_names.md)
 
 ### Mise

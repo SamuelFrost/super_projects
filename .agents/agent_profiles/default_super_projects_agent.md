@@ -54,18 +54,21 @@
 - Title naming guidelines:
   - Ensure the title clearly conveys the entirity of the pull request.
 
-### Git And SSH
+### Host access
 
 - Private keys stay on the host. The host ssh-agent is forwarded at `/ssh-agent.sock`; `ensure-auth` reports whether identities are loaded.
 - Passphrase unlock runs in host `initializeCommand` (VS Code / Cursor / `devcontainer up`) — not a separate user-run script. Prefer Keychain, 1Password, or `gh auth login` (HTTPS) to reduce prompts.
+- If SSH fails with `Permission denied`, check `ssh-add -l` in the container; if empty, reopen in the container (re-runs initializeCommand) or use HTTPS.
+
+### Git
+
 - GitHub CLI auth persists in the `gh-data` volume (`~/.config/gh` / `persist/gh`). Run `gh auth login` **inside the container** once when needed.
-- If Git fails with `Permission denied`, check `ssh-add -l` in the container; if empty, reopen in the container (re-runs initializeCommand) or use HTTPS.
-- Integrated terminals should prefer mise shims so `node`, `ruby`, `python`, and similar tools resolve from the nearest `.mise.toml` or `.tool-versions`.
 
 ### Devcontainer
 
 - We are typically working within a devcontainer when doing work in this project, so assume the system is configured as described under `.devcontainer/` (`Dockerfile`, `compose.yaml`, `devcontainer.json`, `scripts/`, `persist/`).
 - When installing new tools/binaries, prefer modifying the Dockerfile or using mise. User state (auth, caches, profiles) belongs in the named volumes documented under `.devcontainer/persist/`.
+- Integrated terminals should prefer mise shims so `node`, `ruby`, `python`, and similar tools resolve from the nearest `.mise.toml` or `.tool-versions`.
 
 ### Other available tools
 

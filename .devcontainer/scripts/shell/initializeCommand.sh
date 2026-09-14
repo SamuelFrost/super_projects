@@ -7,4 +7,5 @@ cd "$(dirname "$0")/../../.."
 
 sh .devcontainer/scripts/shell/ensure-host-ssh-agent
 sh .devcontainer/scripts/shell/write-devcontainer-env
+sh .devcontainer/scripts/shell/refresh-docker-desktop-ssh-relay
 mkdir -p .devcontainer/persist/gemini .devcontainer/persist/gh .devcontainer/persist/git .devcontainer/persist/mise .devcontainer/persist/chrome .devcontainer/persist/cursor

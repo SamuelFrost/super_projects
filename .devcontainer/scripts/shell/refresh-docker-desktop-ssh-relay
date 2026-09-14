@@ -1,0 +1,16 @@
+#!/bin/sh
+# Run from initializeCommand.sh after write-devcontainer-env (before the container starts).
+#
+# Docker Desktop on WSL2 only. After WSL or Docker Desktop restarts, relay paths under
+# /run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/... can disappear while an old
+# container still references them, so compose fails mounting /ssh-agent.sock. A throwaway
+# docker run with the same host socket (from .devcontainer/.env) recreates the relay;
+# alpine is just a minimal image—the mount is the fix, not the container contents.
+set -eu
+
+cd "$(dirname "$0")/../../.."
+
+case "$(docker info --format '{{.OperatingSystem}}' 2>/dev/null)" in *Docker\ Desktop*)
+  sock=$(grep '^HOST_SSH_AUTH_SOCK=' .devcontainer/.env | cut -d= -f2- || true)
+  [ -n "$sock" ] && [ -S "$sock" ] && docker run --rm -v "$sock:/ssh-agent.sock:ro" alpine true >/dev/null 2>&1 || true
+;; esac

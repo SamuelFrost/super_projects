@@ -32,7 +32,7 @@ Pick your company's project name (`acme_projects` is used as the example below) 
 - `.devcontainer/compose.yaml`
   - `name: "super_projects"` → `name: "acme_projects"` — the Compose project name. This is the name that matters most: it determines the container name (`acme_projects-devcontainer-1`) and the named-volume prefix (`acme_projects_gh-data`, `acme_projects_chrome-devtools-mcp-profile`, …), which is what prevents volume sharing between forks.
   - `hostname: super_projects` → `hostname: acme_projects` — the container's hostname.
-  - `super_projects_default` → `acme_projects_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`. Project compose files that join this network (like the [example below](#simple-example-project-create-a-new-rails-project-inside-your-fork)) must reference the same name.
+  - `super_projects_default` → `acme_projects_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`. Project compose files that join this network (like the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) must reference the same name.
   - While editing, also update the comments quoting `docker volume rm super_projects_…` so they stay copy-pasteable.
 - `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`
   - Replace the container name `super_projects-devcontainer-1` with `acme_projects-devcontainer-1` (one occurrence in each file). These configs `docker exec` into the container by name, so a mismatch with the Compose project name breaks the chrome-devtools MCP server.
@@ -229,6 +229,7 @@ The `.gitignore` is configured to ignore everything **except** the files that de
 | `.mcp.json` | Shared MCP server config |
 | `.mise.toml` | Workspace-root tool versions |
 | `README.md` | This file |
+| `.samples/` | Practical example project setup docs for common use cases (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) |
 | `LICENSE` | Super Projects License (attribution required when reusing) |
 
 The root `agents.md` is **not tracked**: each developer copies a shared profile from `.agents/agent_profiles/` and customizes it locally (see [`.agents/agent_profiles/README.md`](.agents/agent_profiles/README.md)).
@@ -243,68 +244,3 @@ When reusing or redistributing super_projects scaffold files, you must:
 
 - Include a copy of the [Super Projects License](LICENSE) in any repository or distribution that incorporates that scaffold
 - Give credit to **Samuel Anthony Frost** with a web URL to a page he manages that includes a way to contact him (for example [GitHub](https://github.com/SamuelFrost), [LinkedIn](https://www.linkedin.com/in/samuel-frost-0a8711a3), or [X](https://x.com/Samuelfrost7)). (Including the SUPER PROJECTS LICENSE satisfies this requirement; the readme and such may be modified as needed)
-
-
-## Simple example project: create a new Rails project inside your fork
-<!-- note: the project is created as an untracked subdirectory of this repo (the parent-directory pattern). If you renamed your fork, use your project's network name (e.g. acme_projects_default) in place of super_projects_default below. -->
-
-```bash
-docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
-```
-For best results, put a `docker-compose.yaml` in the sample app so Postgres and the app share a project network. `sample_app_1` already has this file; copy it when you create a new project.
-
-Example `sample_app_1/docker-compose.yaml`:
-```yaml
-name: sample_app_1
-
-services:
-  sample_app_1:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      - RAILS_ENV=development
-      - SECRET_KEY_BASE=secret
-      - DATABASE_URL=postgres://postgres:password@postgres:5432/sample_app_1_development
-    ports:
-      - "3000:80"
-      # available on the host machine at http://localhost:3000
-      # available within the parent devcontainer at http://sample_app_1 when that container
-      # shares super_projects_default (add `config.hosts << "sample_app_1"` in development.rb)
-    volumes:
-      # LOCAL_WORKSPACE_FOLDER is the host path of the parent workspace (set by the
-      # super_projects devcontainer). When unset, `..` is this project's parent.
-      - ${LOCAL_WORKSPACE_FOLDER:-..}/sample_app_1:/rails
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - default
-      - super_projects_default
-
-  postgres:
-    image: postgres:18.3
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: sample_app_1_development
-    volumes:
-      - sample_app_1_postgres_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-networks:
-  # Join the parent super_projects network so Chrome in the devcontainer can
-  # reach http://sample_app_1. App and Postgres talk on `default` without it.
-  # The network must already exist (created by .devcontainer/compose.yaml).
-  super_projects_default:
-    external: true
-
-volumes:
-  sample_app_1_postgres_data:
-    external: false
-    name: sample_app_1_postgres_data
-```

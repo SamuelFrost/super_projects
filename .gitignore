@@ -22,6 +22,8 @@
 !.mise.toml
 !.agents/
 !.agents/**
+!.samples/
+!.samples/**
 
 # Always ignore local-only files, including under otherwise whitelisted dirs.
 **/.local_only/

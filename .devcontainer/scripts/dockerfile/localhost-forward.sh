@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
-# Mirror published ports of workspace Compose apps onto 127.0.0.1 in this container.
+# Mirror published ports of docker compose stacks in the workspace onto 127.0.0.1 in this container.
 #
-# Chrome and chrome-devtools-mcp run here. Nested Compose stacks publish ports to the
-# *host*, so http://localhost:<port> does not exist in this network namespace. This
-# watcher finds those stacks (Compose working_dir or bind mounts under the workspace),
-# attaches this container to their network, and forwards 127.0.0.1:<hostPort>
-# to the container's private port (socat when present, otherwise a Python TCP proxy).
+# Chrome and chrome-devtools-mcp run here. A docker compose stack within the workspace publishes ports to the *host*, so http://localhost:<port> does not exist in this network namespace. This watcher finds those stacks (Compose working_dir or bind mounts under the workspace), attaches this container to their network, and forwards 127.0.0.1:<hostPort> to the container's private port (socat when present, otherwise a Python TCP proxy).
 #
 # Prefer the workspace copy so git pull applies without an image rebuild.
 workspace_src=/workspaces/.devcontainer/scripts/dockerfile/localhost-forward.sh

@@ -1,6 +1,6 @@
 # Simple example project: create a new Rails project inside your fork
 
-<!-- The project is created as an untracked subdirectory of this repo (the parent-directory pattern). -->
+The following command creates a new Rails app as an untracked subdirectory of this repo (the parent-directory pattern).
 
 ```bash
 docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
@@ -22,7 +22,9 @@ services:
       - DATABASE_URL=postgres://postgres:password@postgres:5432/sample_app_1_development
     ports:
       - "3000:80"
-      # http://localhost:3000 on the host and in the parent desktop Chrome / MCP
+      # available on the host machine and the devcontainer at http://localhost:3000
+      # available within the parent devcontainer at http://sample_app_1 when that container
+      # shares super_projects_default (add `config.hosts << "sample_app_1"` in development.rb)
     volumes:
       # Compose uses the host Docker socket, so bind sources must be host paths.
       # Inside the parent, HOST_WORKSPACE_DIR (initializeCommand) and
@@ -55,9 +57,6 @@ volumes:
 
 ## Browser access from the parent devcontainer
 
-After `docker compose up`, open **http://localhost:3000** in the parent desktop
-Chrome (and chrome-devtools-mcp). Published `ports:` are mirrored onto `127.0.0.1`
-inside the parent container — no extra Compose network and no Rails `config.hosts`
-change.
+After `docker compose up`, open **http://localhost:3000** in the parent desktop Chrome (and chrome-devtools-mcp). Published `ports:` are mirrored onto `127.0.0.1` inside the parent container — no extra Compose network and no Rails `config.hosts` change.
 
 Details: [`.devcontainer/localhost-forwards.md`](../../.devcontainer/localhost-forwards.md).

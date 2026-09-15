@@ -63,6 +63,7 @@ services:
         ensure-auth
         print-cursor-worker-hint
         start-vnc
+        bash /${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/scripts/dockerfile/localhost-forward.sh
         cd /${SUPER_PROJECTS_WORKDIR:-workspaces}
         mise install
         exec tail -f /dev/null
@@ -74,6 +75,7 @@ services:
       SSH_AUTH_SOCK: /ssh-agent.sock
       SUPER_PROJECTS_NAME: ${SUPER_PROJECTS_NAME:-super_projects}
       SUPER_PROJECTS_WORKDIR: ${SUPER_PROJECTS_WORKDIR:-workspaces}
+      HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
     ports:
       - "6080:6080"   # noVNC  — browser GUI for VNC
       # - "5900:5900" # VNC raw port (optional, for native VNC clients)
@@ -82,6 +84,8 @@ services:
       - "host.docker.internal:host-gateway"
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
+    # start-localhost-forwards mirrors published ports of nested workspace Compose
+    # apps onto 127.0.0.1 for in-container Chrome / MCP (see localhost-forwards.md).
     networks:
       - super_projects_default
 

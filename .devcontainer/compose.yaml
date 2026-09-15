@@ -61,7 +61,6 @@ services:
         ensure-auth
         print-cursor-worker-hint
         start-vnc
-        bash /workspaces/.devcontainer/scripts/dockerfile/localhost-forward.sh
         cd /workspaces
         mise install
         exec tail -f /dev/null
@@ -79,9 +78,32 @@ services:
       - "host.docker.internal:host-gateway"
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
-    # start-localhost-forwards mirrors published ports of docker compose stacks within the workspace onto 127.0.0.1 for in-container Chrome / MCP (see localhost-forwards.md).
     networks:
       - super_projects_default
+
+  # Mirrors published ports of docker compose stacks in the workspace onto 127.0.0.1
+  # so in-container Chrome / MCP can use http://localhost:<port> (see localhost-forwards.md).
+  # Stop independently: docker compose -f .devcontainer/compose.yaml stop localhost_forward_proxy
+  localhost_forward_proxy:
+    build:
+      context: scripts/localhost_forward_proxy
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - devcontainer
+    # Same loopback as `devcontainer` — listeners here are visible to Chrome in the parent.
+    network_mode: "service:devcontainer"
+    environment:
+      HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
+      PARENT_COMPOSE_SERVICE: devcontainer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOST_WORKSPACE_DIR:-../}:/workspaces:cached
+    working_dir: /workspaces/.devcontainer/scripts/localhost_forward_proxy
+    command:
+      - ruby
+      - /workspaces/.devcontainer/scripts/localhost_forward_proxy/bin/localhost_forward_proxy
 
 volumes:
   # Gemini CLI sessions/config. Lost only on `docker volume rm super_projects_gemini-data`.

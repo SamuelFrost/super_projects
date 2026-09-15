@@ -170,11 +170,11 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
-Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
+Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image), `shell/` (host `initializeCommand` and runtime shell helpers), and `localhost_forward_proxy/` (Compose sidecar for `http://localhost:<port>` in the parent).
 
 ### Compose apps at `localhost`
 
-A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the parent desktop Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; `start-localhost-forwards` mirrors it onto `127.0.0.1` inside this container. See [`.devcontainer/localhost-forwards.md`](.devcontainer/localhost-forwards.md).
+A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the parent desktop Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; the `localhost_forward_proxy` sidecar mirrors it onto `127.0.0.1` inside this container. Stop that sidecar with `docker compose -f .devcontainer/compose.yaml stop localhost_forward_proxy`. See [`.devcontainer/localhost-forwards.md`](.devcontainer/localhost-forwards.md).
 
 `.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. It sits in the workspace tree, so a process inside the container can rewrite bind-mount paths before a manual `docker compose up`. VS Code, Cursor, and `devcontainer up` regenerate it each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first.
 

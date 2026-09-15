@@ -20,7 +20,7 @@
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
 
-  "postStartCommand": "ensure-auth && print-cursor-worker-hint && bash /workspaces/.devcontainer/scripts/dockerfile/localhost-forward.sh",
+  "postStartCommand": "ensure-auth && print-cursor-worker-hint",
 
   "otherPortsAttributes": {
     "onAutoForward": "ignore"

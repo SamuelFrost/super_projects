@@ -1,6 +1,6 @@
 # Simple example project: create a new Rails project inside your fork
 
-<!-- The project is created as an untracked subdirectory of this repo (the parent-directory pattern). The network is ${SUPER_PROJECTS_NAME:-super_projects}_default so a host-side compose without SUPER_PROJECTS_NAME still matches a default clone. Inside the ${SUPER_PROJECTS_NAME} container the exported env supplies the override. -->
+<!-- The project is created as an untracked subdirectory of this repo (the parent-directory pattern). -->
 
 ```bash
 docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
@@ -22,19 +22,16 @@ services:
       - DATABASE_URL=postgres://postgres:password@postgres:5432/sample_app_1_development
     ports:
       - "3000:80"
-      # available on the host machine at http://localhost:3000
-      # available within the ${SUPER_PROJECTS_NAME} container at http://sample_app_1 when that container
-      # shares ${SUPER_PROJECTS_NAME:-super_projects}_default (add `config.hosts << "sample_app_1"` in development.rb)
+      # http://localhost:3000 on the host and in the parent desktop Chrome / MCP
     volumes:
-      # LOCAL_WORKSPACE_FOLDER is the host path of the ${SUPER_PROJECTS_NAME} workspace (set by
-      # that container). When unset, `..` is this project's parent.
-      - ${LOCAL_WORKSPACE_FOLDER:-..}/sample_app_1:/rails
+      # Compose uses the host Docker socket, so bind sources must be host paths.
+      # Inside the parent, HOST_WORKSPACE_DIR (initializeCommand) and
+      # LOCAL_WORKSPACE_FOLDER (devcontainer remoteEnv) are that host workspace.
+      # On the host those vars are unset, so `..` is this project's parent.
+      - ${HOST_WORKSPACE_DIR:-${LOCAL_WORKSPACE_FOLDER:-..}}/sample_app_1:/rails
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - default
-      - super_projects_default
 
   postgres:
     image: postgres:18.3
@@ -50,18 +47,14 @@ services:
       timeout: 5s
       retries: 5
 
-networks:
-  # Join the ${SUPER_PROJECTS_NAME:-super_projects}_default network so Chrome
-  # in the ${SUPER_PROJECTS_NAME} container can reach http://sample_app_1. App and Postgres talk on
-  # `default` without it. The network must already exist (created by
-  # .devcontainer/compose.yaml). Inside the ${SUPER_PROJECTS_NAME} container SUPER_PROJECTS_NAME
-  # is exported; on the host the default matches a default clone.
-  super_projects_default:
-    name: ${SUPER_PROJECTS_NAME:-super_projects}_default
-    external: true
-
 volumes:
   sample_app_1_postgres_data:
     external: false
     name: sample_app_1_postgres_data
 ```
+
+## Browser access from the parent devcontainer
+
+After `docker compose up`, open **http://localhost:3000** in the parent desktop Chrome (and chrome-devtools-mcp). Published `ports:` are mirrored onto `127.0.0.1` inside the parent container — no extra Compose network and no Rails `config.hosts` change.
+
+Details: [`.devcontainer/localhost-forwards.md`](../../.devcontainer/localhost-forwards.md).

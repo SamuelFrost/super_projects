@@ -32,7 +32,7 @@ Pick your company's project name (`acme_projects` is used as the example below) 
 - `.devcontainer/compose.yaml`
   - `name: "super_projects"` → `name: "acme_projects"` — the Compose project name. This is the name that matters most: it determines the container name (`acme_projects-devcontainer-1`) and the named-volume prefix (`acme_projects_gh-data`, `acme_projects_chrome-devtools-mcp-profile`, …), which is what prevents volume sharing between forks.
   - `hostname: super_projects` → `hostname: acme_projects` — the container's hostname.
-  - `super_projects_default` → `acme_projects_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`. Project compose files that join this network (like the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) must reference the same name.
+  - `super_projects_default` → `acme_projects_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`.
   - While editing, also update the comments quoting `docker volume rm super_projects_…` so they stay copy-pasteable.
 - `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`
   - Replace the container name `super_projects-devcontainer-1` with `acme_projects-devcontainer-1` (one occurrence in each file). These configs `docker exec` into the container by name, so a mismatch with the Compose project name breaks the chrome-devtools MCP server.
@@ -170,7 +170,11 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
-Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
+Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image), `shell/` (host `initializeCommand` and runtime shell helpers), and `localhost_forward_proxy/` (Compose sidecar for `http://localhost:<port>` in the parent).
+
+### Compose apps at `localhost`
+
+A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the parent desktop Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; the `localhost_forward_proxy` sidecar mirrors it onto `127.0.0.1` inside this container. Stop that sidecar with `docker compose -f .devcontainer/compose.yaml stop localhost_forward_proxy`. See [`.devcontainer/localhost-forwards.md`](.devcontainer/localhost-forwards.md).
 
 `.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. It sits in the workspace tree, so a process inside the container can rewrite bind-mount paths before a manual `docker compose up`. VS Code, Cursor, and `devcontainer up` regenerate it each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first.
 

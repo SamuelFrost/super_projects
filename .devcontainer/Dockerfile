@@ -15,6 +15,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # vim:            quick terminal edits when SSH'd in
 # procps:         top, free, ps — system monitoring
 # ripgrep:        fast recursive search via the `rg` command
+# python3:        system Python for ad-hoc scripts (project interpreters still come from mise)
+# socat:          extra TCP/UDP relay for one-off debugging
 # poppler-utils:  pdftotext etc. — lets agents/scripts read PDFs as text
 # ffmpeg:         probe/process video and audio (metadata, extract audio)
 # tzdata:         timezone data (suppressed interactive prompt via ENV above)
@@ -42,6 +44,8 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   vim \
   procps \
   ripgrep \
+  socat \
+  python3 \
   poppler-utils \
   ffmpeg \
   tzdata \

@@ -29,21 +29,9 @@ Those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookie
 
 Copy the tracked example to a gitignored override and set the name (`acme_projects` is used below). Optionally set `${SUPER_PROJECTS_WORKDIR}` (container path `/${SUPER_PROJECTS_WORKDIR}`, default `workspaces`):
 
-<<<<<<< HEAD
 ```sh
 cp .devcontainer/.env.namespace_override.example .devcontainer/.env.namespace_override
 ```
-=======
-- `.devcontainer/compose.yaml`
-  - `name: "super_projects"` → `name: "acme_projects"` — the Compose project name. This is the name that matters most: it determines the container name (`acme_projects-devcontainer-1`) and the named-volume prefix (`acme_projects_gh-data`, `acme_projects_chrome-devtools-mcp-profile`, …), which is what prevents volume sharing between forks.
-  - `hostname: super_projects` → `hostname: acme_projects` — the container's hostname.
-  - `super_projects_default` → `acme_projects_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`.
-  - While editing, also update the comments quoting `docker volume rm super_projects_…` so they stay copy-pasteable.
-- `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`
-  - Replace the container name `super_projects-devcontainer-1` with `acme_projects-devcontainer-1` (one occurrence in each file). These configs `docker exec` into the container by name, so a mismatch with the Compose project name breaks the chrome-devtools MCP server.
-- `.devcontainer/devcontainer.json`
-  - `"name": "super_projects"` → `"name": "acme_projects"` — the label VS Code / Cursor shows for the devcontainer.
->>>>>>> fd1df5b (Document nested Compose apps as http://localhost in the parent Chrome.)
 
 ```
 SUPER_PROJECTS_NAME=acme_projects
@@ -187,11 +175,11 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
-Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
+Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image), `shell/` (host `initializeCommand` and runtime shell helpers), and `localhost_forward_proxy/` (Compose sidecar for `http://localhost:<port>` in the parent).
 
 ### Compose apps at `localhost`
 
-A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the parent desktop Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; `start-localhost-forwards` mirrors it onto `127.0.0.1` inside this container. See [`.devcontainer/localhost-forwards.md`](.devcontainer/localhost-forwards.md).
+A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the parent desktop Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; the `localhost_forward_proxy` sidecar mirrors it onto `127.0.0.1` inside this container. Stop that sidecar with `docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml stop localhost_forward_proxy`. See [`.devcontainer/localhost-forwards.md`](.devcontainer/localhost-forwards.md).
 
 `.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. Set `${SUPER_PROJECTS_NAME}` and `${SUPER_PROJECTS_WORKDIR}` in `.devcontainer/.env.namespace_override` (copy the `.example`); initialize copies those two keys into `.env`. VS Code, Cursor, and `devcontainer up` regenerate `.env` each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first, then always pass `--project-directory .devcontainer`.
 

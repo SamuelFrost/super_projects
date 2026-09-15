@@ -2,15 +2,15 @@
 
 Chrome and `chrome-devtools-mcp` run inside the super_projects devcontainer. A docker compose stack within the devcontainer publishes its `ports:` mapping on the **host**, so that URL does not exist on `127.0.0.1` inside this container until something bridges it.
 
-`start-localhost-forwards` (`.devcontainer/scripts/dockerfile/localhost-forward.sh`) does that automatically:
+The `localhost_forward_proxy` Compose sidecar (`.devcontainer/scripts/localhost_forward_proxy`) does that automatically:
 
-1. Finds running containers that belong to this workspace (Compose `working_dir` or bind mounts under the workspace path, including `/workspaces`).
-2. Attaches **this** container to that stack's Compose network (no change to the project's Compose file). `docker compose down` may report that network is still in use while this container remains attached; `compose up` reuses it.
-3. Forwards `127.0.0.1:<hostPort>` to the container's private port (`socat`, or a Python TCP proxy if `socat` is not in the image yet).
+1. Finds running containers that belong to this workspace (Compose `working_dir` or bind mounts under the workspace path, including `/${SUPER_PROJECTS_WORKDIR:-workspaces}`).
+2. Attaches the **parent** `devcontainer` to that stack's Compose network (no change to the project's Compose file). `docker compose down` may report that network is still in use while the parent remains attached; `compose up` reuses it.
+3. Forwards `127.0.0.1:<hostPort>` to the container's private port (Ruby TCP proxy). It shares the parent's network namespace, so Chrome in the parent sees the same loopback.
 
 Open the same URL you would use on the host, for example `http://localhost:3000`.
 
-The watcher starts with the container (`compose.yaml` and `postStartCommand`) and reacts to later `docker compose up` / `down`. It uses this container's identity, so company forks that rename `super_projects_default` keep working.
+The sidecar starts with the rest of `.devcontainer/compose.yaml` and reacts to later `docker compose up` / `down`. It uses the parent container's identity, so company forks that set `SUPER_PROJECTS_NAME` keep working.
 
 ## What you need in the project
 
@@ -27,11 +27,13 @@ Two apps that publish the same host port collide here the same way they do on th
 
 ## Troubleshooting
 
-- Status: `bash /workspaces/.devcontainer/scripts/dockerfile/localhost-forward.sh once`
-- Watcher log: `/tmp/localhost-forward-watcher.log`
-- Per-port logs: `/tmp/localhost-forward-<port>.log`
-- Restart: the same script with no arguments (or reconnect the devcontainer)
-- Stop: `bash /workspaces/.devcontainer/scripts/dockerfile/localhost-forward.sh stop`
+From the workspace (host or parent container):
+
+```sh
+docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml logs -f localhost_forward_proxy
+docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml stop localhost_forward_proxy
+docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml start localhost_forward_proxy
+```
 
 `docker compose down` may print `Network sample_app_1_default Resource is still in use`. The parent stays on that network so the forward can reach the app; the next `compose up` reuses it. Do not `docker network disconnect` that from *inside* the parent (it can hang the Docker API).
 

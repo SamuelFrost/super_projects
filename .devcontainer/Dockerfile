@@ -18,8 +18,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # vim:            quick terminal edits when SSH'd in
 # procps:         top, free, ps — system monitoring
 # ripgrep:        fast recursive search via the `rg` command
-# socat:          TCP proxy for mirroring workspace Compose ports onto 127.0.0.1
-# python3:        fallback TCP proxy for those forwards when socat is missing
+# python3:        system Python for ad-hoc scripts (project interpreters still come from mise)
+# socat:          extra TCP/UDP relay for one-off debugging
 # poppler-utils:  pdftotext etc. — lets agents/scripts read PDFs as text
 # ffmpeg:         probe/process video and audio (metadata, extract audio)
 # tzdata:         timezone data (suppressed interactive prompt via ENV above)
@@ -342,11 +342,6 @@ COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/en
 
 # print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
-
-# start-localhost-forwards: mirror workspace Compose published ports onto 127.0.0.1
-# (see .devcontainer/localhost-forwards.md). The workspace copy is preferred at runtime.
-COPY --chmod=0755 .devcontainer/scripts/dockerfile/localhost-forward.sh /usr/local/bin/start-localhost-forwards
-COPY --chmod=0644 .devcontainer/scripts/dockerfile/localhost-forward-proxy.py /usr/local/lib/localhost-forward-proxy.py
 
 # ------------------------------------------------------------------------------
 # Claude Code CLI (commented out; uncomment and rebuild to enable)

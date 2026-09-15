@@ -18,7 +18,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # vim:            quick terminal edits when SSH'd in
 # procps:         top, free, ps — system monitoring
 # ripgrep:        fast recursive search via the `rg` command
-# socat:          TCP proxy for mirroring nested Compose ports onto 127.0.0.1
+# socat:          TCP proxy for mirroring workspace Compose ports onto 127.0.0.1
 # python3:        fallback TCP proxy for those forwards when socat is missing
 # poppler-utils:  pdftotext etc. — lets agents/scripts read PDFs as text
 # ffmpeg:         probe/process video and audio (metadata, extract audio)

@@ -84,8 +84,7 @@ services:
       - "host.docker.internal:host-gateway"
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
-    # start-localhost-forwards mirrors published ports of nested workspace Compose
-    # apps onto 127.0.0.1 for in-container Chrome / MCP (see localhost-forwards.md).
+    # start-localhost-forwards mirrors published ports of docker compose stacks within the workspace onto 127.0.0.1 for in-container Chrome / MCP (see localhost-forwards.md).
     networks:
       - super_projects_default
 

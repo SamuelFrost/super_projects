@@ -39,6 +39,7 @@ This index lists the available agent attributes by category. Link text uses each
 
 - [Domain context — assume the configured devcontainer environment](tools/devcontainer/assume_devcontainer_system_configuration.md)
 - [Tool installation guideline — prefer Dockerfile or mise for persistent tools](tools/devcontainer/prefer_dockerfile_or_mise_for_persistent_tools.md)
+- [Tool interaction guideline — recreate the target devcontainer after setup changes and exec into it with the CLI](tools/devcontainer/use_devcontainer_cli_to_rebuild_and_exec.md)
 
 ### Host access
 

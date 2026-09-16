@@ -87,6 +87,32 @@ The workspace root (`/super_projects_development`) is a **development wrapper** 
 - We are typically working within a devcontainer when doing work in this project, so assume the system is configured as described under `.devcontainer/` (`Dockerfile`, `compose.yaml`, `devcontainer.json`, `scripts/`, `persist/`).
 - When installing new tools/binaries, prefer modifying the Dockerfile or using mise. User state (auth, caches, profiles) belongs in the named volumes documented under `.devcontainer/persist/`.
 - Integrated terminals should prefer mise shims so `node`, `ruby`, `python`, and similar tools resolve from the nearest `.mise.toml` or `.tool-versions`.
+- When modifying `super_projects/.devcontainer/Dockerfile`, `super_projects/.devcontainer/compose.yaml`, `super_projects/.devcontainer/devcontainer.json`, or otherwise changing the setup of a target devcontainer (typically the nested `super_projects/` clone), apply the configuration change and then recreate that container from the workspace folder that owns that `.devcontainer/`:
+  ```sh
+  cd super_projects
+  docker compose -f .devcontainer/compose.yaml down
+  devcontainer up
+  ```
+- When you need to run something **inside that target container**, use `devcontainer exec` from the folder that owns its `.devcontainer/` (`cd super_projects`). This meta shell is a different container; do not `curl 127.0.0.1`, inspect `/tmp`, or assume tools/network state here are the target’s.
+  ```sh
+  cd super_projects
+  devcontainer exec bash                          # interactive shell
+  devcontainer exec -- bash -c 'whoami && pwd'    # one-shot (`-c` is required; otherwise bash treats the next word as a script file)
+  ```
+  `devcontainer exec` is not a TTY. Commands that need a progress UI, pager, or curses output will look silent unless you wrap them in `script -qec '…' /dev/null`.
+  ```sh
+  # quiet checks (stdout still captured if the command prints)
+  devcontainer exec -- bash -c 'cat /tmp/localhost-forward/status'
+  devcontainer exec -- bash -c 'curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/up'
+  devcontainer exec -- bash -c 'git -C /workspaces status -sb'
+  devcontainer exec -- bash -c 'mise ls'
+
+  # need a TTY (Compose progress, test runners, pagers)
+  devcontainer exec -- bash -c 'script -qec "cd /workspaces/sample_app_1 && docker compose up -d" /dev/null'
+  devcontainer exec -- bash -c 'script -qec "cd /workspaces && bundle exec rspec" /dev/null'
+  ```
+  Nested-up extras for child Compose: prefer `up -d` (foreground `up` attaches until Ctrl+C). Bind mounts must use **host** paths; the parent exports `HOST_WORKSPACE_DIR` from `.devcontainer/.env`. `LOCAL_WORKSPACE_FOLDER` is a container path after nested `devcontainer up` and will mount an empty tree if used as a Docker bind source.
+
 
 ### Other available tools
 

@@ -93,8 +93,13 @@ if [ -z "$SELECTED_AGENT_SOCK" ]; then
   if agent_is_running "$MANAGED_AGENT_SOCK"; then
     SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
   else
-    # Early cleanup above handles directories; remove other stale non-socket paths.
-    [ -e "$MANAGED_AGENT_SOCK" ] && [ ! -S "$MANAGED_AGENT_SOCK" ] && rm -f "$MANAGED_AGENT_SOCK"
+    # Path is unusable: Docker may have left a directory, or WSL/reboot may have
+    # left a dead socket. ssh-agent -a cannot bind until the leftover is gone.
+    if [ -d "$MANAGED_AGENT_SOCK" ]; then
+      rm -rf "$MANAGED_AGENT_SOCK"
+    elif [ -e "$MANAGED_AGENT_SOCK" ]; then
+      rm -f "$MANAGED_AGENT_SOCK"
+    fi
     ssh-agent -a "$MANAGED_AGENT_SOCK" >/dev/null
     SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
   fi

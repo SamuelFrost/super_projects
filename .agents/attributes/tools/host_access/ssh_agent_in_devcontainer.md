@@ -14,6 +14,8 @@ When `initializeCommand` runs inside an outer devcontainer, `write-devcontainer-
 
 On WSLg, the managed agent socket path may differ between manual compose and the normal initialize flow — see [WSLg ssh-agent socket path](wslg_ssh_agent_socket_path.md).
 
+After a host or WSL reboot, a leftover Unix socket can remain at the managed path (`~/.cache/super_projects-ssh-agent.sock`) with no listening `ssh-agent`. `ensure-host-ssh-agent` unlinks that stale socket before `ssh-agent -a` so initialize does not fail with `Address already in use`.
+
 ### Docker Desktop on WSL2 — stale bind-mount relays
 
 After WSL or Docker Desktop restarts, starting an **existing** devcontainer can fail mounting `/ssh-agent.sock` (`docker-desktop-bind-mounts/.../no such file or directory`). Step 3 runs after `.env` is written: a throwaway `docker run` bind-mounts the same host socket path so Docker Desktop recreates the relay. Native Docker Engine inside WSL skips this step.

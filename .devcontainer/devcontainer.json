@@ -5,7 +5,7 @@
   "service": "devcontainer",
   // IDE workspace path. Must match /${SUPER_PROJECTS_WORKDIR} (default /workspaces).
   // This JSON field cannot interpolate the override file; change it if you change SUPER_PROJECTS_WORKDIR.
-  "workspaceFolder": "/workspaces/",
+  "workspaceFolder": "/super_projects_development/",
   "shutdownAction": "none",
 
   // "remoteUser": "developer",

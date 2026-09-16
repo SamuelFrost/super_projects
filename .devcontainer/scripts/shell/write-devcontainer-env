@@ -5,7 +5,9 @@
 # docker.sock.
 #
 # Writes .devcontainer/.env for Compose/Dockerfile:
-# DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, HOST_WORKSPACE_DIR.
+# DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, HOST_WORKSPACE_DIR,
+# SUPER_PROJECTS_NAME, and mirrored COMPOSE_PROJECT_NAME.
+# SUPER_PROJECTS_NAME comes from gitignored .env.namespace_override (else super_projects).
 #
 # Bind-mount sources must be paths on the Docker host. When initializeCommand
 # runs inside an outer devcontainer, container-local paths are resolved from a
@@ -13,18 +15,13 @@
 set -eu
 
 cd "$(dirname "$0")/../../.."
+# shellcheck source=devcontainer-env-lib.sh
+. .devcontainer/scripts/shell/devcontainer-env-lib.sh
 
 DEVCONTAINER_ENV_FILE=.devcontainer/.env
 PARENT_ENV="../.devcontainer/.env"
 PARENT_COMPOSE="../.devcontainer/compose.yaml"
 SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
-
-env_file_var() {
-  _file=$1
-  _key=$2
-  [ -f "$_file" ] || return 1
-  grep -m1 "^${_key}=" "$_file" | cut -d= -f2-
-}
 
 # Reject values that would corrupt .env or the compose volume spec.
 validate_bind_path() {
@@ -141,6 +138,8 @@ validate_bind_path SELECTED_AGENT_SOCK "$SELECTED_AGENT_SOCK"
 
 resolve_compose_bind_paths "$SELECTED_AGENT_SOCK"
 
+SUPER_PROJECTS_NAME=$(resolve_super_projects_name) || exit 1
+
 HOST_OS=$(uname -s)
 case "$HOST_OS" in
   Darwin) _docker_gid=$(stat -f '%g' /var/run/docker.sock) ;;
@@ -153,4 +152,6 @@ esac
   printf 'HOST_HOME_DIR=%s\n' "$COMPOSE_HOST_HOME"
   printf 'HOST_SSH_AUTH_SOCK=%s\n' "$COMPOSE_SSH_AUTH_SOCK"
   printf 'HOST_WORKSPACE_DIR=%s\n' "$HOST_WORKSPACE_DIR"
+  printf 'SUPER_PROJECTS_NAME=%s\n' "$SUPER_PROJECTS_NAME"
+  printf 'COMPOSE_PROJECT_NAME=%s\n' "$SUPER_PROJECTS_NAME"
 } >"$DEVCONTAINER_ENV_FILE"

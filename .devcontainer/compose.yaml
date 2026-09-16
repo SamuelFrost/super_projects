@@ -1,4 +1,4 @@
-name: "super_projects"
+name: ${SUPER_PROJECTS_NAME:-super_projects}
 
 services:
   devcontainer:
@@ -10,9 +10,10 @@ services:
         DOCKER_GID: ${DOCKER_GID:-1}
     pull_policy: never
     volumes:
-      # HOST_WORKSPACE_DIR comes from .devcontainer/.env (gitignored, container-writable via
-      # this mount). IDE/devcontainer up regenerate it via initializeCommand; before manual
-      # `docker compose up`, re-run .devcontainer/scripts/shell/initializeCommand.sh on the host.
+      # HOST_WORKSPACE_DIR comes from generated .devcontainer/.env (gitignored).
+      # IDE/devcontainer up regenerate it via initializeCommand; before manual
+      # `docker compose`, re-run initializeCommand.sh and use
+      # `--project-directory .devcontainer` so .env is loaded.
       - ${HOST_WORKSPACE_DIR:-../}:/workspaces:cached
       # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
       - /var/run/docker.sock:/var/run/docker.sock
@@ -45,7 +46,7 @@ services:
       # HOST_SSH_AUTH_SOCK is set by initializeCommand → .devcontainer/scripts/shell/initializeCommand.sh.
       # The default allows manual `docker compose` (down, ps, ...) before .env exists.
       # On WSLg it may differ from ensure-host-ssh-agent (~/.cache); see .agents/attributes/tools/host_access/wslg_ssh_agent_socket_path.md.
-      - ${HOST_SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-${HOME}/.cache}/super_projects-ssh-agent.sock}:/ssh-agent.sock
+      - ${HOST_SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-${HOME}/.cache}/${SUPER_PROJECTS_NAME:-super_projects}-ssh-agent.sock}:/ssh-agent.sock
       # Shared known_hosts (file bind; created on host by shell/ensure-host-ssh-agent when writable).
       - ${HOST_HOME_DIR:-${HOME}}/.ssh/known_hosts:/home/developer/.ssh/known_hosts:ro
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
@@ -64,11 +65,12 @@ services:
         cd /workspaces
         mise install
         exec tail -f /dev/null
-    hostname: super_projects
+    hostname: ${SUPER_PROJECTS_NAME:-super_projects}
     user: developer
     environment:
       UID: ${DEVELOPER_UID:-501}
       SSH_AUTH_SOCK: /ssh-agent.sock
+      SUPER_PROJECTS_NAME: ${SUPER_PROJECTS_NAME:-super_projects}
     ports:
       - "6080:6080"   # noVNC  — browser GUI for VNC
       # - "5900:5900" # VNC raw port (optional, for native VNC clients)
@@ -81,23 +83,23 @@ services:
       - super_projects_default
 
 volumes:
-  # Gemini CLI sessions/config. Lost only on `docker volume rm super_projects_gemini-data`.
+  # Gemini CLI sessions/config. Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_gemini-data`.
   gemini-data: {}
   # Chrome profile data: logins, cookies, extensions, history.
-  # Survives container stop/start and rebuilds; lost only on `docker volume rm super_projects_chrome-devtools-mcp-profile`.
+  # Survives container stop/start and rebuilds; lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_chrome-devtools-mcp-profile`.
   chrome-devtools-mcp-profile: {}
   # mise downloads and installs (~/.local/share/mise).
   # Survives rebuilds so tool versions don't need to be re-downloaded or recompiled.
-  # Lost only on `docker volume rm super_projects_mise-data`.
+  # Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_mise-data`.
   mise-data: {}
-  # GitHub CLI auth (gh auth login). Lost only on `docker volume rm super_projects_gh-data`.
+  # GitHub CLI auth (gh auth login). Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_gh-data`.
   gh-data: {}
-  # git XDG config (~/.config/git). Lost only on `docker volume rm super_projects_git-config`.
+  # git XDG config (~/.config/git). Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_git-config`.
   git-config: {}
   # Cursor agent state (~/.cursor): agent-transcripts, CLI chats, MCP config, skills.
-  # Lost only on `docker volume rm super_projects_cursor-data`.
+  # Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_cursor-data`.
   cursor-data: {}
 
 networks:
   super_projects_default:
-    name: super_projects_default
+    name: ${SUPER_PROJECTS_NAME:-super_projects}_default

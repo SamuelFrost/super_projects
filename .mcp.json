@@ -2,10 +2,9 @@
   "mcpServers": {
     "chrome-devtools": {
       "type": "stdio",
-      "command": "docker",
+      "command": "sh",
       "args": [
-        "exec", "-i",
-        "super_projects-devcontainer-1",
+        ".devcontainer/scripts/shell/exec-in-devcontainer",
         "mise", "exec", "-C", "/workspaces", "--",
         "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"

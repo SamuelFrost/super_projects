@@ -38,6 +38,7 @@
 
 # Ignore generated/persisted files even though the parent dirs are whitelisted above
 .devcontainer/.env
+.devcontainer/.env.namespace_override
 .devcontainer/.selected-ssh-agent.env
 
 # Persist shortcut dirs are Docker mount points on the host (often empty); keep README tracked

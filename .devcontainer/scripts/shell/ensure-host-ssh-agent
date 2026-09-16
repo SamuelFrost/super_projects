@@ -13,13 +13,18 @@
 set -eu
 
 cd "$(dirname "$0")/../../.."
+# shellcheck source=devcontainer-env-lib.sh
+. .devcontainer/scripts/shell/devcontainer-env-lib.sh
 
 SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
 
+SUPER_PROJECTS_NAME=$(resolve_super_projects_name) || exit 1
+
 # WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
+# Socket filename follows SUPER_PROJECTS_NAME from .env.namespace_override (not generated .env).
 case "${XDG_RUNTIME_DIR:-}" in
-  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/super_projects-ssh-agent.sock" ;;
-  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock" ;;
+  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/${SUPER_PROJECTS_NAME}-ssh-agent.sock" ;;
+  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/${SUPER_PROJECTS_NAME}-ssh-agent.sock" ;;
 esac
 
 # Docker bind-mounts create a directory at a missing source path; if compose ever

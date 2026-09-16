@@ -22,14 +22,11 @@ services:
       - DATABASE_URL=postgres://postgres:password@postgres:5432/sample_app_1_development
     ports:
       - "3000:80"
-      # available on the host machine and the devcontainer at http://localhost:3000
-      # available from the devcontainer at http://sample_app_1 when they share a Docker network
+      # available on the host machine and at super_projects default network localhost (http://localhost:3000)
+      # available from the devcontainer at http://sample_app_1 once the sidecar has attached the devcontainer to this stack's network
       # Note: To be able to access sample_app_1 (from within the devcontainer), Rails needs `config.hosts << "sample_app_1"` in development.rb
     volumes:
-      # Compose uses the host Docker socket, so bind sources must be host paths.
-      # Inside the parent, HOST_WORKSPACE_DIR (initializeCommand) and
-      # LOCAL_WORKSPACE_FOLDER (devcontainer remoteEnv) are that host workspace.
-      # On the host those vars are unset, so `..` is this project's parent.
+      # Compose uses the host Docker socket, so bind sources must be host paths. Inside the devcontainer, HOST_WORKSPACE_DIR (initializeCommand) and LOCAL_WORKSPACE_FOLDER (devcontainer remoteEnv) are that host workspace. On the host those vars are unset, so `..` is this project's parent.
       - ${HOST_WORKSPACE_DIR:-${LOCAL_WORKSPACE_FOLDER:-..}}/sample_app_1:/rails
     depends_on:
       postgres:
@@ -55,8 +52,8 @@ volumes:
     name: sample_app_1_postgres_data
 ```
 
-## Browser access from the parent devcontainer
+## Browser access from the devcontainer
 
-After `docker compose up`, open **http://localhost:3000** in the parent desktop Chrome (and chrome-devtools-mcp). Published `ports:` are mirrored onto `127.0.0.1` inside the parent container. That localhost URL does not need a Compose network entry or a Rails `config.hosts` change.
+After `docker compose up`, open **http://localhost:3000** in the devcontainer desktop Chrome (and chrome-devtools-mcp). Published `ports:` are mirrored onto super_projects default network localhost (`127.0.0.1` and `::1`). That localhost URL does not need a Compose network entry or a Rails `config.hosts` change.
 
 Details: [`.devcontainer/scripts/localhost_forward_proxy/.directory_information.md`](../../.devcontainer/scripts/localhost_forward_proxy/.directory_information.md).

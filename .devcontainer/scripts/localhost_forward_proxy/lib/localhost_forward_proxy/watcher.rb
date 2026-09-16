@@ -4,16 +4,16 @@ require_relative "docker"
 require_relative "tcp_proxy"
 
 module LocalhostForwardProxy
-  # Mirrors the published TCP `ports:` of docker compose stacks in the workspace onto loopback of the parent devcontainer.
+  # Mirrors the published TCP `ports:` of docker compose stacks in the workspace onto super_projects default network localhost.
   #
-  # Runs in the parent's network namespace. Every sync inspects running containers, attaches the parent to a
-  # stack's compose network when needed so the sidecar can reach the container's private IP, and keeps one
-  # TcpProxy per published host port.
+  # Runs in the devcontainer's network namespace. Every sync inspects running containers, attaches the
+  # devcontainer to a stack's compose network when needed so the sidecar can reach the container's private IP,
+  # and keeps one TcpProxy per published host port.
   class Watcher
     HEARTBEAT_SECONDS = 15
     EVENTS_RETRY_SECONDS = 2
-    PARENT_COMPOSE_SERVICE = "devcontainer"
-    # Docker's built-in networks: the parent cannot be attached to them, and containers on them are not reachable.
+    DEVCONTAINER_SERVICE = "devcontainer"
+    # Docker's built-in networks: skipped as attach targets. host/none cannot be used this way; default bridge is not a Compose project network.
     UNATTACHABLE_NETWORKS = %w[bridge host none].freeze
 
     Forward = Struct.new(:listen_port, :target_ip, :target_port, :container_name, keyword_init: true)
@@ -50,10 +50,10 @@ module LocalhostForwardProxy
     def sync
       @sync_mutex.synchronize do
         containers = @docker.running_containers
-        parent = containers.find { |container| parent_devcontainer?(container) }
-        raise "no running #{PARENT_COMPOSE_SERVICE} container in compose project #{parent_compose_project}" if parent.nil?
+        devcontainer = containers.find { |container| devcontainer?(container) }
+        raise "no running #{DEVCONTAINER_SERVICE} container in compose project #{compose_project_name}" if devcontainer.nil?
 
-        forwards = desired_forwards(containers, parent)
+        forwards = desired_forwards(containers, devcontainer)
         reconcile_proxies(forwards)
         report_status(forwards)
       end
@@ -63,8 +63,8 @@ module LocalhostForwardProxy
 
     private
 
-    def desired_forwards(containers, parent)
-      parent_networks = network_names(parent)
+    def desired_forwards(containers, devcontainer)
+      devcontainer_networks = network_names(devcontainer)
       forwards = {}
       containers.each do |container|
         next unless workspace_stack_container?(container)
@@ -73,7 +73,7 @@ module LocalhostForwardProxy
         next if published_ports.empty?
 
         container_name = container["Name"].delete_prefix("/")
-        network_name = reachable_network(container, parent, parent_networks)
+        network_name = reachable_network(container, devcontainer, devcontainer_networks)
         if network_name.nil?
           log("cannot reach #{container_name}: no attachable network")
           next
@@ -90,7 +90,7 @@ module LocalhostForwardProxy
     end
 
     def workspace_stack_container?(container)
-      return false if compose_label(container, "project") == parent_compose_project
+      return false if compose_label(container, "project") == compose_project_name
 
       working_dir = compose_label(container, "project.working_dir").to_s
       workspace_prefixes.any? { |prefix| working_dir == prefix || working_dir.start_with?("#{prefix}/") }
@@ -111,18 +111,18 @@ module LocalhostForwardProxy
       ports
     end
 
-    # A compose network the parent shares with the container, attaching the parent to one if needed.
-    def reachable_network(container, parent, parent_networks)
+    # A compose network the devcontainer shares with the container, attaching the devcontainer to one if needed.
+    def reachable_network(container, devcontainer, devcontainer_networks)
       candidates = network_names(container) - UNATTACHABLE_NETWORKS
-      shared = candidates.find { |network_name| parent_networks.include?(network_name) }
+      shared = candidates.find { |network_name| devcontainer_networks.include?(network_name) }
       return shared if shared
 
       network_name = candidates.first
       return nil if network_name.nil?
 
-      @docker.connect_network(network_name, parent["Id"])
-      parent_networks << network_name
-      log("attached #{PARENT_COMPOSE_SERVICE} to network #{network_name}")
+      @docker.connect_network(network_name, devcontainer["Id"])
+      devcontainer_networks << network_name
+      log("attached #{DEVCONTAINER_SERVICE} to network #{network_name}")
       network_name
     end
 
@@ -147,7 +147,7 @@ module LocalhostForwardProxy
         if @proxies.key?(forward.listen_port)
           "#{forward.listen_port}→#{forward.container_name}:#{forward.target_port}"
         else
-          "#{forward.listen_port} skipped (port already in use in the #{PARENT_COMPOSE_SERVICE})"
+          "#{forward.listen_port} skipped (port already in use in the #{DEVCONTAINER_SERVICE})"
         end
       end.join(", ")
       status = "no published ports to mirror" if status.empty?
@@ -157,12 +157,12 @@ module LocalhostForwardProxy
       log(status)
     end
 
-    def parent_devcontainer?(container)
-      compose_label(container, "project") == parent_compose_project &&
-        compose_label(container, "service") == PARENT_COMPOSE_SERVICE
+    def devcontainer?(container)
+      compose_label(container, "project") == compose_project_name &&
+        compose_label(container, "service") == DEVCONTAINER_SERVICE
     end
 
-    def parent_compose_project
+    def compose_project_name
       @env.fetch("SUPER_PROJECTS_NAME", "super_projects")
     end
 

@@ -3,7 +3,7 @@
 require "socket"
 
 module LocalhostForwardProxy
-  # Accepts connections on 127.0.0.1 and ::1 (when IPv6 exists) and copies bytes both ways to target_host:target_port.
+  # Accepts connections on 127.0.0.1 and ::1 (when IPv6 loopback exists and that port is free) and copies bytes both ways to target_host:target_port.
   class TcpProxy
     CONNECT_TIMEOUT_SECONDS = 10
 

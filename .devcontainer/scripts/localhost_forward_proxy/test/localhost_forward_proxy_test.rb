@@ -63,8 +63,8 @@ class FakeDocker
 
   def connect_network(network_name, container_id)
     @network_connects << [network_name, container_id]
-    parent = @containers.find { |container| container["Id"] == container_id }
-    parent["NetworkSettings"]["Networks"][network_name] = { "IPAddress" => "172.18.0.9" }
+    target = @containers.find { |container| container["Id"] == container_id }
+    target["NetworkSettings"]["Networks"][network_name] = { "IPAddress" => "172.18.0.9" }
   end
 end
 
@@ -87,13 +87,13 @@ def published(host_port)
   [{ "HostIp" => "127.0.0.1", "HostPort" => host_port.to_s }, { "HostIp" => "::1", "HostPort" => host_port.to_s }]
 end
 
-parent = compose_container(
-  id: "parentid", name: "super_projects-devcontainer-1", project: "super_projects", service: "devcontainer",
+devcontainer = compose_container(
+  id: "devcontainerid", name: "super_projects-devcontainer-1", project: "super_projects", service: "devcontainer",
   working_dir: "/host/super_projects/.devcontainer",
   networks: { "super_projects_default" => { "IPAddress" => "172.19.0.2" } },
   ports: { "6080/tcp" => published(6080) }
 )
-sidecar_in_parent_project = compose_container(
+sidecar_in_super_projects_project = compose_container(
   id: "sidecarid", name: "super_projects-localhost_forward_proxy-1", project: "super_projects",
   service: "localhost_forward_proxy", working_dir: "/host/super_projects/.devcontainer",
   networks: { "super_projects_default" => { "IPAddress" => "172.19.0.3" } },
@@ -133,7 +133,7 @@ sibling_path_app = compose_container(
 RecordingProxy.started = []
 RecordingProxy.ports_in_use = [3443]
 fake_docker = FakeDocker.new(
-  [parent, sidecar_in_parent_project, sample_app, sample_app_postgres, host_started_app, outside_workspace, sibling_path_app]
+  [devcontainer, sidecar_in_super_projects_project, sample_app, sample_app_postgres, host_started_app, outside_workspace, sibling_path_app]
 )
 watcher = LocalhostForwardProxy::Watcher.new(
   docker: fake_docker,
@@ -148,8 +148,8 @@ $stdout = STDOUT
 
 started = RecordingProxy.started
 failures += 1 unless assert(
-  fake_docker.network_connects == [["sample_app_1_default", "parentid"], ["host_app_default", "parentid"]],
-  "parent is attached once per workspace stack network, skipping the bridge network"
+  fake_docker.network_connects == [["sample_app_1_default", "devcontainerid"], ["host_app_default", "devcontainerid"]],
+  "the devcontainer is attached once per workspace stack network, skipping the bridge network"
 )
 failures += 1 unless assert(
   started.map { |proxy| [proxy.listen_port, proxy.target_host, proxy.target_port] }.sort ==
@@ -162,7 +162,7 @@ failures += 1 unless assert(
 )
 failures += 1 unless assert(
   started.none? { |proxy| [8000, 6080].include?(proxy.listen_port) },
-  "containers of the parent compose project are not proxied"
+  "containers of the super_projects compose project are not proxied"
 )
 failures += 1 unless assert(
   started.none? { |proxy| [8080, 8081].include?(proxy.listen_port) },
@@ -186,7 +186,7 @@ failures += 1 unless assert(
 recreated_sample_app = Marshal.load(Marshal.dump(sample_app))
 recreated_sample_app["Id"] = "sampleid2"
 recreated_sample_app["NetworkSettings"]["Networks"]["sample_app_1_default"]["IPAddress"] = "172.18.0.5"
-fake_docker.containers = [parent, recreated_sample_app]
+fake_docker.containers = [devcontainer, recreated_sample_app]
 watcher.sync
 sample_app_proxies = started.select { |proxy| proxy.listen_port == 3000 }
 failures += 1 unless assert(
@@ -204,12 +204,12 @@ $stdout = log
 begin
   watcher.sync
 rescue RuntimeError => error
-  parent_missing_error = error
+  devcontainer_missing_error = error
 end
 $stdout = STDOUT
 failures += 1 unless assert(
-  parent_missing_error&.message == "no running devcontainer container in compose project super_projects",
-  "sync fails loudly when the parent devcontainer is not running"
+  devcontainer_missing_error&.message == "no running devcontainer container in compose project super_projects",
+  "sync fails loudly when the devcontainer is not running"
 )
 
 backend_port = free_port

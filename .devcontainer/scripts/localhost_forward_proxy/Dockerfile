@@ -1,4 +1,4 @@
-FROM ruby:4.0-alpine
+FROM ruby:4.0.7-alpine
 
 RUN apk add --no-cache docker-cli
 

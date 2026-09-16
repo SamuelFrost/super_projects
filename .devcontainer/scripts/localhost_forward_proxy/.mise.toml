@@ -1,0 +1,9 @@
+# Pin the Ruby used for `test/localhost_forward_proxy_test.rb` (and `mise test`).
+# Keep this in lockstep with the sidecar Dockerfile `FROM ruby:` tag.
+
+[tools]
+ruby = "4.0.7"
+
+[tasks.test]
+description = "Run localhost_forward_proxy unit tests"
+run = "ruby test/localhost_forward_proxy_test.rb"

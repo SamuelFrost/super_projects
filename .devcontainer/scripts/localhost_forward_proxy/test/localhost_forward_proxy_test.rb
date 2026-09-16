@@ -216,18 +216,34 @@ backend_port = free_port
 listen_port = free_port
 backend = TCPServer.new("127.0.0.1", backend_port)
 backend_thread = Thread.new do
-  client = backend.accept
-  client.write(client.readpartial(5))
-  client.close
+  loop do
+    client = backend.accept
+    client.write(client.readpartial(5))
+    client.close
+  end
+rescue IOError, SystemCallError
+  nil
 end
 proxy = LocalhostForwardProxy::TcpProxy.new(listen_port: listen_port, target_host: "127.0.0.1", target_port: backend_port).start
 response = Socket.tcp("127.0.0.1", listen_port) do |client|
   client.write("hello")
   client.readpartial(5)
 end
-backend_thread.join(1)
-backend.close
-failures += 1 unless assert(response == "hello", "tcp proxy copies bytes in both directions")
+failures += 1 unless assert(response == "hello", "tcp proxy copies bytes in both directions on 127.0.0.1")
+
+begin
+  ipv6_response = Socket.tcp("::1", listen_port, connect_timeout: 1) do |client|
+    client.write("hello")
+    client.readpartial(5)
+  end
+rescue Errno::ECONNREFUSED, Errno::EADDRNOTAVAIL, Errno::EHOSTUNREACH, SocketError
+  ipv6_response = nil
+end
+if ipv6_response.nil?
+  puts("skip: ::1 not listening (IPv6 loopback unavailable)")
+else
+  failures += 1 unless assert(ipv6_response == "hello", "tcp proxy copies bytes in both directions on ::1")
+end
 
 begin
   LocalhostForwardProxy::TcpProxy.new(listen_port: listen_port, target_host: "127.0.0.1", target_port: backend_port).start
@@ -238,13 +254,15 @@ end
 failures += 1 unless assert(address_in_use, "starting a proxy on a bound port raises Errno::EADDRINUSE")
 
 proxy.stop
+backend.close
+backend_thread.join(1)
 begin
   Socket.tcp("127.0.0.1", listen_port, connect_timeout: 1) { nil }
   listener_closed = false
 rescue Errno::ECONNREFUSED
   listener_closed = true
 end
-failures += 1 unless assert(listener_closed, "a stopped proxy no longer accepts connections")
+failures += 1 unless assert(listener_closed, "a stopped proxy no longer accepts connections on 127.0.0.1")
 
 if failures.positive?
   warn("#{failures} failure(s)")

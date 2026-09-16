@@ -3,7 +3,7 @@
 require "socket"
 
 module LocalhostForwardProxy
-  # Accepts connections on 127.0.0.1:listen_port and copies bytes both ways to target_host:target_port.
+  # Accepts connections on 127.0.0.1 and ::1 (when IPv6 exists) and copies bytes both ways to target_host:target_port.
   class TcpProxy
     CONNECT_TIMEOUT_SECONDS = 10
 
@@ -17,25 +17,34 @@ module LocalhostForwardProxy
       @open_sockets_mutex = Mutex.new
     end
 
-    # Raises Errno::EADDRINUSE when something in the shared network namespace already listens on the port.
+    # Raises Errno::EADDRINUSE when 127.0.0.1:listen_port is already taken in this network namespace.
     def start
-      @server = TCPServer.new("127.0.0.1", @listen_port)
-      @accept_thread = Thread.new { accept_loop }
+      @servers = [TCPServer.new("127.0.0.1", @listen_port)]
+      begin
+        @servers << TCPServer.new("::1", @listen_port)
+      rescue Errno::EADDRINUSE, Errno::EAFNOSUPPORT, Errno::EADDRNOTAVAIL, SocketError
+        nil # IPv4 is enough when IPv6 loopback is missing or already taken
+      end
+      @accept_threads = @servers.map do |server|
+        thread = Thread.new { accept_loop(server) }
+        thread.abort_on_exception = true # a dead listener should restart the sidecar; a dead relay must not
+        thread
+      end
       self
     end
 
-    # Closes the listener and any in-flight connections.
+    # Closes the listeners and any in-flight connections.
     def stop
-      @server.close
+      @servers.each { |server| close_quietly(server) }
       @open_sockets_mutex.synchronize { @open_sockets.each { |socket| close_quietly(socket) } }
-      @accept_thread.join(1)
+      @accept_threads.each { |thread| thread.join(1) }
     end
 
     private
 
-    def accept_loop
+    def accept_loop(server)
       loop do
-        client = @server.accept
+        client = server.accept
         Thread.new { relay(client) }
       end
     rescue IOError, SystemCallError

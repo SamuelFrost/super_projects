@@ -4,7 +4,7 @@ require_relative "docker"
 require_relative "tcp_proxy"
 
 module LocalhostForwardProxy
-  # Mirrors the published TCP `ports:` of docker compose stacks in the workspace onto 127.0.0.1 of the parent devcontainer.
+  # Mirrors the published TCP `ports:` of docker compose stacks in the workspace onto loopback of the parent devcontainer.
   #
   # Runs in the parent's network namespace. Every sync inspects running containers, attaches the parent to a
   # stack's compose network when needed so the sidecar can reach the container's private IP, and keeps one
@@ -29,17 +29,17 @@ module LocalhostForwardProxy
 
     def run
       $stdout.sync = true
-      Thread.abort_on_exception = true # an unexpected failure exits the process so Compose can restart it
       %w[INT TERM].each { |signal| Signal.trap(signal) { exit } }
-      log("mirroring published ports of compose stacks under #{workspace_prefixes.join(" or ")} onto 127.0.0.1")
+      log("mirroring published ports of compose stacks under #{workspace_prefixes.join(" or ")} onto 127.0.0.1 and ::1")
 
       sync
-      Thread.new do
+      heartbeat = Thread.new do
         loop do
           sleep HEARTBEAT_SECONDS
           sync
         end
       end
+      heartbeat.abort_on_exception = true # an unexpected failure here exits so Compose can restart the sidecar
       loop do
         @docker.each_container_start_or_die { sync }
         log("docker events stream ended; retrying in #{EVENTS_RETRY_SECONDS}s")

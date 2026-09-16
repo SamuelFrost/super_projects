@@ -16,8 +16,12 @@ module LocalhostForwardProxy
       return [] if ids.empty?
 
       # A container can exit between ps and inspect; inspect still prints the others but exits non-zero.
-      stdout, = Open3.capture3("docker", "inspect", *ids)
-      stdout.empty? ? [] : JSON.parse(stdout)
+      stdout, stderr, = Open3.capture3("docker", "inspect", *ids)
+      raise CommandError, "docker inspect: #{stderr.strip}" if stdout.empty?
+
+      JSON.parse(stdout)
+    rescue JSON::ParserError
+      raise CommandError, "docker inspect: #{stderr.to_s.strip}"
     end
 
     def connect_network(network_name, container_id)

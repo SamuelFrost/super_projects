@@ -41,7 +41,7 @@ Bare assignment only: no quotes, no spaces, no `export` prefix. Then start the c
 
 **Skipping the copy silently keeps `super_projects`** and will share volumes with any other default clone on this Docker daemon.
 
-`devcontainer.json` `"name"` stays `super_projects` (IDE label only). MCP configs call `exec-in-devcontainer` and do not hardcode `${SUPER_PROJECTS_NAME}-devcontainer-1`. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
+`devcontainer.json` `"name"` stays `super_projects` (IDE label only). MCP configs `docker compose … exec` the `devcontainer` service and do not hardcode `${SUPER_PROJECTS_NAME}-devcontainer-1`. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
 
 **Manual Compose** always uses `--project-directory .devcontainer` so generated `.env` is loaded from `.devcontainer/`, not from the repo-root cwd. Initialize must have run after the override exists (VS Code / Cursor / `devcontainer up` already do this):
 
@@ -167,7 +167,7 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
 - Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
 - Google Chrome, launched with remote debugging on port 9223 (accessible from the desktop GUI and via MCP)
-- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `exec-in-devcontainer` (`docker compose … exec` into the `devcontainer` service) and `mise`, so the MCP server connects to Chrome at `127.0.0.1:9223` inside the container. Optional host publication of the debugging port is disabled by default in Compose.
+- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `docker compose … exec` into the `devcontainer` service and `mise`, so the MCP server connects to Chrome at `127.0.0.1:9223` inside the container. Optional host publication of the debugging port is disabled by default in Compose.
 - [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, Java, and more
 - Recommended extensions and settings for VS Code and Cursor
 - TODO: add ruby-lsp, stimulus-lsp, and herb-lsp for language servers

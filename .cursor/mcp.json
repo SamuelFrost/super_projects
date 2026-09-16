@@ -1,9 +1,13 @@
 {
   "mcpServers": {
     "chrome-devtools": {
-      "command": "sh",
+      "command": "docker",
       "args": [
-        ".devcontainer/scripts/shell/exec-in-devcontainer",
+        "compose",
+        "-f", ".devcontainer/compose.yaml",
+        "--project-directory", ".devcontainer",
+        "exec", "-T",
+        "devcontainer",
         "mise",
         "exec",
         "-C",

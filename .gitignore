@@ -25,6 +25,13 @@
 !.samples/
 !.samples/**
 
+# ignore Agent-generated plans by default
+.cursor/plans/**
+.claude/plans/**
+.codex/plans/**
+.gemini/plans/**
+.vscode/plans/**
+
 # Always ignore local-only files, including under otherwise whitelisted dirs.
 **/.local_only/
 **/.local_only/**

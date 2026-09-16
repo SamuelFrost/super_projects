@@ -10,7 +10,7 @@
         "--project-directory", ".devcontainer",
         "exec", "-T",
         "devcontainer",
-        "mise", "exec", "-C", "/workspaces", "--",
+        "mise", "exec", "--",
         "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"
       ]

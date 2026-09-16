@@ -7,7 +7,7 @@ Volume names are prefixed with `${SUPER_PROJECTS_NAME}` (Compose `name:`, defaul
 On the **host**, these shortcut directories are mount points and often look empty. Inspect data with:
 
 ```sh
-devcontainer exec --workspace-folder . -- ls -la /workspaces/.devcontainer/persist
+devcontainer exec --workspace-folder . -- ls -la /${SUPER_PROJECTS_WORKDIR}/.devcontainer/persist
 ```
 
 | Shortcut | Docker volume | Home path | Purpose |
@@ -38,11 +38,11 @@ When `cursor-data` is added to an existing devcontainer, Docker creates an **emp
 
 ```sh
 # 1. Before rebuild (inside the running container):
-cp -a ~/.cursor /workspaces/.devcontainer/cursor-migration-backup
+cp -a ~/.cursor /${SUPER_PROJECTS_WORKDIR}/.devcontainer/cursor-migration-backup
 
 # 2. Rebuild/recreate the devcontainer, then restore:
-cp -a /workspaces/.devcontainer/cursor-migration-backup/. ~/.cursor/
-rm -rf /workspaces/.devcontainer/cursor-migration-backup
+cp -a /${SUPER_PROJECTS_WORKDIR}/.devcontainer/cursor-migration-backup/. ~/.cursor/
+rm -rf /${SUPER_PROJECTS_WORKDIR}/.devcontainer/cursor-migration-backup
 ```
 
 The backup directory is gitignored but lives on the host workspace disk and includes Cursor CLI auth/session state — remove it after a successful restore; do not leave it in the repo directory.
@@ -53,6 +53,6 @@ After that, `~/.cursor` (agent-transcripts, CLI chats, MCP config, skills) survi
 
 Private keys are **not** mounted. Compose forwards a host `ssh-agent` socket to `/ssh-agent.sock`.
 
-`initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `ensure-host-ssh-agent` and `write-devcontainer-env`) to write `.devcontainer/.env` (bind-mount vars plus `SUPER_PROJECTS_NAME` from `.env.namespace_override`). Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts. Manual Compose must use `--project-directory .devcontainer`.
+`initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `ensure-host-ssh-agent` and `write-devcontainer-env`) to write `.devcontainer/.env` (bind-mount vars plus `SUPER_PROJECTS_NAME` and `SUPER_PROJECTS_WORKDIR` from `.env.namespace_override`). Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts. Manual Compose must use `--project-directory .devcontainer`.
 
 `known_hosts` is bind-mounted read-only from the host.

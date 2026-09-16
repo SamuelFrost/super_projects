@@ -6,8 +6,9 @@
 #
 # Writes .devcontainer/.env for Compose/Dockerfile:
 # DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, HOST_WORKSPACE_DIR,
-# SUPER_PROJECTS_NAME, and mirrored COMPOSE_PROJECT_NAME.
-# SUPER_PROJECTS_NAME comes from gitignored .env.namespace_override (else super_projects).
+# SUPER_PROJECTS_NAME, mirrored COMPOSE_PROJECT_NAME, and SUPER_PROJECTS_WORKDIR.
+# SUPER_PROJECTS_NAME and SUPER_PROJECTS_WORKDIR come from
+# .env.namespace_override (else super_projects / workspaces).
 #
 # Bind-mount sources must be paths on the Docker host. When initializeCommand
 # runs inside an outer devcontainer, container-local paths are resolved from a
@@ -139,6 +140,7 @@ validate_bind_path SELECTED_AGENT_SOCK "$SELECTED_AGENT_SOCK"
 resolve_compose_bind_paths "$SELECTED_AGENT_SOCK"
 
 SUPER_PROJECTS_NAME=$(resolve_super_projects_name) || exit 1
+SUPER_PROJECTS_WORKDIR=$(resolve_super_projects_workdir) || exit 1
 
 HOST_OS=$(uname -s)
 case "$HOST_OS" in
@@ -154,4 +156,5 @@ esac
   printf 'HOST_WORKSPACE_DIR=%s\n' "$HOST_WORKSPACE_DIR"
   printf 'SUPER_PROJECTS_NAME=%s\n' "$SUPER_PROJECTS_NAME"
   printf 'COMPOSE_PROJECT_NAME=%s\n' "$SUPER_PROJECTS_NAME"
+  printf 'SUPER_PROJECTS_WORKDIR=%s\n' "$SUPER_PROJECTS_WORKDIR"
 } >"$DEVCONTAINER_ENV_FILE"

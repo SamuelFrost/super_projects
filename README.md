@@ -27,7 +27,7 @@ The intended way to use this project is one fork per company (or team). Your for
 
 Those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state, and git config. If two clones use the same `${SUPER_PROJECTS_NAME}` on one Docker daemon, they silently **share** that state.
 
-Copy the tracked example to a gitignored override and set the name (`acme_projects` is used below):
+Copy the tracked example to a gitignored override and set the name (`acme_projects` is used below). Optionally set `${SUPER_PROJECTS_WORKDIR}` (container path `/${SUPER_PROJECTS_WORKDIR}`, default `workspaces`):
 
 ```sh
 cp .devcontainer/.env.namespace_override.example .devcontainer/.env.namespace_override
@@ -35,9 +35,12 @@ cp .devcontainer/.env.namespace_override.example .devcontainer/.env.namespace_ov
 
 ```
 SUPER_PROJECTS_NAME=acme_projects
+SUPER_PROJECTS_WORKDIR=workspaces
 ```
 
-Bare assignment only: no quotes, no spaces, no `export` prefix. Then start the container — `initializeCommand` reads the override and writes generated `.devcontainer/.env` (bind-mount vars plus `SUPER_PROJECTS_NAME` and a `COMPOSE_PROJECT_NAME` mirror so Compose picks up the project name). Do not edit the name in generated `.env`; it is overwritten on every initialize.
+Bare assignment only: no quotes, no spaces, no `export` prefix. Then start the container — `initializeCommand` reads the override and writes generated `.devcontainer/.env` (bind-mount vars plus `SUPER_PROJECTS_NAME`, a `COMPOSE_PROJECT_NAME` mirror, and `SUPER_PROJECTS_WORKDIR` so Compose and the image build pick them up). Do not edit the name or workdir in generated `.env`; it is overwritten on every initialize.
+
+`${SUPER_PROJECTS_WORKDIR}` sets Dockerfile `WORKDIR`, the workspace bind mount, persist shortcuts, and Compose `working_dir`. Changing it also requires updating `"workspaceFolder"` in `.devcontainer/devcontainer.json` (JSON cannot interpolate the override). Changing `SUPER_PROJECTS_WORKDIR` needs an image rebuild (`devcontainer up --remove-existing-container` or Rebuild Container).
 
 **Skipping the copy silently keeps `super_projects`** and will share volumes with any other default clone on this Docker daemon.
 
@@ -142,7 +145,7 @@ The VNC desktop and Chrome start automatically with the container — no extra s
 
 Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
 
-Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent using the `${SUPER_PROJECTS_NAME}` socket path from `.env.namespace_override`; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with bind-mount vars plus `SUPER_PROJECTS_NAME` and mirrored `COMPOSE_PROJECT_NAME`). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
+Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent using the `${SUPER_PROJECTS_NAME}` socket path from `.env.namespace_override`; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with bind-mount vars plus `SUPER_PROJECTS_NAME`, a `COMPOSE_PROJECT_NAME` mirror, and `SUPER_PROJECTS_WORKDIR`). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
 
 **Still useful:**
 
@@ -176,7 +179,7 @@ The VNC/Chrome stack starts automatically when the container starts and can be r
 
 Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
 
-`.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. Set `${SUPER_PROJECTS_NAME}` in `.devcontainer/.env.namespace_override` (copy the `.example`); initialize copies it into `.env`. VS Code, Cursor, and `devcontainer up` regenerate `.env` each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first, then always pass `--project-directory .devcontainer`.
+`.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. Set `${SUPER_PROJECTS_NAME}` and `${SUPER_PROJECTS_WORKDIR}` in `.devcontainer/.env.namespace_override` (copy the `.example`); initialize copies them into `.env`. VS Code, Cursor, and `devcontainer up` regenerate `.env` each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first, then always pass `--project-directory .devcontainer`.
 
 ### Persisted data
 

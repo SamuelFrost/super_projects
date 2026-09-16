@@ -4,7 +4,7 @@
 
 [mcp_servers.chrome-devtools]
 command = "docker"
-args = ["compose", "-f", ".devcontainer/compose.yaml", "--project-directory", ".devcontainer", "exec", "-T", "devcontainer", "mise", "exec", "-C", "/workspaces", "--", "chrome-devtools-mcp", "--browser-url=http://127.0.0.1:9223"]
+args = ["compose", "-f", ".devcontainer/compose.yaml", "--project-directory", ".devcontainer", "exec", "-T", "devcontainer", "mise", "exec", "--", "chrome-devtools-mcp", "--browser-url=http://127.0.0.1:9223"]
 enabled = true
 startup_timeout_sec = 60
 tool_timeout_sec = 120

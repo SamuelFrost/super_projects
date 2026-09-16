@@ -1,19 +1,6 @@
 # frozen_string_literal: true
 
 module LocalhostForwardProxy
-  Forward = Struct.new(
-    :listen_port,
-    :target_ip,
-    :target_port,
-    :container_id,
-    :container_name,
-    keyword_init: true
-  ) do
-    def identity
-      "#{target_ip} #{target_port} #{container_id} #{container_name}"
-    end
-  end
-
   # Pure inspect-JSON helpers: which containers belong to the workspace, which ports to mirror.
   class Discovery
     DEFAULT_RESERVED_PORTS = [6080, 5900, 9223].freeze
@@ -39,11 +26,11 @@ module LocalhostForwardProxy
     end
 
     def self.same_container_id?(left, right)
-      a = left.to_s.delete_prefix("sha256:")
-      b = right.to_s.delete_prefix("sha256:")
-      return false if a.empty? || b.empty?
+      left_id = left.to_s.delete_prefix("sha256:")
+      right_id = right.to_s.delete_prefix("sha256:")
+      return false if left_id.empty? || right_id.empty?
 
-      a == b || a.start_with?(b) || b.start_with?(a)
+      left_id == right_id || left_id.start_with?(right_id) || right_id.start_with?(left_id)
     end
 
     def self.container_name(container)
@@ -63,8 +50,8 @@ module LocalhostForwardProxy
       (container.dig("NetworkSettings", "Networks") || {}).keys
     end
 
-    def self.ipv4_on_network(container, network)
-      container.dig("NetworkSettings", "Networks", network, "IPAddress").to_s
+    def self.ipv4_on_network(container, network_name)
+      container.dig("NetworkSettings", "Networks", network_name, "IPAddress").to_s
     end
 
     def self.published_host_ports(container)
@@ -72,11 +59,11 @@ module LocalhostForwardProxy
     end
 
     def self.parent_published_host_ports(container)
-      published_tcp_forwards(container).map { |fwd| fwd[:host_port] }
+      published_tcp_forwards(container).map { |port_mapping| port_mapping[:host_port] }
     end
 
     def self.published_tcp_forwards(container)
-      seen = {}
+      seen_host_ports = {}
       forwards = []
       published_host_ports(container).each do |private_spec, bindings|
         next if bindings.nil?
@@ -90,9 +77,9 @@ module LocalhostForwardProxy
           next unless host_port.match?(/\A\d+\z/)
 
           host_port = host_port.to_i
-          next if seen[host_port]
+          next if seen_host_ports[host_port]
 
-          seen[host_port] = true
+          seen_host_ports[host_port] = true
           forwards << { host_port: host_port, private_port: private_port }
         end
       end
@@ -100,15 +87,20 @@ module LocalhostForwardProxy
     end
 
     def self.parse_port_list(value)
-      value.to_s.split(",").map(&:strip).reject(&:empty?).map(&:to_i)
+      parse_list(value).map(&:to_i)
     end
 
     def self.parse_name_list(value)
-      value.to_s.split(",").map(&:strip).reject(&:empty?)
+      parse_list(value)
     end
 
-    def skip_network?(name)
-      @skip_networks.include?(name)
+    def self.parse_list(value)
+      value.to_s.split(",").map(&:strip).reject(&:empty?)
+    end
+    private_class_method :parse_list
+
+    def skip_network?(network_name)
+      @skip_networks.include?(network_name)
     end
 
     def reserved_port?(port)
@@ -118,6 +110,13 @@ module LocalhostForwardProxy
     def parent_compose_project?(container)
       project = self.class.compose_project(container)
       !self.class.blank?(@parent_compose_project) && project == @parent_compose_project
+    end
+
+    def skip_container?(container, parent_id:)
+      return true if self.class.same_container_id?(container["Id"], parent_id)
+      return true if parent_compose_project?(container)
+
+      !workspace_container?(container)
     end
 
     def workspace_container?(container)
@@ -137,17 +136,20 @@ module LocalhostForwardProxy
     end
 
     def mirrorable_ports(container)
-      self.class.published_tcp_forwards(container).reject { |fwd| reserved_port?(fwd[:host_port]) }
+      self.class.published_tcp_forwards(container).reject { |port_mapping| reserved_port?(port_mapping[:host_port]) }
+    end
+
+    def attachable_networks(container)
+      self.class.network_names(container).reject { |network_name| skip_network?(network_name) }
+    end
+
+    def shared_attachable_network(child, parent)
+      parent_networks = self.class.network_names(parent)
+      attachable_networks(child).find { |network_name| parent_networks.include?(network_name) }
     end
 
     def first_attachable_network(child, parent)
-      child_nets = self.class.network_names(child)
-      parent_nets = self.class.network_names(parent)
-
-      shared = child_nets.find { |net| !skip_network?(net) && parent_nets.include?(net) }
-      return shared if shared
-
-      child_nets.find { |net| !skip_network?(net) }
+      shared_attachable_network(child, parent) || attachable_networks(child).first
     end
 
     private

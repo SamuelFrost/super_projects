@@ -2,7 +2,6 @@
 
 require "json"
 require "open3"
-require "timeout"
 
 module LocalhostForwardProxy
   # Thin wrapper around the Docker CLI (the sidecar talks to the host daemon via the socket).
@@ -23,12 +22,13 @@ module LocalhostForwardProxy
       nil
     end
 
-    def connect_network(network, container_id)
-      Timeout.timeout(NETWORK_CONNECT_TIMEOUT_SECONDS) do
-        _out, _err, status = Open3.capture3("docker", "network", "connect", network, container_id)
-        status.success?
-      end
-    rescue Timeout::Error
+    def connect_network(network_name, container_id)
+      _out, _err, status = run_command(
+        "docker", "network", "connect", network_name, container_id,
+        timeout_seconds: NETWORK_CONNECT_TIMEOUT_SECONDS
+      )
+      status.success?
+    rescue CommandError
       false
     end
 
@@ -42,21 +42,42 @@ module LocalhostForwardProxy
     end
 
     def stop_event_stream
-      pid = @events_pid
-      return if pid.nil?
-
-      Process.kill("TERM", pid)
-    rescue Errno::ESRCH
-      nil
+      terminate_process(@events_pid)
     end
 
     private
 
     def capture(*args)
-      out, err, status = Timeout.timeout(DEFAULT_TIMEOUT_SECONDS) { Open3.capture3(*args) }
+      out, err, status = run_command(*args, timeout_seconds: DEFAULT_TIMEOUT_SECONDS)
       raise CommandError, "#{args.join(" ")}: #{err.strip}" unless status.success?
 
       out
+    end
+
+    def run_command(*args, timeout_seconds:)
+      Open3.popen3(*args) do |stdin, stdout, stderr, wait_thread|
+        stdin.close
+        stdout_thread = Thread.new { stdout.read }
+        stderr_thread = Thread.new { stderr.read }
+
+        unless wait_thread.join(timeout_seconds)
+          terminate_process(wait_thread.pid)
+          wait_thread.join(1)
+          stdout_thread.join(1)
+          stderr_thread.join(1)
+          raise CommandError, "#{args.join(" ")}: timed out after #{timeout_seconds}s"
+        end
+
+        [stdout_thread.value, stderr_thread.value, wait_thread.value]
+      end
+    end
+
+    def terminate_process(pid)
+      return if pid.nil?
+
+      Process.kill("TERM", pid)
+    rescue Errno::ESRCH
+      nil
     end
 
     class CommandError < StandardError; end

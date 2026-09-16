@@ -103,6 +103,8 @@ services:
       HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
       SUPER_PROJECTS_WORKDIR: ${SUPER_PROJECTS_WORKDIR:-workspaces}
       PARENT_COMPOSE_SERVICE: devcontainer
+      # Re-scan interval (seconds) when docker events miss a start/stop.
+      LOCALHOST_FORWARD_HEARTBEAT_SECONDS: "15"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOST_WORKSPACE_DIR:-../}:/${SUPER_PROJECTS_WORKDIR:-workspaces}:cached

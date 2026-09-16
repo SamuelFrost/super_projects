@@ -4,9 +4,12 @@
       "type": "stdio",
       "command": "docker",
       "args": [
-        "exec", "-i",
-        "super_projects-devcontainer-1",
-        "mise", "exec", "-C", "/workspaces", "--",
+        "compose",
+        "-f", ".devcontainer/compose.yaml",
+        "--project-directory", ".devcontainer",
+        "exec", "-T",
+        "devcontainer",
+        "mise", "exec", "--",
         "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"
       ]

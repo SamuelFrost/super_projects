@@ -16,10 +16,20 @@ cd "$(dirname "$0")/../../.."
 
 SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
 
+SUPER_PROJECTS_NAME=super_projects
+# Optional gitignored override: copy only SUPER_PROJECTS_NAME. Missing file
+# or missing key keeps the default above.
+if [ -f .devcontainer/.env.namespace_override ]; then
+  if _line=$(grep -m1 '^SUPER_PROJECTS_NAME=' .devcontainer/.env.namespace_override); then
+    SUPER_PROJECTS_NAME=$(printf '%s' "${_line#*=}" | tr -d '\r')
+  fi
+fi
+
 # WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
+# Socket filename follows SUPER_PROJECTS_NAME from .env.namespace_override (not generated .env).
 case "${XDG_RUNTIME_DIR:-}" in
-  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/super_projects-ssh-agent.sock" ;;
-  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock" ;;
+  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/${SUPER_PROJECTS_NAME}-ssh-agent.sock" ;;
+  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/${SUPER_PROJECTS_NAME}-ssh-agent.sock" ;;
 esac
 
 # Docker bind-mounts create a directory at a missing source path; if compose ever
@@ -179,7 +189,7 @@ fi
 mkdir -p .devcontainer
 # Drop legacy bridge filename from an earlier PR revision.
 [ -f .devcontainer/.host-ssh-agent.env ] && rm -f .devcontainer/.host-ssh-agent.env
-# Parsed by write-devcontainer-env (env_file_var); values may contain spaces (e.g. 1Password).
+# Parsed by write-devcontainer-env; values may contain spaces (e.g. 1Password).
 {
   printf 'SELECTED_AGENT_SOCK=%s\n' "$SELECTED_AGENT_SOCK"
 } >"$SELECTED_SSH_AGENT_ENV_FILE"

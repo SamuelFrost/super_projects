@@ -74,6 +74,7 @@ services:
       SSH_AUTH_SOCK: /ssh-agent.sock
       SUPER_PROJECTS_NAME: ${SUPER_PROJECTS_NAME:-super_projects}
       SUPER_PROJECTS_WORKDIR: ${SUPER_PROJECTS_WORKDIR:-workspaces}
+      HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
     ports:
       - "6080:6080"   # noVNC  — browser GUI for VNC
       # - "5900:5900" # VNC raw port (optional, for native VNC clients)
@@ -84,6 +85,28 @@ services:
     shm_size: '3gb'
     networks:
       - super_projects_default
+
+  # Mirrors published TCP ports of docker compose stacks in the workspace onto super_projects default network localhost (127.0.0.1 and ::1) so
+  # Chrome / chrome-devtools-mcp in the devcontainer can use http://localhost:<port> like on the host (see scripts/localhost_forward_proxy/.directory_information.md).
+  # Stop or start it on its own: docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml stop localhost_forward_proxy
+  localhost_forward_proxy:
+    build: scripts/localhost_forward_proxy
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - devcontainer
+    # Shares the devcontainer's network namespace, so listening on loopback here is listening in the devcontainer.
+    network_mode: "service:devcontainer"
+    environment:
+      # SUPER_PROJECTS_NAME is this compose project (skipped so the sidecar does not proxy the devcontainer); the workdir vars are workspace prefixes (see Watcher).
+      SUPER_PROJECTS_NAME: ${SUPER_PROJECTS_NAME:-super_projects}
+      SUPER_PROJECTS_WORKDIR: ${SUPER_PROJECTS_WORKDIR:-workspaces}
+      HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Runs the checked-out code, so a git pull applies on the next restart without rebuilding the image.
+      - ${HOST_WORKSPACE_DIR:-../}/.devcontainer/scripts/localhost_forward_proxy:/opt/localhost_forward_proxy:ro
+    command: ruby /opt/localhost_forward_proxy/bin/localhost_forward_proxy
 
 volumes:
   # Gemini CLI sessions/config. Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_gemini-data`.

@@ -175,7 +175,11 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
 
-Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
+Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image), `shell/` (host `initializeCommand` and runtime shell helpers), and `localhost_forward_proxy/` (Compose sidecar for super_projects default network localhost).
+
+### Compose apps at `localhost`
+
+A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the devcontainer Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; the `localhost_forward_proxy` sidecar mirrors it onto super_projects default network localhost. Stop that sidecar with `docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml stop localhost_forward_proxy`. See [`.devcontainer/scripts/localhost_forward_proxy/.directory_information.md`](.devcontainer/scripts/localhost_forward_proxy/.directory_information.md).
 
 `.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. Set `${SUPER_PROJECTS_NAME}` and `${SUPER_PROJECTS_WORKDIR}` in `.devcontainer/.env.namespace_override` (copy the `.example`); initialize copies those two keys into `.env`. VS Code, Cursor, and `devcontainer up` regenerate `.env` each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first, then always pass `--project-directory .devcontainer`.
 

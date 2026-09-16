@@ -23,8 +23,8 @@ services:
     ports:
       - "3000:80"
       # available on the host machine and the devcontainer at http://localhost:3000
-      # available within the parent devcontainer at http://sample_app_1 when that container
-      # shares ${SUPER_PROJECTS_NAME:-super_projects}_default (add `config.hosts << "sample_app_1"` in development.rb)
+      # also available within the parent devcontainer at http://sample_app_1 because the localhost_forward_proxy
+      # attaches that container to this stack's network (Rails needs `config.hosts << "sample_app_1"` in development.rb)
     volumes:
       # Compose uses the host Docker socket, so bind sources must be host paths.
       # Inside the parent, HOST_WORKSPACE_DIR (initializeCommand) and

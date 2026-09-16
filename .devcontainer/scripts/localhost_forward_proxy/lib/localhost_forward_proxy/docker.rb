@@ -4,82 +4,40 @@ require "json"
 require "open3"
 
 module LocalhostForwardProxy
-  # Thin wrapper around the Docker CLI (the sidecar talks to the host daemon via the socket).
+  # Thin wrapper around the Docker CLI, which talks to the host daemon through the mounted socket.
   class Docker
-    DEFAULT_TIMEOUT_SECONDS = 15
-    NETWORK_CONNECT_TIMEOUT_SECONDS = 5
+    class CommandError < StandardError; end
 
+    CONTAINER_START_OR_DIE_EVENTS = %w[docker events --filter type=container --filter event=start --filter event=die].freeze
+
+    # Full `docker inspect` JSON for every running container on the host.
     def running_containers
-      ids = capture("docker", "ps", "-q").split
+      ids = run("ps", "--quiet").split
       return [] if ids.empty?
 
-      JSON.parse(capture("docker", "inspect", *ids))
-    end
-
-    def inspect(container_id)
-      JSON.parse(capture("docker", "inspect", container_id)).first
-    rescue CommandError
-      nil
+      # A container can exit between ps and inspect; inspect still prints the others but exits non-zero.
+      stdout, = Open3.capture3("docker", "inspect", *ids)
+      stdout.empty? ? [] : JSON.parse(stdout)
     end
 
     def connect_network(network_name, container_id)
-      _out, _err, status = run_command(
-        "docker", "network", "connect", network_name, container_id,
-        timeout_seconds: NETWORK_CONNECT_TIMEOUT_SECONDS
-      )
-      status.success?
-    rescue CommandError
-      false
+      run("network", "connect", network_name, container_id)
     end
 
-    def stream_container_events
-      Open3.popen2("docker", "events", "--filter", "type=container", "--format", "{{.Action}}") do |_stdin, stdout, waiter|
-        @events_pid = waiter.pid
-        stdout.each_line { |line| yield line.strip }
-      ensure
-        @events_pid = nil
-      end
-    end
-
-    def stop_event_stream
-      terminate_process(@events_pid)
+    # Yields once per container start/die anywhere on the host, until the stream ends (for example a daemon restart).
+    def each_container_start_or_die
+      events = IO.popen(CONTAINER_START_OR_DIE_EVENTS)
+      events.each_line { yield }
+      events.close
     end
 
     private
 
-    def capture(*args)
-      out, err, status = run_command(*args, timeout_seconds: DEFAULT_TIMEOUT_SECONDS)
-      raise CommandError, "#{args.join(" ")}: #{err.strip}" unless status.success?
+    def run(*args)
+      stdout, stderr, status = Open3.capture3("docker", *args)
+      raise CommandError, "docker #{args.join(" ")}: #{stderr.strip}" unless status.success?
 
-      out
+      stdout
     end
-
-    def run_command(*args, timeout_seconds:)
-      Open3.popen3(*args) do |stdin, stdout, stderr, wait_thread|
-        stdin.close
-        stdout_thread = Thread.new { stdout.read }
-        stderr_thread = Thread.new { stderr.read }
-
-        unless wait_thread.join(timeout_seconds)
-          terminate_process(wait_thread.pid)
-          wait_thread.join(1)
-          stdout_thread.join(1)
-          stderr_thread.join(1)
-          raise CommandError, "#{args.join(" ")}: timed out after #{timeout_seconds}s"
-        end
-
-        [stdout_thread.value, stderr_thread.value, wait_thread.value]
-      end
-    end
-
-    def terminate_process(pid)
-      return if pid.nil?
-
-      Process.kill("TERM", pid)
-    rescue Errno::ESRCH
-      nil
-    end
-
-    class CommandError < StandardError; end
   end
 end

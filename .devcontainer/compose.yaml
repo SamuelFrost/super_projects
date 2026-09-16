@@ -86,32 +86,27 @@ services:
     networks:
       - super_projects_default
 
-  # Mirrors published ports of docker compose stacks in the workspace onto 127.0.0.1
-  # so in-container Chrome / MCP can use http://localhost:<port> (see localhost-forwards.md).
-  # Stop independently: docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml stop localhost_forward_proxy
+  # Mirrors the published ports of docker compose stacks in the workspace onto 127.0.0.1 so in-container
+  # Chrome / chrome-devtools-mcp can use http://localhost:<port> like on the host (see localhost-forwards.md).
+  # Stop or start it on its own: docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml stop localhost_forward_proxy
   localhost_forward_proxy:
-    build:
-      context: scripts/localhost_forward_proxy
-      dockerfile: Dockerfile
+    build: scripts/localhost_forward_proxy
     init: true
     restart: unless-stopped
     depends_on:
       - devcontainer
-    # Same loopback as `devcontainer` — listeners here are visible to Chrome in the parent.
+    # Shares the devcontainer's network namespace, so listening on 127.0.0.1 here is listening in the devcontainer.
     network_mode: "service:devcontainer"
     environment:
-      HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
+      # Which compose project / workspace paths count as "ours" (see Watcher#workspace_prefixes).
+      SUPER_PROJECTS_NAME: ${SUPER_PROJECTS_NAME:-super_projects}
       SUPER_PROJECTS_WORKDIR: ${SUPER_PROJECTS_WORKDIR:-workspaces}
-      PARENT_COMPOSE_SERVICE: devcontainer
-      # Re-scan interval (seconds) when docker events miss a start/stop.
-      LOCALHOST_FORWARD_HEARTBEAT_SECONDS: "15"
+      HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${HOST_WORKSPACE_DIR:-../}:/${SUPER_PROJECTS_WORKDIR:-workspaces}:cached
-    working_dir: /${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/scripts/localhost_forward_proxy
-    command:
-      - ruby
-      - /${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/scripts/localhost_forward_proxy/bin/localhost_forward_proxy
+      # Runs the checked-out code, so a git pull applies on the next restart without rebuilding the image.
+      - ${HOST_WORKSPACE_DIR:-../}/.devcontainer/scripts/localhost_forward_proxy:/opt/localhost_forward_proxy:ro
+    command: ruby /opt/localhost_forward_proxy/bin/localhost_forward_proxy
 
 volumes:
   # Gemini CLI sessions/config. Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_gemini-data`.

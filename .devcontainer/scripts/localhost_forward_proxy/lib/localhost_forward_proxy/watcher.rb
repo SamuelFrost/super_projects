@@ -1,327 +1,186 @@
 # frozen_string_literal: true
 
 require_relative "docker"
-require_relative "discovery"
 require_relative "tcp_proxy"
 
 module LocalhostForwardProxy
-  Forward = Struct.new(
-    :listen_port,
-    :target_ip,
-    :target_port,
-    :container_id,
-    :container_name,
-    keyword_init: true
-  ) do
-    def identity
-      "#{target_ip} #{target_port} #{container_id} #{container_name}"
-    end
-  end
-
-  # Watches workspace Compose stacks, attaches the parent container to their networks,
-  # and mirrors published host ports onto 127.0.0.1 in the shared network namespace.
+  # Mirrors the published `ports:` of docker compose stacks in the workspace onto 127.0.0.1 of the parent devcontainer.
+  #
+  # Runs in the parent's network namespace. Every sync inspects the running containers, attaches the parent to a
+  # stack's compose network when it is not on it yet (which is also what makes http://<service>/ resolve), and keeps
+  # one TcpProxy per published host port pointed at the container's private port.
   class Watcher
-    DEFAULT_HEARTBEAT_SECONDS = 15
-    STOP_POLL_SECONDS = 0.25
+    HEARTBEAT_SECONDS = 15
     EVENTS_RETRY_SECONDS = 2
-    IPV4_RETRY_SECONDS = 0.2
-    PARENT_LOOKUP_ATTEMPTS = 20
-    PARENT_LOOKUP_INTERVAL_SECONDS = 0.25
+    PARENT_COMPOSE_SERVICE = "devcontainer"
+    # Docker's built-in networks: the parent cannot be attached to them, and containers on them are not reachable.
+    UNATTACHABLE_NETWORKS = %w[bridge host none].freeze
 
-    def initialize(docker: Docker.new, env: ENV, parent_id: nil, proxy_class: TcpProxy)
+    Forward = Struct.new(:listen_port, :target_ip, :target_port, :container_name, keyword_init: true)
+
+    def initialize(docker: Docker.new, env: ENV, proxy_class: TcpProxy)
       @docker = docker
       @env = env
-      @parent_id = parent_id
       @proxy_class = proxy_class
-      @mutex = Mutex.new
       @proxies = {}
-      @stop = false
+      @sync_mutex = Mutex.new
       @last_status = nil
     end
 
     def run
       $stdout.sync = true
-      @parent_id ||= parent_container_id
-      raise "could not determine the parent devcontainer id" if @parent_id.nil?
+      Thread.abort_on_exception = true # an unexpected failure exits the process so Compose can restart it
+      %w[INT TERM].each { |signal| Signal.trap(signal) { exit } }
+      log("mirroring published ports of compose stacks under #{workspace_prefixes.join(" or ")} onto 127.0.0.1")
 
-      log("mirroring workspace Compose ports onto 127.0.0.1 (parent #{@parent_id[0, 12]})")
-      install_signal_traps
       sync
-
-      heartbeat = Thread.new { heartbeat_loop }
-      events = Thread.new { events_loop }
-      heartbeat.abort_on_exception = true
-      events.abort_on_exception = true
-
-      sleep STOP_POLL_SECONDS until @stop
-      @docker.stop_event_stream
-      stop_all_proxies
-      log("stopped")
-    end
-
-    def sync
-      @mutex.synchronize { sync_unlocked }
-    end
-
-    private
-
-    def heartbeat_loop
-      until @stop
-        sleep heartbeat_seconds
-        sync unless @stop
+      Thread.new do
+        loop do
+          sleep HEARTBEAT_SECONDS
+          sync
+        end
       end
-    end
-
-    def events_loop
-      until @stop
-        @docker.stream_container_events { sync unless @stop }
-        break if @stop
-
-        log("docker events ended; retrying in #{EVENTS_RETRY_SECONDS}s")
+      loop do
+        @docker.each_container_start_or_die { sync }
+        log("docker events stream ended; retrying in #{EVENTS_RETRY_SECONDS}s")
         sleep EVENTS_RETRY_SECONDS
       end
     end
 
-    def install_signal_traps
-      %w[INT TERM].each do |signal|
-        Signal.trap(signal) { @stop = true }
+    def sync
+      @sync_mutex.synchronize do
+        containers = @docker.running_containers
+        parent = containers.find { |container| parent_devcontainer?(container) }
+        raise "no running #{PARENT_COMPOSE_SERVICE} container in compose project #{parent_compose_project}" if parent.nil?
+
+        forwards = desired_forwards(containers, parent)
+        reconcile_proxies(forwards)
+        report_status(forwards)
       end
+    rescue Docker::CommandError => error
+      log(error.message)
     end
 
-    def sync_unlocked
-      containers = @docker.running_containers
-      parent = find_parent(containers)
-      if parent.nil?
-        log("parent container #{@parent_id[0, 12]} is not inspectable")
-        return
-      end
+    private
 
-      @discovery = discovery_for(parent)
-      desired_forwards = collect_desired_forwards(containers, parent)
-      reconcile_proxies(desired_forwards)
-      report_status(desired_forwards)
-    end
-
-    def find_parent(containers)
-      containers.find { |container| Discovery.same_container_id?(container["Id"], @parent_id) } ||
-        @docker.inspect(@parent_id)
-    end
-
-    def discovery_for(parent)
-      Discovery.new(
-        workspace_prefixes: workspace_prefixes(parent),
-        reserved_ports: reserved_ports_for(parent),
-        skip_networks: skip_networks,
-        parent_compose_project: Discovery.compose_project(parent)
-      )
-    end
-
-    def collect_desired_forwards(containers, parent)
-      desired_forwards = {}
+    def desired_forwards(containers, parent)
+      parent_networks = network_names(parent)
+      forwards = {}
       containers.each do |container|
-        next if @discovery.skip_container?(container, parent_id: @parent_id)
+        next unless workspace_stack_container?(container)
 
-        port_mappings = @discovery.mirrorable_ports(container)
-        next if port_mappings.empty?
+        published_ports = published_tcp_ports(container)
+        next if published_ports.empty?
 
-        container_name = Discovery.container_name(container)
-        network_name = ensure_parent_on_child_network(container, parent)
+        container_name = container["Name"].delete_prefix("/")
+        network_name = reachable_network(container, parent, parent_networks)
         if network_name.nil?
-          log("cannot reach #{container_name} (no attachable Docker network)")
+          log("cannot reach #{container_name}: no attachable network")
           next
         end
 
-        parent = @docker.inspect(@parent_id) || parent
-        ipv4_address = ipv4_for(container, network_name)
-        if ipv4_address.empty?
-          log("no IPv4 address for #{container_name} on #{network_name}")
-          next
-        end
-
-        port_mappings.each do |port_mapping|
-          listen_port = port_mapping[:host_port]
-          if desired_forwards.key?(listen_port)
-            other = desired_forwards[listen_port]
-            log("skipping #{container_name}:#{listen_port} (already used by #{other.container_name})")
-            next
-          end
-
-          desired_forwards[listen_port] = Forward.new(
-            listen_port: listen_port,
-            target_ip: ipv4_address,
-            target_port: port_mapping[:private_port],
-            container_id: container["Id"],
-            container_name: container_name
+        target_ip = container.dig("NetworkSettings", "Networks", network_name, "IPAddress")
+        published_ports.each do |host_port, private_port|
+          forwards[host_port] = Forward.new(
+            listen_port: host_port, target_ip: target_ip, target_port: private_port, container_name: container_name
           )
         end
       end
-      desired_forwards
+      forwards
     end
 
-    def reconcile_proxies(desired_forwards)
-      (@proxies.keys - desired_forwards.keys).each { |port| stop_proxy(port) }
+    def workspace_stack_container?(container)
+      return false if compose_label(container, "project") == parent_compose_project
 
-      desired_forwards.each do |port, forward|
-        existing = @proxies[port]
-        next if existing&.alive? && existing.identity == forward.identity
-
-        stop_proxy(port)
-        start_proxy(forward)
-      end
+      working_dir = compose_label(container, "project.working_dir").to_s
+      workspace_prefixes.any? { |prefix| working_dir == prefix || working_dir.start_with?("#{prefix}/") }
     end
 
-    def ensure_parent_on_child_network(child, parent)
-      shared_network = @discovery.shared_attachable_network(child, parent)
-      return shared_network if shared_network
+    # { host_port => private_port } for every TCP port the container publishes.
+    def published_tcp_ports(container)
+      ports = {}
+      (container.dig("NetworkSettings", "Ports") || {}).each do |private_spec, bindings|
+        private_port, protocol = private_spec.split("/")
+        next unless protocol == "tcp"
 
-      @discovery.attachable_networks(child).each do |network_name|
-        if @docker.connect_network(network_name, @parent_id)
-          log("attached to network #{network_name}")
-          return network_name
+        Array(bindings).each do |binding|
+          host_port = binding["HostPort"].to_i
+          ports[host_port] = private_port.to_i if host_port.positive?
         end
-
-        refreshed_parent = @docker.inspect(@parent_id)
-        return network_name if refreshed_parent && Discovery.network_names(refreshed_parent).include?(network_name)
       end
-
-      nil
+      ports
     end
 
-    def ipv4_for(container, network_name)
-      ipv4_address = Discovery.ipv4_on_network(container, network_name)
-      return ipv4_address unless ipv4_address.empty?
+    # A compose network the parent shares with the container, attaching the parent to one if needed.
+    def reachable_network(container, parent, parent_networks)
+      candidates = network_names(container) - UNATTACHABLE_NETWORKS
+      shared = candidates.find { |network_name| parent_networks.include?(network_name) }
+      return shared if shared
 
-      sleep IPV4_RETRY_SECONDS
-      refreshed = @docker.inspect(container["Id"])
-      return "" if refreshed.nil?
+      network_name = candidates.first
+      return nil if network_name.nil?
 
-      Discovery.ipv4_on_network(refreshed, network_name)
+      @docker.connect_network(network_name, parent["Id"])
+      parent_networks << network_name
+      log("attached #{PARENT_COMPOSE_SERVICE} to network #{network_name}")
+      network_name
     end
 
-    def start_proxy(forward)
-      proxy = @proxy_class.new(
-        listen_port: forward.listen_port,
-        target_host: forward.target_ip,
-        target_port: forward.target_port,
-        identity: forward.identity
-      )
-      proxy.start
-      unless proxy.alive?
-        log("failed to listen on 127.0.0.1:#{forward.listen_port}")
-        proxy.stop
-        return
-      end
+    def reconcile_proxies(forwards)
+      (@proxies.keys - forwards.keys).each { |listen_port| @proxies.delete(listen_port).stop }
 
-      @proxies[forward.listen_port] = proxy
-    rescue Errno::EADDRINUSE, Errno::EACCES => error
-      log("failed to listen on 127.0.0.1:#{forward.listen_port} (#{error.message})")
-    end
+      forwards.each do |listen_port, forward|
+        proxy = @proxies[listen_port]
+        next if proxy && proxy.target_host == forward.target_ip && proxy.target_port == forward.target_port
 
-    def stop_proxy(port)
-      @proxies.delete(port)&.stop
-    end
-
-    def stop_all_proxies
-      @mutex.synchronize do
-        @proxies.keys.each { |port| stop_proxy(port) }
+        @proxies.delete(listen_port)&.stop
+        @proxies[listen_port] = @proxy_class.new(
+          listen_port: listen_port, target_host: forward.target_ip, target_port: forward.target_port
+        ).start
+      rescue Errno::EADDRINUSE
+        nil # reported by report_status; retried on the next sync
       end
     end
 
-    def report_status(desired_forwards)
-      status = if desired_forwards.empty?
-        "none (publish a port on a workspace Compose service)"
-      else
-        desired_forwards.keys.sort.map do |port|
-          forward = desired_forwards[port]
-          "#{port}→#{forward.container_name}:#{forward.target_port}"
-        end.join(", ")
-      end
+    def report_status(forwards)
+      status = forwards.values.sort_by(&:listen_port).map do |forward|
+        if @proxies.key?(forward.listen_port)
+          "#{forward.listen_port}→#{forward.container_name}:#{forward.target_port}"
+        else
+          "#{forward.listen_port} skipped (port already in use in the #{PARENT_COMPOSE_SERVICE})"
+        end
+      end.join(", ")
+      status = "no published ports to mirror" if status.empty?
       return if status == @last_status
 
       @last_status = status
       log(status)
     end
 
-    def parent_container_id
-      PARENT_LOOKUP_ATTEMPTS.times do
-        id = lookup_parent_container_id
-        return id if id
-
-        sleep PARENT_LOOKUP_INTERVAL_SECONDS
-      end
-      nil
+    def parent_devcontainer?(container)
+      compose_label(container, "project") == parent_compose_project &&
+        compose_label(container, "service") == PARENT_COMPOSE_SERVICE
     end
 
-    def lookup_parent_container_id
-      hostname = File.read("/etc/hostname").strip
-      service = @env.fetch("PARENT_COMPOSE_SERVICE", "devcontainer")
-
-      named = @docker.inspect("#{hostname}-#{service}-1")
-      return named["Id"] if named
-
-      @docker.running_containers.find do |container|
-        labels = container.dig("Config", "Labels") || {}
-        container.dig("Config", "Hostname") == hostname &&
-          labels["com.docker.compose.service"] == service
-      end&.fetch("Id")
+    def parent_compose_project
+      @env.fetch("SUPER_PROJECTS_NAME", "super_projects")
     end
 
-    def workspace_prefixes(parent)
-      prefixes = [workspace_container_path]
-      host_dir = @env["HOST_WORKSPACE_DIR"]
-      host_dir = host_workspace_dir_from_env_file if Discovery.blank?(host_dir)
-      prefixes << host_dir unless Discovery.blank?(host_dir)
-      prefixes << @env["LOCAL_WORKSPACE_FOLDER"] unless Discovery.blank?(@env["LOCAL_WORKSPACE_FOLDER"])
-
-      working_dir = Discovery.compose_working_dir(parent)
-      if working_dir.to_s.end_with?("/.devcontainer")
-        prefixes << working_dir.delete_suffix("/.devcontainer")
-      end
-
-      prefixes.uniq
+    # The workspace as seen from inside the devcontainer and from the Docker host: compose stacks started from
+    # either place carry that path in their working_dir label.
+    def workspace_prefixes
+      prefixes = ["/#{@env.fetch("SUPER_PROJECTS_WORKDIR", "workspaces")}"]
+      host_workspace_dir = @env["HOST_WORKSPACE_DIR"].to_s
+      prefixes << host_workspace_dir unless host_workspace_dir.empty?
+      prefixes
     end
 
-    def workspace_container_path
-      workdir = @env["SUPER_PROJECTS_WORKDIR"]
-      workdir = "workspaces" if Discovery.blank?(workdir)
-      "/#{workdir.to_s.delete_prefix("/")}"
+    def compose_label(container, key)
+      container.dig("Config", "Labels", "com.docker.compose.#{key}")
     end
 
-    def host_workspace_dir_from_env_file
-      path = "#{workspace_container_path}/.devcontainer/.env"
-      return nil unless File.readable?(path)
-
-      File.readlines(path).reverse_each do |line|
-        next unless line.start_with?("HOST_WORKSPACE_DIR=")
-
-        value = line.split("=", 2)[1].to_s.strip
-        return value.delete_prefix('"').delete_suffix('"').delete_prefix("'").delete_suffix("'")
-      end
-      nil
-    end
-
-    def heartbeat_seconds
-      configured = @env["LOCALHOST_FORWARD_HEARTBEAT_SECONDS"]
-      return DEFAULT_HEARTBEAT_SECONDS if Discovery.blank?(configured)
-
-      seconds = Integer(configured)
-      seconds.positive? ? seconds : DEFAULT_HEARTBEAT_SECONDS
-    rescue ArgumentError
-      DEFAULT_HEARTBEAT_SECONDS
-    end
-
-    def reserved_ports
-      extra = Discovery.parse_port_list(@env["LOCALHOST_FORWARD_RESERVED_PORTS"])
-      (Discovery::DEFAULT_RESERVED_PORTS + extra).uniq
-    end
-
-    def reserved_ports_for(parent)
-      (reserved_ports + Discovery.parent_published_host_ports(parent)).uniq
-    end
-
-    def skip_networks
-      extra = Discovery.parse_name_list(@env["LOCALHOST_FORWARD_SKIP_NETWORKS"])
-      (Discovery::DEFAULT_SKIP_NETWORKS + extra).uniq
+    def network_names(container)
+      (container.dig("NetworkSettings", "Networks") || {}).keys
     end
 
     def log(message)

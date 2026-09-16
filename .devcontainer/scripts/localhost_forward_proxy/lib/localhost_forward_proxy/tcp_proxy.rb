@@ -3,92 +3,77 @@
 require "socket"
 
 module LocalhostForwardProxy
-  # Listen on 127.0.0.1:listen_port and copy bytes to target_host:target_port.
+  # Accepts connections on 127.0.0.1:listen_port and copies bytes both ways to target_host:target_port.
   class TcpProxy
-    attr_reader :listen_port, :target_host, :target_port, :identity
+    CONNECT_TIMEOUT_SECONDS = 10
 
-    def initialize(listen_port:, target_host:, target_port:, identity:)
+    attr_reader :listen_port, :target_host, :target_port
+
+    def initialize(listen_port:, target_host:, target_port:)
       @listen_port = listen_port
       @target_host = target_host
       @target_port = target_port
-      @identity = identity
       @open_sockets = []
-      @sockets_mutex = Mutex.new
+      @open_sockets_mutex = Mutex.new
     end
 
+    # Raises Errno::EADDRINUSE when something in the shared network namespace already listens on the port.
     def start
-      @server = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
-      @server.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEADDR, 1)
-      @server.bind(Addrinfo.tcp("127.0.0.1", @listen_port))
-      @server.listen(128)
-      @connection_threads = ThreadGroup.new
+      @server = TCPServer.new("127.0.0.1", @listen_port)
       @accept_thread = Thread.new { accept_loop }
-      @accept_thread.abort_on_exception = true
       self
     end
 
+    # Closes the listener and any in-flight connections.
     def stop
-      close_quietly(@server)
-      sockets = @sockets_mutex.synchronize do
-        taken = @open_sockets.dup
-        @open_sockets.clear
-        taken
-      end
-      sockets.each { |socket| close_socket(socket) }
-      @connection_threads&.list&.each { |thread| thread.join(1) }
-      @accept_thread&.join(1)
-    end
-
-    def alive?
-      @accept_thread&.alive? && @server && !@server.closed?
+      @server.close
+      @open_sockets_mutex.synchronize { @open_sockets.each { |socket| close_quietly(socket) } }
+      @accept_thread.join(1)
     end
 
     private
 
     def accept_loop
       loop do
-        client, _addr = @server.accept
-        remember_socket(client)
-        @connection_threads.add(Thread.new { handle(client) })
+        client = @server.accept
+        Thread.new { relay(client) }
       end
-    rescue IOError, Errno::EBADF, Errno::EINVAL
-      nil
+    rescue IOError, SystemCallError
+      nil # the listener was closed by #stop
     end
 
-    def handle(client)
-      upstream = nil
-      upstream = Socket.tcp(@target_host, @target_port, connect_timeout: 10)
-      remember_socket(upstream)
-      to_upstream = Thread.new { copy(client, upstream) }
-      copy(upstream, client)
-      to_upstream.join
-    rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::ETIMEDOUT, SocketError, IOError
+    def relay(client)
+      upstream = Socket.tcp(@target_host, @target_port, connect_timeout: CONNECT_TIMEOUT_SECONDS)
+      track(client, upstream)
+      Thread.new { copy_then_signal_end(client, upstream) }
+      copy_then_signal_end(upstream, client)
+    rescue IOError, SocketError, SystemCallError
       nil
     ensure
+      untrack(client, upstream)
       close_quietly(client)
       close_quietly(upstream)
     end
 
-    def copy(src, dst)
-      IO.copy_stream(src, dst)
-    rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Errno::ECONNABORTED, Errno::ENOTCONN
+    # Copies until source hits EOF, then half-closes destination so its peer sees that EOF too.
+    def copy_then_signal_end(source, destination)
+      IO.copy_stream(source, destination)
+      destination.close_write
+    rescue IOError, SystemCallError
       nil
     end
 
-    def remember_socket(socket)
-      @sockets_mutex.synchronize { @open_sockets << socket }
+    def track(*sockets)
+      @open_sockets_mutex.synchronize { @open_sockets.concat(sockets) }
+    end
+
+    def untrack(*sockets)
+      @open_sockets_mutex.synchronize { @open_sockets -= sockets }
     end
 
     def close_quietly(socket)
-      return if socket.nil?
-
-      @sockets_mutex.synchronize { @open_sockets.delete(socket) }
-      close_socket(socket)
-    end
-
-    def close_socket(socket)
-      socket.close
-    rescue IOError
+      socket&.close
+    rescue IOError, SystemCallError
       nil
     end
   end

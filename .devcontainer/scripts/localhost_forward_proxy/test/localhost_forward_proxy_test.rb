@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "socket"
+require "stringio"
 require_relative "../lib/localhost_forward_proxy"
 
 failures = 0
@@ -23,38 +24,33 @@ end
 
 class RecordingProxy
   class << self
-    attr_accessor :started
+    attr_accessor :started, :ports_in_use
   end
 
-  attr_reader :listen_port, :target_host, :target_port, :identity
+  attr_reader :listen_port, :target_host, :target_port, :stopped
 
-  def initialize(listen_port:, target_host:, target_port:, identity:)
+  def initialize(listen_port:, target_host:, target_port:)
     @listen_port = listen_port
     @target_host = target_host
     @target_port = target_port
-    @identity = identity
-    @started = false
     @stopped = false
-    self.class.started << self
   end
 
   def start
-    @started = true
+    raise Errno::EADDRINUSE if self.class.ports_in_use.include?(@listen_port)
+
+    self.class.started << self
     self
   end
 
   def stop
     @stopped = true
-    self
-  end
-
-  def alive?
-    @started && !@stopped
   end
 end
 
 class FakeDocker
   attr_reader :network_connects
+  attr_accessor :containers
 
   def initialize(containers)
     @containers = containers
@@ -65,237 +61,155 @@ class FakeDocker
     @containers
   end
 
-  def inspect(container_id)
-    @containers.find do |container|
-      LocalhostForwardProxy::Discovery.same_container_id?(container["Id"], container_id)
-    end
-  end
-
   def connect_network(network_name, container_id)
     @network_connects << [network_name, container_id]
-    parent = inspect(container_id)
-    if parent
-      networks = parent.dig("NetworkSettings", "Networks") || {}
-      networks[network_name] = { "IPAddress" => "172.19.0.2" }
-      parent["NetworkSettings"]["Networks"] = networks
-    end
-    true
+    parent = @containers.find { |container| container["Id"] == container_id }
+    parent["NetworkSettings"]["Networks"][network_name] = { "IPAddress" => "172.18.0.9" }
   end
 end
 
-failures += 1 unless assert(
-  LocalhostForwardProxy::Discovery.path_under?("/workspaces/sample_app_1", "/workspaces"),
-  "container-side compose working_dir is under /workspaces"
-)
-failures += 1 unless assert(
-  LocalhostForwardProxy::Discovery.path_under?(
-    "/home/sam/projects/super_projects/sample_app_1",
-    "/home/sam/projects/super_projects"
-  ),
-  "host bind source is under HOST_WORKSPACE_DIR"
-)
-failures += 1 unless assert(
-  !LocalhostForwardProxy::Discovery.path_under?("/workspaces-other/app", "/workspaces"),
-  "a sibling prefix is not treated as under the workspace"
-)
-failures += 1 unless assert(
-  LocalhostForwardProxy::Discovery.same_container_id?("sha256:abc123def456", "abc123"),
-  "short and long container ids match"
-)
-failures += 1 unless assert(
-  LocalhostForwardProxy::Discovery.parse_port_list(" 8080, 9090 ") == [8080, 9090],
-  "port lists split on commas"
-)
-failures += 1 unless assert(
-  LocalhostForwardProxy::Discovery.parse_name_list("app_net, other_net") == %w[app_net other_net],
-  "name lists split on commas"
-)
-
-discovery = LocalhostForwardProxy::Discovery.new(
-  workspace_prefixes: ["/workspaces", "/host/super_projects"],
-  reserved_ports: [6080, 3000],
-  skip_networks: LocalhostForwardProxy::Discovery::DEFAULT_SKIP_NETWORKS,
-  parent_compose_project: "super_projects"
-)
-
-sample_app = {
-  "Id" => "aaa",
-  "Name" => "/sample_app_1-web-1",
-  "Config" => {
-    "Labels" => {
-      "com.docker.compose.project" => "sample_app_1",
-      "com.docker.compose.project.working_dir" => "/host/super_projects/sample_app_1",
-      "com.docker.compose.project.config_files" => "/host/super_projects/sample_app_1/docker-compose.yaml"
-    }
-  },
-  "Mounts" => [
-    { "Type" => "bind", "Source" => "/host/super_projects/sample_app_1" }
-  ],
-  "NetworkSettings" => {
-    "Networks" => {
-      "sample_app_1_default" => { "IPAddress" => "172.18.0.2" },
-      "bridge" => { "IPAddress" => "172.17.0.2" }
+def compose_container(id:, name:, project:, working_dir:, service: name, networks:, ports: {})
+  {
+    "Id" => id,
+    "Name" => "/#{name}",
+    "Config" => {
+      "Labels" => {
+        "com.docker.compose.project" => project,
+        "com.docker.compose.service" => service,
+        "com.docker.compose.project.working_dir" => working_dir
+      }
     },
-    "Ports" => {
-      "80/tcp" => [{ "HostIp" => "0.0.0.0", "HostPort" => "3000" }],
-      "443/tcp" => [{ "HostIp" => "0.0.0.0", "HostPort" => "3443" }],
-      "53/udp" => [{ "HostIp" => "0.0.0.0", "HostPort" => "5353" }]
-    }
+    "NetworkSettings" => { "Networks" => networks, "Ports" => ports }
   }
-}
+end
 
-parent = {
-  "Id" => "parentid",
-  "Config" => {
-    "Labels" => {
-      "com.docker.compose.project" => "super_projects",
-      "com.docker.compose.service" => "devcontainer",
-      "com.docker.compose.project.working_dir" => "/host/super_projects/.devcontainer"
-    }
-  },
-  "NetworkSettings" => {
-    "Networks" => { "super_projects_default" => { "IPAddress" => "172.19.0.2" } },
-    "Ports" => {
-      "6080/tcp" => [{ "HostIp" => "0.0.0.0", "HostPort" => "6080" }]
-    }
+def published(host_port)
+  [{ "HostIp" => "127.0.0.1", "HostPort" => host_port.to_s }, { "HostIp" => "::1", "HostPort" => host_port.to_s }]
+end
+
+parent = compose_container(
+  id: "parentid", name: "super_projects-devcontainer-1", project: "super_projects", service: "devcontainer",
+  working_dir: "/host/super_projects/.devcontainer",
+  networks: { "super_projects_default" => { "IPAddress" => "172.19.0.2" } },
+  ports: { "6080/tcp" => published(6080) }
+)
+sidecar_in_parent_project = compose_container(
+  id: "sidecarid", name: "super_projects-localhost_forward_proxy-1", project: "super_projects",
+  service: "localhost_forward_proxy", working_dir: "/host/super_projects/.devcontainer",
+  networks: { "super_projects_default" => { "IPAddress" => "172.19.0.3" } },
+  ports: { "8000/tcp" => published(8000) }
+)
+sample_app = compose_container(
+  id: "sampleid", name: "sample_app_1-sample_app_1-1", project: "sample_app_1", working_dir: "/workspaces/sample_app_1",
+  networks: { "sample_app_1_default" => { "IPAddress" => "172.18.0.2" }, "bridge" => { "IPAddress" => "172.17.0.2" } },
+  ports: {
+    "80/tcp" => published(3000),
+    "443/tcp" => published(3443),
+    "53/udp" => published(5353),
+    "5432/tcp" => nil
   }
-}
-
-sibling_in_parent_project = {
-  "Id" => "sidecar",
-  "Name" => "/super_projects-localhost_forward_proxy-1",
-  "Config" => {
-    "Labels" => {
-      "com.docker.compose.project" => "super_projects",
-      "com.docker.compose.project.working_dir" => "/host/super_projects/.devcontainer"
-    }
-  },
-  "NetworkSettings" => {
-    "Networks" => { "super_projects_default" => { "IPAddress" => "172.19.0.3" } },
-    "Ports" => {}
-  }
-}
-
-outside_workspace = {
-  "Id" => "other",
-  "Name" => "/unrelated-web-1",
-  "Config" => {
-    "Labels" => {
-      "com.docker.compose.project" => "unrelated",
-      "com.docker.compose.project.working_dir" => "/unrelated"
-    }
-  },
-  "Mounts" => [],
-  "NetworkSettings" => {
-    "Networks" => { "unrelated_default" => { "IPAddress" => "172.20.0.2" } },
-    "Ports" => {
-      "80/tcp" => [{ "HostIp" => "0.0.0.0", "HostPort" => "8080" }]
-    }
-  }
-}
-
-colliding_app = {
-  "Id" => "bbb",
-  "Name" => "/sample_app_2-web-1",
-  "Config" => {
-    "Labels" => {
-      "com.docker.compose.project" => "sample_app_2",
-      "com.docker.compose.project.working_dir" => "/host/super_projects/sample_app_2"
-    }
-  },
-  "Mounts" => [
-    { "Type" => "bind", "Source" => "/host/super_projects/sample_app_2" }
-  ],
-  "NetworkSettings" => {
-    "Networks" => {
-      "sample_app_2_default" => { "IPAddress" => "172.21.0.2" }
-    },
-    "Ports" => {
-      "80/tcp" => [{ "HostIp" => "0.0.0.0", "HostPort" => "3443" }]
-    }
-  }
-}
-
-failures += 1 unless assert(discovery.workspace_container?(sample_app), "sample app is a workspace container")
-failures += 1 unless assert(discovery.parent_compose_project?(parent), "parent compose project is skipped")
-failures += 1 unless assert(!discovery.parent_compose_project?(sample_app), "sample app is not the parent project")
-failures += 1 unless assert(
-  discovery.skip_container?(parent, parent_id: "parentid"),
-  "the parent container itself is skipped"
 )
-failures += 1 unless assert(
-  discovery.skip_container?(sibling_in_parent_project, parent_id: "parentid"),
-  "sibling containers in the parent compose project are skipped"
+sample_app_postgres = compose_container(
+  id: "postgresid", name: "sample_app_1-postgres-1", project: "sample_app_1", working_dir: "/workspaces/sample_app_1",
+  networks: { "sample_app_1_default" => { "IPAddress" => "172.18.0.3" } },
+  ports: { "5432/tcp" => published(5432) }
 )
-failures += 1 unless assert(
-  discovery.skip_container?(outside_workspace, parent_id: "parentid"),
-  "containers outside the workspace are skipped"
+host_started_app = compose_container(
+  id: "hostappid", name: "host_app-web-1", project: "host_app", working_dir: "/host/super_projects/host_app",
+  networks: { "host_app_default" => { "IPAddress" => "172.20.0.2" } },
+  ports: { "80/tcp" => published(4000) }
 )
-failures += 1 unless assert(
-  !discovery.skip_container?(sample_app, parent_id: "parentid"),
-  "workspace apps are not skipped"
+outside_workspace = compose_container(
+  id: "otherid", name: "unrelated-web-1", project: "unrelated", working_dir: "/elsewhere/unrelated",
+  networks: { "unrelated_default" => { "IPAddress" => "172.21.0.2" } },
+  ports: { "80/tcp" => published(8080) }
 )
-failures += 1 unless assert(discovery.skip_network?("bridge"), "bridge is not attachable")
-failures += 1 unless assert(
-  discovery.attachable_networks(sample_app) == ["sample_app_1_default"],
-  "attachable networks skip bridge"
-)
-failures += 1 unless assert(
-  discovery.shared_attachable_network(sample_app, parent).nil?,
-  "parent is not yet on the sample app network"
-)
-failures += 1 unless assert(
-  discovery.first_attachable_network(sample_app, parent) == "sample_app_1_default",
-  "first attachable network skips bridge"
-)
-failures += 1 unless assert(discovery.reserved_port?(3000), "reserved host ports are not mirrored")
-failures += 1 unless assert(
-  discovery.mirrorable_ports(sample_app) == [{ host_port: 3443, private_port: 443 }],
-  "udp and reserved tcp ports are dropped"
-)
-failures += 1 unless assert(
-  LocalhostForwardProxy::Discovery.parent_published_host_ports(parent) == [6080],
-  "parent published ports are collected"
-)
-
-parent_already_attached = Marshal.load(Marshal.dump(parent))
-parent_already_attached["NetworkSettings"]["Networks"]["sample_app_1_default"] = { "IPAddress" => "172.18.0.9" }
-failures += 1 unless assert(
-  discovery.shared_attachable_network(sample_app, parent_already_attached) == "sample_app_1_default",
-  "shared attachable network is preferred when the parent is already connected"
+sibling_path_app = compose_container(
+  id: "siblingid", name: "sibling-web-1", project: "sibling", working_dir: "/workspaces-other/app",
+  networks: { "sibling_default" => { "IPAddress" => "172.22.0.2" } },
+  ports: { "80/tcp" => published(8081) }
 )
 
 RecordingProxy.started = []
-fake_docker = FakeDocker.new([parent, sample_app, sibling_in_parent_project, outside_workspace, colliding_app])
+RecordingProxy.ports_in_use = [3443]
+fake_docker = FakeDocker.new(
+  [parent, sidecar_in_parent_project, sample_app, sample_app_postgres, host_started_app, outside_workspace, sibling_path_app]
+)
 watcher = LocalhostForwardProxy::Watcher.new(
   docker: fake_docker,
-  env: {
-    "HOST_WORKSPACE_DIR" => "/host/super_projects",
-    "SUPER_PROJECTS_WORKDIR" => "workspaces",
-    "LOCALHOST_FORWARD_RESERVED_PORTS" => "3000"
-  },
-  parent_id: "parentid",
+  env: { "SUPER_PROJECTS_NAME" => "super_projects", "SUPER_PROJECTS_WORKDIR" => "workspaces", "HOST_WORKSPACE_DIR" => "/host/super_projects" },
   proxy_class: RecordingProxy
 )
+
+log = StringIO.new
+$stdout = log
 watcher.sync
+$stdout = STDOUT
 
 started = RecordingProxy.started
 failures += 1 unless assert(
-  fake_docker.network_connects == [["sample_app_1_default", "parentid"], ["sample_app_2_default", "parentid"]],
-  "parent is attached to workspace app networks"
-)
-failures += 1 unless assert(started.length == 1, "only the first owner of a host port is proxied")
-failures += 1 unless assert(
-  started.first.listen_port == 3443 && started.first.target_port == 443 && started.first.target_host == "172.18.0.2",
-  "watcher proxies the sample app host port to the container IPv4"
+  fake_docker.network_connects == [["sample_app_1_default", "parentid"], ["host_app_default", "parentid"]],
+  "parent is attached once per workspace stack network, skipping the bridge network"
 )
 failures += 1 unless assert(
-  started.none? { |proxy| proxy.listen_port == 8080 },
-  "containers outside the workspace are not proxied"
+  started.map { |proxy| [proxy.listen_port, proxy.target_host, proxy.target_port] }.sort ==
+    [[3000, "172.18.0.2", 80], [4000, "172.20.0.2", 80], [5432, "172.18.0.3", 5432]],
+  "published tcp ports of stacks started in the container or on the host are proxied to the container IPv4"
 )
 failures += 1 unless assert(
-  started.none? { |proxy| proxy.listen_port == 3000 },
-  "extra reserved ports from env are not proxied"
+  started.none? { |proxy| proxy.listen_port == 5353 },
+  "udp ports are not proxied"
+)
+failures += 1 unless assert(
+  started.none? { |proxy| [8000, 6080].include?(proxy.listen_port) },
+  "containers of the parent compose project are not proxied"
+)
+failures += 1 unless assert(
+  started.none? { |proxy| [8080, 8081].include?(proxy.listen_port) },
+  "stacks outside the workspace (including sibling path prefixes) are not proxied"
+)
+failures += 1 unless assert(
+  log.string.include?("3443 skipped (port already in use in the devcontainer)"),
+  "a port already bound in the shared namespace is reported and skipped"
+)
+failures += 1 unless assert(
+  log.string.include?("3000→sample_app_1-sample_app_1-1:80"),
+  "status logs the active forwards"
+)
+
+watcher.sync
+failures += 1 unless assert(
+  started.length == 3 && started.none?(&:stopped) && fake_docker.network_connects.length == 2,
+  "an unchanged sync keeps the running proxies and does not reattach networks"
+)
+
+recreated_sample_app = Marshal.load(Marshal.dump(sample_app))
+recreated_sample_app["Id"] = "sampleid2"
+recreated_sample_app["NetworkSettings"]["Networks"]["sample_app_1_default"]["IPAddress"] = "172.18.0.5"
+fake_docker.containers = [parent, recreated_sample_app]
+watcher.sync
+sample_app_proxies = started.select { |proxy| proxy.listen_port == 3000 }
+failures += 1 unless assert(
+  sample_app_proxies.map(&:stopped) == [true, false] && sample_app_proxies.last.target_host == "172.18.0.5",
+  "a recreated container with a new IPv4 replaces its proxy"
+)
+failures += 1 unless assert(
+  started.select { |proxy| [4000, 5432].include?(proxy.listen_port) }.all?(&:stopped),
+  "proxies of containers that went away are stopped"
+)
+
+fake_docker.containers = [sample_app]
+log = StringIO.new
+$stdout = log
+begin
+  watcher.sync
+rescue RuntimeError => error
+  parent_missing_error = error
+end
+$stdout = STDOUT
+failures += 1 unless assert(
+  parent_missing_error&.message == "no running devcontainer container in compose project super_projects",
+  "sync fails loudly when the parent devcontainer is not running"
 )
 
 backend_port = free_port
@@ -306,21 +220,31 @@ backend_thread = Thread.new do
   client.write(client.readpartial(5))
   client.close
 end
-proxy = LocalhostForwardProxy::TcpProxy.new(
-  listen_port: listen_port,
-  target_host: "127.0.0.1",
-  target_port: backend_port,
-  identity: "test"
-).start
+proxy = LocalhostForwardProxy::TcpProxy.new(listen_port: listen_port, target_host: "127.0.0.1", target_port: backend_port).start
 response = Socket.tcp("127.0.0.1", listen_port) do |client|
   client.write("hello")
   client.readpartial(5)
 end
-proxy.stop
 backend_thread.join(1)
 backend.close
-
 failures += 1 unless assert(response == "hello", "tcp proxy copies bytes in both directions")
+
+begin
+  LocalhostForwardProxy::TcpProxy.new(listen_port: listen_port, target_host: "127.0.0.1", target_port: backend_port).start
+  address_in_use = false
+rescue Errno::EADDRINUSE
+  address_in_use = true
+end
+failures += 1 unless assert(address_in_use, "starting a proxy on a bound port raises Errno::EADDRINUSE")
+
+proxy.stop
+begin
+  Socket.tcp("127.0.0.1", listen_port, connect_timeout: 1) { nil }
+  listener_closed = false
+rescue Errno::ECONNREFUSED
+  listener_closed = true
+end
+failures += 1 unless assert(listener_closed, "a stopped proxy no longer accepts connections")
 
 if failures.positive?
   warn("#{failures} failure(s)")

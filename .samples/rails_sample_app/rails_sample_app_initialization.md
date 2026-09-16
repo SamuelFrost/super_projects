@@ -59,4 +59,4 @@ volumes:
 
 After `docker compose up`, open **http://localhost:3000** in the parent desktop Chrome (and chrome-devtools-mcp). Published `ports:` are mirrored onto `127.0.0.1` inside the parent container. That localhost URL does not need a Compose network entry or a Rails `config.hosts` change.
 
-Details: [`.devcontainer/localhost-forwards.md`](../../.devcontainer/localhost-forwards.md).
+Details: [`.devcontainer/scripts/localhost_forward_proxy/.directory_information.md`](../../.devcontainer/scripts/localhost_forward_proxy/.directory_information.md).

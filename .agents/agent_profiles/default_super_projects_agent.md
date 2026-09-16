@@ -56,13 +56,13 @@
 
 ### Host access
 
-- Private keys stay on the host. The host ssh-agent is forwarded at `/ssh-agent.sock`; `ensure-auth` reports whether identities are loaded.
+- Private keys stay on the host. The host ssh-agent is forwarded at `/ssh-agent.sock`; `ensure-auth` reports whether identities are loaded. The managed socket filename uses `${SUPER_PROJECTS_NAME}` from `.devcontainer/.env.namespace_override` (default `super_projects`).
 - Passphrase unlock runs in host `initializeCommand` (VS Code / Cursor / `devcontainer up`) — not a separate user-run script. Prefer Keychain, 1Password, or `gh auth login` (HTTPS) to reduce prompts.
 - If SSH fails with `Permission denied`, check `ssh-add -l` in the container; if empty, reopen in the container (re-runs initializeCommand) or use HTTPS.
 
 ### Git
 
-- GitHub CLI auth persists in the `gh-data` volume (`~/.config/gh` / `persist/gh`). Run `gh auth login` **inside the container** once when needed.
+- GitHub CLI auth persists in the `gh-data` volume (`~/.config/gh` / `persist/gh`). Run `gh auth login` **inside the container** once when needed. Wipe with `docker volume rm ${SUPER_PROJECTS_NAME}_gh-data` as needed.
 
 ### Devcontainer
 
@@ -77,7 +77,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 #### Docker Compose
 
 - One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/${SUPER_PROJECTS_WORKDIR}` (default `/workspaces`), Docker socket mounted for docker-outside-of-docker.
-- Host `initializeCommand` (`.devcontainer/scripts/shell/initializeCommand.sh`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, `HOST_WORKSPACE_DIR`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6080`.
+- Host `initializeCommand` (`.devcontainer/scripts/shell/initializeCommand.sh`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, `HOST_WORKSPACE_DIR`, `SUPER_PROJECTS_NAME`, mirrored `COMPOSE_PROJECT_NAME`, `SUPER_PROJECTS_WORKDIR`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6080`.
 - Do not mount whole `/home/developer` — that freezes image-owned installs after the first named-volume create.
 
 #### Persisted files

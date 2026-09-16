@@ -25,7 +25,7 @@ The intended way to use this project is one fork per company (or team). Your for
 
 `${SUPER_PROJECTS_NAME}` is the Compose project name. It determines the container (`${SUPER_PROJECTS_NAME}-devcontainer-1`), hostname (`${SUPER_PROJECTS_NAME}`), network (`${SUPER_PROJECTS_NAME}_default`), named-volume prefix (`${SUPER_PROJECTS_NAME}_gh-data`, `${SUPER_PROJECTS_NAME}_chrome-devtools-mcp-profile`, …), host ssh-agent socket (`$HOME/.cache/${SUPER_PROJECTS_NAME}-ssh-agent.sock` on WSLg, otherwise `$XDG_RUNTIME_DIR/${SUPER_PROJECTS_NAME}-ssh-agent.sock`), and the Cursor worker hint (`${SUPER_PROJECTS_NAME}_devcontainer`).
 
-Those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state, and git config. If two clones use the same `${SUPER_PROJECTS_NAME}` on one Docker daemon, they silently **share** that state.
+Those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state, and git config. If two clones use the same `${SUPER_PROJECTS_NAME}` on one Docker daemon, they silently **share** that state. In other words, the project will share volumes and network space with any other clone with the same name on the same Docker daemon.
 
 Copy the tracked example to a gitignored override and set the name (`acme_projects` is used below). Optionally set `${SUPER_PROJECTS_WORKDIR}` (container path `/${SUPER_PROJECTS_WORKDIR}`, default `workspaces`):
 
@@ -41,8 +41,6 @@ SUPER_PROJECTS_WORKDIR=workspaces
 Then start the container — `initializeCommand` reads `SUPER_PROJECTS_NAME` and `SUPER_PROJECTS_WORKDIR` from the override and writes generated `.devcontainer/.env` (bind-mount vars plus those keys and a `COMPOSE_PROJECT_NAME` mirror so Compose and the image build pick them up). Do not edit the name or workdir in generated `.env`; it is overwritten on every initialize.
 
 `${SUPER_PROJECTS_WORKDIR}` sets Dockerfile `WORKDIR`, the workspace bind mount, persist shortcuts, and Compose `working_dir`. Changing it also requires updating `"workspaceFolder"` in `.devcontainer/devcontainer.json` (JSON cannot interpolate the override). Changing `SUPER_PROJECTS_WORKDIR` needs an image rebuild (`devcontainer up --remove-existing-container` or Rebuild Container).
-
-**Skipping the copy silently keeps `super_projects`** and will share volumes with any other default clone on this Docker daemon.
 
 `devcontainer.json` `"name"` stays `super_projects` (IDE label only). MCP configs `docker compose … exec` the `devcontainer` service and do not hardcode `${SUPER_PROJECTS_NAME}-devcontainer-1`. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
 

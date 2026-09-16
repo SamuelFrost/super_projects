@@ -8,7 +8,7 @@
 # DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, HOST_WORKSPACE_DIR,
 # SUPER_PROJECTS_NAME, mirrored COMPOSE_PROJECT_NAME, and SUPER_PROJECTS_WORKDIR.
 # SUPER_PROJECTS_NAME and SUPER_PROJECTS_WORKDIR are read from
-# .env.namespace_override (else super_projects / workspaces).
+# .env.namespace_override; else they default to super_projects and workspaces respectively.
 #
 # Bind-mount sources must be paths on the Docker host. When initializeCommand
 # runs inside an outer devcontainer, container-local paths are resolved from a

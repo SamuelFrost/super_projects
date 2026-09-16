@@ -4,13 +4,13 @@ Chrome and `chrome-devtools-mcp` run inside the super_projects devcontainer. A d
 
 The `localhost_forward_proxy` Compose sidecar (`.devcontainer/scripts/localhost_forward_proxy`) does that:
 
-1. Watches the Docker socket for containers whose Compose `working_dir` is under the workspace (`/${SUPER_PROJECTS_WORKDIR:-workspaces}` inside the container, or `HOST_WORKSPACE_DIR` on the host), skipping the devcontainer's own Compose project.
-2. Attaches the `devcontainer` container to that stack's Compose network when it is not on it yet. This is also what makes the Compose service name resolve from the devcontainer (for example `http://sample_app_1/`).
-3. Listens on `127.0.0.1:<hostPort>` for every published TCP port and forwards connections to the container's private port. The sidecar shares the devcontainer's network namespace, so Chrome in the devcontainer sees those listeners as its own localhost.
+1. On container start/stop events, and every 15 seconds, inspects running containers whose Compose `working_dir` is under the workspace (`/${SUPER_PROJECTS_WORKDIR:-workspaces}` inside the container, or `HOST_WORKSPACE_DIR` on the host), skipping the devcontainer's own Compose project.
+2. Attaches the `devcontainer` to that stack's Compose network when it is not on it yet, so the sidecar can reach the container's private IP. Sharing a network also lets Compose DNS names resolve (for example `http://sample_app_1/`); that is Docker networking, not the proxy.
+3. Listens on `127.0.0.1:<hostPort>` for each published **TCP** port and copies the byte stream to the container's private port. UDP is not mirrored. The sidecar shares the devcontainer's network namespace, so Chrome in the devcontainer sees those listeners as its own localhost.
 
-Open the same URL you would use on the host, for example `http://localhost:3000`.
+Open the same URL you would use on the host, for example `http://localhost:3000`. HTTPS, HTTP/2 over TCP, and WebSockets work because the proxy does not interpret the stream. HTTP/3 / QUIC does not, because it is UDP.
 
-The sidecar starts with `.devcontainer/compose.yaml` (`devcontainer up`), reacts to container start/stop events, and re-checks every 15 seconds.
+The sidecar starts with `.devcontainer/compose.yaml` (`devcontainer up`).
 
 ## What you need in the project
 
@@ -25,7 +25,7 @@ No parent network, forwarder config, or Rails `config.hosts` entry is needed for
 
 ## Notes
 
-- A host port that is already in use inside the devcontainer (noVNC `6080`, VNC `5900`, Chrome debugging `9223`) is skipped and reported in the sidecar log; it is retried once the port is free.
+- A port already bound inside the devcontainer is skipped and reported in the sidecar log, then retried once it is free. Typical examples are noVNC (`6080`) and Chrome's remote-debugging port (`9223`).
 - `docker compose down` in the app may print `Network <project>_default Resource is still in use`: the devcontainer stays attached to that network so the forward can come back on the next `compose up`, which reuses the network. The command still exits 0.
 
 ## Troubleshooting

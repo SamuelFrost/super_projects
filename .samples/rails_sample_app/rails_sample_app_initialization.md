@@ -23,8 +23,8 @@ services:
     ports:
       - "3000:80"
       # available on the host machine and the devcontainer at http://localhost:3000
-      # also available within the parent devcontainer at http://sample_app_1 because the localhost_forward_proxy
-      # attaches that container to this stack's network (Rails needs `config.hosts << "sample_app_1"` in development.rb)
+      # available from the devcontainer at http://sample_app_1 when they share a Docker network
+      # Note: To be able to access sample_app_1 (from within the devcontainer), Rails needs `config.hosts << "sample_app_1"` in development.rb
     volumes:
       # Compose uses the host Docker socket, so bind sources must be host paths.
       # Inside the parent, HOST_WORKSPACE_DIR (initializeCommand) and
@@ -57,6 +57,6 @@ volumes:
 
 ## Browser access from the parent devcontainer
 
-After `docker compose up`, open **http://localhost:3000** in the parent desktop Chrome (and chrome-devtools-mcp). Published `ports:` are mirrored onto `127.0.0.1` inside the parent container — no extra Compose network and no Rails `config.hosts` change.
+After `docker compose up`, open **http://localhost:3000** in the parent desktop Chrome (and chrome-devtools-mcp). Published `ports:` are mirrored onto `127.0.0.1` inside the parent container. That localhost URL does not need a Compose network entry or a Rails `config.hosts` change.
 
 Details: [`.devcontainer/localhost-forwards.md`](../../.devcontainer/localhost-forwards.md).

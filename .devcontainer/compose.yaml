@@ -86,7 +86,7 @@ services:
     networks:
       - super_projects_default
 
-  # Mirrors the published ports of docker compose stacks in the workspace onto 127.0.0.1 so in-container
+  # Mirrors published TCP ports of docker compose stacks in the workspace onto 127.0.0.1 so in-container
   # Chrome / chrome-devtools-mcp can use http://localhost:<port> like on the host (see localhost-forwards.md).
   # Stop or start it on its own: docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml stop localhost_forward_proxy
   localhost_forward_proxy:

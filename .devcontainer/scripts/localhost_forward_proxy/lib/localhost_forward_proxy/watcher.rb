@@ -4,11 +4,11 @@ require_relative "docker"
 require_relative "tcp_proxy"
 
 module LocalhostForwardProxy
-  # Mirrors the published `ports:` of docker compose stacks in the workspace onto 127.0.0.1 of the parent devcontainer.
+  # Mirrors the published TCP `ports:` of docker compose stacks in the workspace onto 127.0.0.1 of the parent devcontainer.
   #
-  # Runs in the parent's network namespace. Every sync inspects the running containers, attaches the parent to a
-  # stack's compose network when it is not on it yet (which is also what makes http://<service>/ resolve), and keeps
-  # one TcpProxy per published host port pointed at the container's private port.
+  # Runs in the parent's network namespace. Every sync inspects running containers, attaches the parent to a
+  # stack's compose network when needed so the sidecar can reach the container's private IP, and keeps one
+  # TcpProxy per published host port.
   class Watcher
     HEARTBEAT_SECONDS = 15
     EVENTS_RETRY_SECONDS = 2

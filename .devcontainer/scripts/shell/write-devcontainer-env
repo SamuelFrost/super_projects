@@ -7,7 +7,7 @@
 # Writes .devcontainer/.env for Compose/Dockerfile:
 # DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, HOST_WORKSPACE_DIR,
 # SUPER_PROJECTS_NAME, mirrored COMPOSE_PROJECT_NAME, and SUPER_PROJECTS_WORKDIR.
-# SUPER_PROJECTS_NAME and SUPER_PROJECTS_WORKDIR come from
+# SUPER_PROJECTS_NAME and SUPER_PROJECTS_WORKDIR are read from
 # .env.namespace_override (else super_projects / workspaces).
 #
 # Bind-mount sources must be paths on the Docker host. When initializeCommand
@@ -16,13 +16,20 @@
 set -eu
 
 cd "$(dirname "$0")/../../.."
-# shellcheck source=devcontainer-env-lib.sh
-. .devcontainer/scripts/shell/devcontainer-env-lib.sh
 
 DEVCONTAINER_ENV_FILE=.devcontainer/.env
 PARENT_ENV="../.devcontainer/.env"
 PARENT_COMPOSE="../.devcontainer/compose.yaml"
 SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
+
+# Read KEY=value from a file (values may contain spaces, e.g. 1Password sockets).
+env_file_var() {
+  _file=$1
+  _key=$2
+  [ -f "$_file" ] || return 1
+  _line=$(grep -m1 "^${_key}=" "$_file") || return 1
+  printf '%s' "${_line#*=}" | tr -d '\r'
+}
 
 # Reject values that would corrupt .env or the compose volume spec.
 validate_bind_path() {
@@ -139,8 +146,15 @@ validate_bind_path SELECTED_AGENT_SOCK "$SELECTED_AGENT_SOCK"
 
 resolve_compose_bind_paths "$SELECTED_AGENT_SOCK"
 
-SUPER_PROJECTS_NAME=$(resolve_super_projects_name) || exit 1
-SUPER_PROJECTS_WORKDIR=$(resolve_super_projects_workdir) || exit 1
+SUPER_PROJECTS_NAME=super_projects
+SUPER_PROJECTS_WORKDIR=workspaces
+
+if _val=$(env_file_var .devcontainer/.env.namespace_override SUPER_PROJECTS_NAME); then
+  SUPER_PROJECTS_NAME=$_val
+fi
+if _val=$(env_file_var .devcontainer/.env.namespace_override SUPER_PROJECTS_WORKDIR); then
+  SUPER_PROJECTS_WORKDIR=$_val
+fi
 
 HOST_OS=$(uname -s)
 case "$HOST_OS" in

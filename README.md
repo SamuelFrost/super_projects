@@ -38,7 +38,7 @@ SUPER_PROJECTS_NAME=acme_projects
 SUPER_PROJECTS_WORKDIR=workspaces
 ```
 
-Bare assignment only: no quotes, no spaces, no `export` prefix. Then start the container — `initializeCommand` reads the override and writes generated `.devcontainer/.env` (bind-mount vars plus `SUPER_PROJECTS_NAME`, a `COMPOSE_PROJECT_NAME` mirror, and `SUPER_PROJECTS_WORKDIR` so Compose and the image build pick them up). Do not edit the name or workdir in generated `.env`; it is overwritten on every initialize.
+Then start the container — `initializeCommand` reads `SUPER_PROJECTS_NAME` and `SUPER_PROJECTS_WORKDIR` from the override and writes generated `.devcontainer/.env` (bind-mount vars plus those keys and a `COMPOSE_PROJECT_NAME` mirror so Compose and the image build pick them up). Do not edit the name or workdir in generated `.env`; it is overwritten on every initialize.
 
 `${SUPER_PROJECTS_WORKDIR}` sets Dockerfile `WORKDIR`, the workspace bind mount, persist shortcuts, and Compose `working_dir`. Changing it also requires updating `"workspaceFolder"` in `.devcontainer/devcontainer.json` (JSON cannot interpolate the override). Changing `SUPER_PROJECTS_WORKDIR` needs an image rebuild (`devcontainer up --remove-existing-container` or Rebuild Container).
 
@@ -179,7 +179,7 @@ The VNC/Chrome stack starts automatically when the container starts and can be r
 
 Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image) and `shell/` (host `initializeCommand` and runtime shell helpers).
 
-`.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. Set `${SUPER_PROJECTS_NAME}` and `${SUPER_PROJECTS_WORKDIR}` in `.devcontainer/.env.namespace_override` (copy the `.example`); initialize copies them into `.env`. VS Code, Cursor, and `devcontainer up` regenerate `.env` each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first, then always pass `--project-directory .devcontainer`.
+`.devcontainer/.env` is generated on the host by `initializeCommand` and is gitignored. Set `${SUPER_PROJECTS_NAME}` and `${SUPER_PROJECTS_WORKDIR}` in `.devcontainer/.env.namespace_override` (copy the `.example`); initialize copies those two keys into `.env`. VS Code, Cursor, and `devcontainer up` regenerate `.env` each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first, then always pass `--project-directory .devcontainer`.
 
 ### Persisted data
 

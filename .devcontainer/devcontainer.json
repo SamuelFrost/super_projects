@@ -1,6 +1,6 @@
 // For format details, see https://containers.dev/implementors/json_reference/.
 {
-  "name": "super_projects",
+  "name": "samuel_frost_personal",
   "dockerComposeFile": "compose.yaml",
   "service": "devcontainer",
   "workspaceFolder": "/workspaces/",

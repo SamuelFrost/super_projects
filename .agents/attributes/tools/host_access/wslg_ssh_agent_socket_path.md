@@ -1,11 +1,11 @@
 # Domain context — WSLg ssh-agent socket path
 
-When **WSLg** sets `XDG_RUNTIME_DIR` under `/mnt/wslg/` (often `/mnt/wslg/runtime-dir`), the **managed** agent socket path used by `ensure-host-ssh-agent` can differ from the compose fallback when `.devcontainer/.env` is missing. Forks rename `super_projects-ssh-agent.sock` per fork guidelines.
+When **WSLg** sets `XDG_RUNTIME_DIR` under `/mnt/wslg/` (often `/mnt/wslg/runtime-dir`), the **managed** agent socket path used by `ensure-host-ssh-agent` can differ from the compose fallback when `.devcontainer/.env` is missing. Forks rename `samuel_frost_personal-ssh-agent.sock` per fork guidelines.
 
 | When | Typical managed-socket path |
 |------|----------------------------|
-| Manual `docker compose` before `.env` exists (compose `${HOST_SSH_AUTH_SOCK:-...}` default) | `$XDG_RUNTIME_DIR/super_projects-ssh-agent.sock` |
-| After `initializeCommand` when the managed socket is selected | `$HOME/.cache/super_projects-ssh-agent.sock` |
+| Manual `docker compose` before `.env` exists (compose `${HOST_SSH_AUTH_SOCK:-...}` default) | `$XDG_RUNTIME_DIR/samuel_frost_personal-ssh-agent.sock` |
+| After `initializeCommand` when the managed socket is selected | `$HOME/.cache/samuel_frost_personal-ssh-agent.sock` |
 
 `ensure-host-ssh-agent` uses `~/.cache/...` on WSLg because the runtime-dir path can be occupied by a **directory**, which prevents `ssh-agent` from binding a socket. Compose keeps the `$XDG_RUNTIME_DIR` default so manual `docker compose down`, `ps`, and `config` work before initialize has run.
 

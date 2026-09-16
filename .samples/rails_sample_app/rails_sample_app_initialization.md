@@ -1,6 +1,6 @@
 # Simple example project: create a new Rails project inside your fork
 
-<!-- note: the project is created as an untracked subdirectory of this repo (the parent-directory pattern). If you renamed your fork, use your project's network name (e.g. acme_projects_default) in place of super_projects_default below. -->
+<!-- note: the project is created as an untracked subdirectory of this repo (the parent-directory pattern). This fork's parent network is samuel_frost_personal_default. -->
 
 ```bash
 docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
@@ -24,17 +24,17 @@ services:
       - "3000:80"
       # available on the host machine at http://localhost:3000
       # available within the parent devcontainer at http://sample_app_1 when that container
-      # shares super_projects_default (add `config.hosts << "sample_app_1"` in development.rb)
+      # shares samuel_frost_personal_default (add `config.hosts << "sample_app_1"` in development.rb)
     volumes:
       # LOCAL_WORKSPACE_FOLDER is the host path of the parent workspace (set by the
-      # super_projects devcontainer). When unset, `..` is this project's parent.
+      # samuel_frost_personal devcontainer). When unset, `..` is this project's parent.
       - ${LOCAL_WORKSPACE_FOLDER:-..}/sample_app_1:/rails
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - default
-      - super_projects_default
+      - samuel_frost_personal_default
 
   postgres:
     image: postgres:18.3
@@ -51,10 +51,10 @@ services:
       retries: 5
 
 networks:
-  # Join the parent super_projects network so Chrome in the devcontainer can
+  # Join the parent samuel_frost_personal network so Chrome in the devcontainer can
   # reach http://sample_app_1. App and Postgres talk on `default` without it.
   # The network must already exist (created by .devcontainer/compose.yaml).
-  super_projects_default:
+  samuel_frost_personal_default:
     external: true
 
 volumes:

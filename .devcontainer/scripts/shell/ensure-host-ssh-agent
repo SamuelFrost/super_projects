@@ -18,8 +18,8 @@ SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
 
 # WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
 case "${XDG_RUNTIME_DIR:-}" in
-  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/super_projects-ssh-agent.sock" ;;
-  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/super_projects-ssh-agent.sock" ;;
+  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/samuel_frost_personal-ssh-agent.sock" ;;
+  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/samuel_frost_personal-ssh-agent.sock" ;;
 esac
 
 # Docker bind-mounts create a directory at a missing source path; if compose ever

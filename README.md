@@ -1,4 +1,4 @@
-# super_projects
+# samuel_frost_personal
 
 A containerized parent-directory environment for software development teams.
 
@@ -6,7 +6,7 @@ Fork this repository for your company, place your fork where you would normally 
 
 ## What this is
 
-`super_projects` is designed to be your projects' parent directory. Rather than configuring each developer's machine individually, the dev environment (Docker, IDE settings, AI tooling) is codified here and shared via git.
+`samuel_frost_personal` is designed to be your projects' parent directory. Rather than configuring each developer's machine individually, the dev environment (Docker, IDE settings, AI tooling) is codified here and shared via git.
 
 It is a template meant to be forked once per company (or team), customized, and shared across the organization:
 
@@ -23,26 +23,26 @@ The intended way to use this project is one fork per company (or team). Your for
 
 ### 1. Rename the container (do this first)
 
-The Docker Compose project name — `name: "super_projects"` in `.devcontainer/compose.yaml` — determines the container name (`super_projects-devcontainer-1`), the Docker network name, and the prefix of every named volume. If your fork keeps the default name, it will collide with any other fork or copy of this project on the same machine, and Docker will silently **share the named volumes** between them. With the current setup that is usually not a big deal, but those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state (`cursor-data`), and git config — so a name collision can leak state and credentials between unrelated projects. Rename as soon as you fork, before anyone starts the container.
+The Docker Compose project name — `name: "samuel_frost_personal"` in `.devcontainer/compose.yaml` — determines the container name (`samuel_frost_personal-devcontainer-1`), the Docker network name, and the prefix of every named volume. If a fork keeps the upstream `super_projects` name, it will collide with any other fork or copy of this project on the same machine, and Docker will silently **share the named volumes** between them. With the current setup that is usually not a big deal, but those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state (`cursor-data`), and git config — so a name collision can leak state and credentials between unrelated projects. This fork already uses `samuel_frost_personal`; keep that name consistent, and rename again before anyone starts the container if you fork further.
 
-Pick your company's project name (`acme_projects` is used as the example below) and apply it consistently — the container name in the MCP configs is derived from the Compose project name, so they must be changed together.
+This fork's project name is `samuel_frost_personal`. Apply it consistently — the container name in the MCP configs is derived from the Compose project name, so they must stay in sync.
 
 **Required — Docker and the MCP configs use these names directly:**
 
 - `.devcontainer/compose.yaml`
-  - `name: "super_projects"` → `name: "acme_projects"` — the Compose project name. This is the name that matters most: it determines the container name (`acme_projects-devcontainer-1`) and the named-volume prefix (`acme_projects_gh-data`, `acme_projects_chrome-devtools-mcp-profile`, …), which is what prevents volume sharing between forks.
-  - `hostname: super_projects` → `hostname: acme_projects` — the container's hostname.
-  - `super_projects_default` → `acme_projects_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`. Project compose files that join this network (like the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) must reference the same name.
-  - While editing, also update the comments quoting `docker volume rm super_projects_…` so they stay copy-pasteable.
+  - `name: "samuel_frost_personal"` — the Compose project name. This is the name that matters most: it determines the container name (`samuel_frost_personal-devcontainer-1`) and the named-volume prefix (`samuel_frost_personal_gh-data`, `samuel_frost_personal_chrome-devtools-mcp-profile`, …), which is what prevents volume sharing between forks.
+  - `hostname: samuel_frost_personal` — the container's hostname.
+  - `samuel_frost_personal_default` in all three network entries: the service's `networks:` list, the top-level `networks:` key, and its `name:`. Project compose files that join this network (like the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) must reference the same name.
+  - While editing, also update the comments quoting `docker volume rm samuel_frost_personal_…` so they stay copy-pasteable.
 - `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`
-  - Replace the container name `super_projects-devcontainer-1` with `acme_projects-devcontainer-1` (one occurrence in each file). These configs `docker exec` into the container by name, so a mismatch with the Compose project name breaks the chrome-devtools MCP server.
+  - Container name `samuel_frost_personal-devcontainer-1` (one occurrence in each file). These configs `docker exec` into the container by name, so a mismatch with the Compose project name breaks the chrome-devtools MCP server.
 - `.devcontainer/devcontainer.json`
-  - `"name": "super_projects"` → `"name": "acme_projects"` — the label VS Code / Cursor shows for the devcontainer.
+  - `"name": "samuel_frost_personal"` — the label VS Code / Cursor shows for the devcontainer.
 
 **Recommended — host-side helper scripts:**
 
-- `.devcontainer/scripts/shell/ensure-host-ssh-agent` — rename the `super_projects-ssh-agent.sock` socket filename so your fork keeps its own stable ssh-agent socket on the host instead of sharing one with other forks.
-- `.devcontainer/scripts/dockerfile/print-cursor-worker-hint` — rename the suggested Cursor worker name `super_projects_devcontainer`.
+- `.devcontainer/scripts/shell/ensure-host-ssh-agent` — this fork uses `samuel_frost_personal-ssh-agent.sock` so it keeps its own stable ssh-agent socket on the host instead of sharing one with other forks.
+- `.devcontainer/scripts/dockerfile/print-cursor-worker-hint` — suggested Cursor worker name `samuel_frost_personal_devcontainer`.
 
 **Documentation mentions — no rush.** Every other occurrence (volume names quoted in this README and in `.devcontainer/persist/README.md`, the `.directory_information.md` files, the agent profile template under `.agents/`) is documentation with no functional effect; update them whenever convenient — `git grep super_projects` lists them all. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
 
@@ -180,25 +180,25 @@ Tool state uses **named Docker volumes** (macOS-friendly I/O). Each volume is al
 
 | Volume | Home path | Persist shortcut | Purpose |
 |--------|-----------|------------------|---------|
-| `super_projects_gemini-data` | `~/.gemini` | `persist/gemini` | Gemini CLI sessions/config |
-| `super_projects_gh-data` | `~/.config/gh` | `persist/gh` | GitHub CLI auth |
-| `super_projects_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
-| `super_projects_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
-| `super_projects_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
-| `super_projects_cursor-data` | `~/.cursor` | `persist/cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
+| `samuel_frost_personal_gemini-data` | `~/.gemini` | `persist/gemini` | Gemini CLI sessions/config |
+| `samuel_frost_personal_gh-data` | `~/.config/gh` | `persist/gh` | GitHub CLI auth |
+| `samuel_frost_personal_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
+| `samuel_frost_personal_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
+| `samuel_frost_personal_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
+| `samuel_frost_personal_cursor-data` | `~/.cursor` | `persist/cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
 | host ssh-agent socket | `/ssh-agent.sock` | — | Host-forwarded agent (private keys stay on the host) |
 | host `known_hosts` (ro bind) | `~/.ssh/known_hosts` | — | Shared SSH host keys |
 
 Named volumes survive container rebuilds. Remove one explicitly if you need a clean slate, for example:
 ```sh
-docker volume rm super_projects_chrome-devtools-mcp-profile
+docker volume rm samuel_frost_personal_chrome-devtools-mcp-profile
 ```
 
 ### Tool version management (mise)
 
 `mise` is pre-installed and activated in every shell. Configure the tools your project needs by editing `.mise.toml` or including a `mise.toml` or `.tool-versions` file in the a project's directory see [mise documentation](https://mise.jdx.dev/getting-started.html) for more details.
 
-Tools defined in the top level directory `.mise.toml` are installed automatically when the container starts (`mise install` in `compose.yaml`). Note: downloads and installs are stored in the `mise-data` Docker volume, so they will persist across container rebuilds unless you explicitly remove the volume with `docker volume rm super_projects_mise-data`.
+Tools defined in the top level directory `.mise.toml` are installed automatically when the container starts (`mise install` in `compose.yaml`). Note: downloads and installs are stored in the `mise-data` Docker volume, so they will persist across container rebuilds unless you explicitly remove the volume with `docker volume rm samuel_frost_personal_mise-data`.
 
 To install tools from mise in a particular project directory run `mise install` in the project directory.
 

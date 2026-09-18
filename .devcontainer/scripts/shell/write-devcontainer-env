@@ -6,9 +6,8 @@
 #
 # Writes .devcontainer/.env for Compose/Dockerfile:
 # DEVELOPER_UID, DOCKER_GID, HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, HOST_WORKSPACE_DIR,
-# SUPER_PROJECTS_NAME, mirrored COMPOSE_PROJECT_NAME, and SUPER_PROJECTS_WORKDIR.
-# SUPER_PROJECTS_NAME and SUPER_PROJECTS_WORKDIR are read from
-# .env.namespace_override; else they default to super_projects and workspaces respectively.
+# SUPER_PROJECTS_NAME, and mirrored COMPOSE_PROJECT_NAME.
+# SUPER_PROJECTS_NAME is read from .env.namespace_override; else it defaults to super_projects.
 #
 # Bind-mount sources must be paths on the Docker host. When initializeCommand
 # runs inside an outer devcontainer, container-local paths are resolved from a
@@ -71,60 +70,64 @@ parent_env_trusted() {
   [ -f "$PARENT_COMPOSE" ]
 }
 
-# Docker Compose bind mounts need host-side paths. When initializeCommand runs
-# inside an outer devcontainer, $HOME and the agent socket may be container-local;
-# reuse recorded host paths from a prior .env.
+# Docker Compose bind mounts need host-side paths. On the Docker host those are
+# local paths. Inside an outer devcontainer, $HOME and the agent socket are
+# container-local, so reuse the outer's recorded host paths and append this
+# repo's path relative to the outer workspace directory.
 resolve_compose_bind_paths() {
   _agent_sock=$1
   _repo_root=$(pwd)
 
-  if needs_docker_host_paths "$_agent_sock"; then
-    case "$_agent_sock" in
-      /ssh-agent.sock)
-        echo "devcontainer env: resolving Docker host bind paths from .env (agent socket is forwarded at $_agent_sock)" >&2
-        ;;
-      *)
-        echo "devcontainer env: resolving Docker host bind paths from .env (running inside a devcontainer)" >&2
-        ;;
-    esac
-
-    if ! parent_env_trusted; then
-      if [ -f "$PARENT_ENV" ]; then
-        echo "devcontainer env: ignoring $PARENT_ENV (no $PARENT_COMPOSE; not an outer devcontainer scaffold)" >&2
-      fi
-      echo "devcontainer env: cannot resolve Docker host bind paths; expected trusted $PARENT_ENV with $PARENT_COMPOSE" >&2
-      exit 1
-    fi
-
-    _home=$(env_file_var "$PARENT_ENV" HOST_HOME_DIR) || _home=
-    _sock=$(env_file_var "$PARENT_ENV" HOST_SSH_AUTH_SOCK) || _sock=
-    _workspace=$(env_file_var "$PARENT_ENV" HOST_WORKSPACE_DIR) || _workspace=
-    if [ -z "$_home" ] || [ -z "$_sock" ] || [ -z "$_workspace" ]; then
-      echo "devcontainer env: cannot resolve Docker host bind paths; $PARENT_ENV is missing HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, or HOST_WORKSPACE_DIR" >&2
-      exit 1
-    fi
-    validate_bind_path HOST_HOME_DIR "$_home"
-    validate_bind_path HOST_SSH_AUTH_SOCK "$_sock"
-    validate_bind_path HOST_WORKSPACE_DIR "$_workspace"
-    _parent_root=$(CDPATH= cd -- "$(dirname "$PARENT_ENV")/.." && pwd)
-    _rel=${_repo_root#"${_parent_root}/"}
-    if [ "$_rel" = "$_repo_root" ] || [ -z "$_rel" ]; then
-      echo "devcontainer env: cannot resolve Docker host bind paths; $PARENT_ENV workspace root does not contain this repository" >&2
-      exit 1
-    fi
-    echo "devcontainer env: using Docker host paths from $PARENT_ENV" >&2
-    COMPOSE_HOST_HOME=$_home
-    COMPOSE_SSH_AUTH_SOCK=$_sock
-    HOST_WORKSPACE_DIR="$_workspace/$_rel"
+  if ! needs_docker_host_paths "$_agent_sock"; then
+    COMPOSE_HOST_HOME=$HOME
+    COMPOSE_SSH_AUTH_SOCK=$_agent_sock
+    HOST_WORKSPACE_DIR=$_repo_root
+    validate_bind_path HOST_HOME_DIR "$COMPOSE_HOST_HOME"
+    validate_bind_path HOST_SSH_AUTH_SOCK "$COMPOSE_SSH_AUTH_SOCK"
     validate_bind_path HOST_WORKSPACE_DIR "$HOST_WORKSPACE_DIR"
     return
   fi
 
-  COMPOSE_HOST_HOME=$HOME
-  COMPOSE_SSH_AUTH_SOCK=$_agent_sock
-  HOST_WORKSPACE_DIR=$_repo_root
-  validate_bind_path HOST_HOME_DIR "$COMPOSE_HOST_HOME"
-  validate_bind_path HOST_SSH_AUTH_SOCK "$COMPOSE_SSH_AUTH_SOCK"
+  case "$_agent_sock" in
+    /ssh-agent.sock)
+      echo "devcontainer env: resolving Docker host bind paths from .env (agent socket is forwarded at $_agent_sock)" >&2
+      ;;
+    *)
+      echo "devcontainer env: resolving Docker host bind paths from .env (running inside a devcontainer)" >&2
+      ;;
+  esac
+
+  if ! parent_env_trusted; then
+    if [ -f "$PARENT_ENV" ]; then
+      echo "devcontainer env: ignoring $PARENT_ENV (no $PARENT_COMPOSE; not an outer devcontainer scaffold)" >&2
+    fi
+    echo "devcontainer env: cannot resolve Docker host bind paths; expected trusted $PARENT_ENV with $PARENT_COMPOSE" >&2
+    exit 1
+  fi
+
+  _home=$(env_file_var "$PARENT_ENV" HOST_HOME_DIR) || _home=
+  _sock=$(env_file_var "$PARENT_ENV" HOST_SSH_AUTH_SOCK) || _sock=
+  _workspace=$(env_file_var "$PARENT_ENV" HOST_WORKSPACE_DIR) || _workspace=
+  if [ -z "$_home" ] || [ -z "$_sock" ] || [ -z "$_workspace" ]; then
+    echo "devcontainer env: cannot resolve Docker host bind paths; $PARENT_ENV is missing HOST_HOME_DIR, HOST_SSH_AUTH_SOCK, or HOST_WORKSPACE_DIR" >&2
+    exit 1
+  fi
+  validate_bind_path HOST_HOME_DIR "$_home"
+  validate_bind_path HOST_SSH_AUTH_SOCK "$_sock"
+  validate_bind_path HOST_WORKSPACE_DIR "$_workspace"
+
+  # Outer workspace directory (parent of ../.devcontainer). Nested clones of this
+  # scaffold live under /workspaces; other wrappers may use a different mount.
+  _parent_root=$(CDPATH= cd -- "$(dirname "$PARENT_ENV")/.." && pwd)
+  _rel=${_repo_root#"${_parent_root}/"}
+  if [ "$_rel" = "$_repo_root" ] || [ -z "$_rel" ]; then
+    echo "devcontainer env: cannot resolve Docker host bind paths; $PARENT_ENV workspace root does not contain this repository" >&2
+    exit 1
+  fi
+  echo "devcontainer env: using Docker host paths from $PARENT_ENV" >&2
+  COMPOSE_HOST_HOME=$_home
+  COMPOSE_SSH_AUTH_SOCK=$_sock
+  HOST_WORKSPACE_DIR="$_workspace/$_rel"
   validate_bind_path HOST_WORKSPACE_DIR "$HOST_WORKSPACE_DIR"
 }
 
@@ -147,13 +150,9 @@ validate_bind_path SELECTED_AGENT_SOCK "$SELECTED_AGENT_SOCK"
 resolve_compose_bind_paths "$SELECTED_AGENT_SOCK"
 
 SUPER_PROJECTS_NAME=super_projects
-SUPER_PROJECTS_WORKDIR=workspaces
 
 if _val=$(env_file_var .devcontainer/.env.namespace_override SUPER_PROJECTS_NAME); then
   SUPER_PROJECTS_NAME=$_val
-fi
-if _val=$(env_file_var .devcontainer/.env.namespace_override SUPER_PROJECTS_WORKDIR); then
-  SUPER_PROJECTS_WORKDIR=$_val
 fi
 
 HOST_OS=$(uname -s)
@@ -170,5 +169,4 @@ esac
   printf 'HOST_WORKSPACE_DIR=%s\n' "$HOST_WORKSPACE_DIR"
   printf 'SUPER_PROJECTS_NAME=%s\n' "$SUPER_PROJECTS_NAME"
   printf 'COMPOSE_PROJECT_NAME=%s\n' "$SUPER_PROJECTS_NAME"
-  printf 'SUPER_PROJECTS_WORKDIR=%s\n' "$SUPER_PROJECTS_WORKDIR"
 } >"$DEVCONTAINER_ENV_FILE"

@@ -8,14 +8,13 @@ services:
       args:
         DEVELOPER_UID: ${DEVELOPER_UID:-501}
         DOCKER_GID: ${DOCKER_GID:-1}
-        SUPER_PROJECTS_WORKDIR: ${SUPER_PROJECTS_WORKDIR:-workspaces}
     pull_policy: never
     volumes:
       # HOST_WORKSPACE_DIR comes from generated .devcontainer/.env (gitignored).
       # IDE/devcontainer up regenerate it via initializeCommand; before manual
       # `docker compose`, re-run initializeCommand.sh and use
       # `--project-directory .devcontainer` so .env is loaded.
-      - ${HOST_WORKSPACE_DIR:-../}:/${SUPER_PROJECTS_WORKDIR:-workspaces}:cached
+      - ${HOST_WORKSPACE_DIR:-../}:/workspaces:cached
       # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -26,23 +25,23 @@ services:
 
       # Gemini CLI sessions/config
       - gemini-data:/home/developer/.gemini
-      - gemini-data:/${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/persist/gemini
+      - gemini-data:/workspaces/.devcontainer/persist/gemini
       # GitHub CLI auth tokens (gh auth login)
       - gh-data:/home/developer/.config/gh
-      - gh-data:/${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/persist/gh
+      - gh-data:/workspaces/.devcontainer/persist/gh
       # Git XDG config (~/.config/git/config)
       - git-config:/home/developer/.config/git
-      - git-config:/${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/persist/git
+      - git-config:/workspaces/.devcontainer/persist/git
       # Chrome profile: named volume so Docker initialises it from the image
       # (a bind-mount would create the parent dir as root, crashing Chrome).
       - chrome-devtools-mcp-profile:/home/developer/chrome-profile
-      - chrome-devtools-mcp-profile:/${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/persist/chrome
+      - chrome-devtools-mcp-profile:/workspaces/.devcontainer/persist/chrome
       # mise tool cache: persists downloads/installs across rebuilds
       - mise-data:/home/developer/.local/share/mise
-      - mise-data:/${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/persist/mise
+      - mise-data:/workspaces/.devcontainer/persist/mise
       # Cursor agent state: transcripts, CLI sessions, MCP config, skills
       - cursor-data:/home/developer/.cursor
-      - cursor-data:/${SUPER_PROJECTS_WORKDIR:-workspaces}/.devcontainer/persist/cursor
+      - cursor-data:/workspaces/.devcontainer/persist/cursor
       # Host ssh-agent only (private keys never enter the container).
       # HOST_SSH_AUTH_SOCK is set by initializeCommand → .devcontainer/scripts/shell/initializeCommand.sh.
       # The default allows manual `docker compose` (down, ps, ...) before .env exists.
@@ -63,17 +62,16 @@ services:
         ensure-auth
         print-cursor-worker-hint
         start-vnc
-        cd /${SUPER_PROJECTS_WORKDIR:-workspaces}
+        cd /workspaces
         mise install
         exec tail -f /dev/null
-    working_dir: /${SUPER_PROJECTS_WORKDIR:-workspaces}
+    working_dir: /workspaces
     hostname: ${SUPER_PROJECTS_NAME:-super_projects}
     user: developer
     environment:
       UID: ${DEVELOPER_UID:-501}
       SSH_AUTH_SOCK: /ssh-agent.sock
       SUPER_PROJECTS_NAME: ${SUPER_PROJECTS_NAME:-super_projects}
-      SUPER_PROJECTS_WORKDIR: ${SUPER_PROJECTS_WORKDIR:-workspaces}
       HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
     ports:
       # Host ports offset +1 vs super_projects (6080/5900/9223) so both stacks can run together.
@@ -99,10 +97,8 @@ services:
     networks:
       - super_projects_default
     environment:
-      # SUPER_PROJECTS_NAME is this compose project (skipped so the sidecar does not proxy the devcontainer); the workdir vars are workspace prefixes (see Watcher).
+      # SUPER_PROJECTS_NAME is this compose project (skipped so the sidecar does not proxy the devcontainer).
       SUPER_PROJECTS_NAME: ${SUPER_PROJECTS_NAME:-super_projects}
-      SUPER_PROJECTS_WORKDIR: ${SUPER_PROJECTS_WORKDIR:-workspaces}
-      HOST_WORKSPACE_DIR: ${HOST_WORKSPACE_DIR}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Runs the checked-out code, so a git pull applies on the next restart without rebuilding the image.

@@ -10,6 +10,8 @@
         "devcontainer",
         "mise",
         "exec",
+        "-C",
+        "/workspaces",
         "--",
         "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"

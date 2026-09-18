@@ -13,6 +13,7 @@ module LocalhostForwardProxy
     HEARTBEAT_SECONDS = 15
     EVENTS_RETRY_SECONDS = 2
     DEVCONTAINER_SERVICE = "devcontainer"
+    CONTAINER_WORKSPACE = "/workspaces"
     # Docker's built-in networks: skipped as attach targets. host/none cannot be used this way; default bridge is not a Compose project network.
     UNATTACHABLE_NETWORKS = %w[bridge host none].freeze
 
@@ -30,7 +31,7 @@ module LocalhostForwardProxy
     def run
       $stdout.sync = true
       %w[INT TERM].each { |signal| Signal.trap(signal) { exit } }
-      log("mirroring published ports of compose stacks under #{workspace_prefixes.join(" or ")} onto 127.0.0.1 and ::1")
+      log("mirroring published ports of compose stacks under #{CONTAINER_WORKSPACE} (and the host path bound there) onto 127.0.0.1 and ::1")
 
       sync
       heartbeat = Thread.new do
@@ -64,10 +65,11 @@ module LocalhostForwardProxy
     private
 
     def desired_forwards(containers, devcontainer)
+      prefixes = workspace_prefixes(devcontainer)
       devcontainer_networks = network_names(devcontainer)
       forwards = {}
       containers.each do |container|
-        next unless workspace_stack_container?(container)
+        next unless workspace_stack_container?(container, prefixes)
 
         published_ports = published_tcp_ports(container)
         next if published_ports.empty?
@@ -89,11 +91,11 @@ module LocalhostForwardProxy
       forwards
     end
 
-    def workspace_stack_container?(container)
+    def workspace_stack_container?(container, prefixes)
       return false if compose_label(container, "project") == compose_project_name
 
       working_dir = compose_label(container, "project.working_dir").to_s
-      workspace_prefixes.any? { |prefix| working_dir == prefix || working_dir.start_with?("#{prefix}/") }
+      prefixes.any? { |prefix| working_dir == prefix || working_dir.start_with?("#{prefix}/") }
     end
 
     # { host_port => private_port } for every TCP port the container publishes.
@@ -166,13 +168,20 @@ module LocalhostForwardProxy
       @env.fetch("SUPER_PROJECTS_NAME", "super_projects")
     end
 
-    # The workspace as seen from inside the devcontainer and from the Docker host: compose stacks started from
-    # either place carry that path in their working_dir label.
-    def workspace_prefixes
-      prefixes = ["/#{@env.fetch("SUPER_PROJECTS_WORKDIR", "workspaces")}"]
-      host_workspace_dir = @env["HOST_WORKSPACE_DIR"].to_s
-      prefixes << host_workspace_dir unless host_workspace_dir.empty?
+    # Compose stacks started in the container have working_dir under /workspaces.
+    # Stacks started on the host use the host path bound at that same mount.
+    def workspace_prefixes(devcontainer)
+      prefixes = [CONTAINER_WORKSPACE]
+      host_source = workspace_bind_source(devcontainer)
+      prefixes << host_source unless host_source.nil? || host_source.empty? || host_source == CONTAINER_WORKSPACE
       prefixes
+    end
+
+    def workspace_bind_source(devcontainer)
+      mount = (devcontainer["Mounts"] || []).find do |candidate|
+        candidate["Destination"].to_s.chomp("/") == CONTAINER_WORKSPACE
+      end
+      mount&.[]("Source")
     end
 
     def compose_label(container, key)

@@ -1,10 +1,7 @@
 ARG UBUNTU_VERSION=24.04
 FROM ubuntu:${UBUNTU_VERSION}
 
-# Container workspace path is /${SUPER_PROJECTS_WORKDIR} (default /workspaces).
-# Passed as a build arg from compose so WORKDIR matches the bind mount.
-ARG SUPER_PROJECTS_WORKDIR=workspaces
-WORKDIR /${SUPER_PROJECTS_WORKDIR}
+WORKDIR /workspaces
 
 # Prevent interactive prompts during apt installs
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -297,14 +294,12 @@ RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
   && apt-get update -qq && apt-get install -y --no-install-recommends mise \
   && rm -rf /var/lib/apt/lists/*
 
-# Trust any mise config under /${SUPER_PROJECTS_WORKDIR} without interactive `mise trust`.
-ARG SUPER_PROJECTS_WORKDIR=workspaces
-ENV SUPER_PROJECTS_WORKDIR=${SUPER_PROJECTS_WORKDIR}
-ENV MISE_TRUSTED_CONFIG_PATHS=/${SUPER_PROJECTS_WORKDIR}
+# Trust any mise config under /workspaces without interactive `mise trust`.
+ENV MISE_TRUSTED_CONFIG_PATHS=/workspaces
 
 # Source mise-shell-init for interactive terminals; report auth status on TTYs.
 RUN printf '%s\n' \
-  "[ -r /${SUPER_PROJECTS_WORKDIR}/.devcontainer/scripts/shell/mise-shell-init.sh ] && . /${SUPER_PROJECTS_WORKDIR}/.devcontainer/scripts/shell/mise-shell-init.sh" \
+  '[ -r /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh ] && . /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh' \
   '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' \
   >> /home/developer/.bashrc
 

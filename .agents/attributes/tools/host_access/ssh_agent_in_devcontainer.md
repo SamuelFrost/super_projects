@@ -3,7 +3,7 @@
 Private keys stay on the host. Before the container starts, `initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (VS Code, Cursor, and `devcontainer up`):
 
 1. **`ensure-host-ssh-agent`** — reads `${SUPER_PROJECTS_NAME}` from `.devcontainer/.env.namespace_override` (not generated `.env`) for the managed socket filename; selects or starts a host agent; writes `.devcontainer/.selected-ssh-agent.env` with the chosen socket path
-2. **`write-devcontainer-env`** — writes gitignored `.devcontainer/.env` (bind-mount vars plus `SUPER_PROJECTS_NAME`, mirrored `COMPOSE_PROJECT_NAME`, and `SUPER_PROJECTS_WORKDIR`) for Compose/Dockerfile bind mounts
+2. **`write-devcontainer-env`** — writes gitignored `.devcontainer/.env` (bind-mount vars plus `SUPER_PROJECTS_NAME` and mirrored `COMPOSE_PROJECT_NAME`) for Compose/Dockerfile bind mounts
 3. **`refresh-docker-desktop-ssh-relay`** — Docker Desktop on WSL2 only; one-shot bind mount of `HOST_SSH_AUTH_SOCK` so stale relay paths exist before compose starts an existing container
 
 Compose forwards the host agent at `/ssh-agent.sock` (from `HOST_SSH_AUTH_SOCK`) and mounts `known_hosts` read-only. `ensure-auth` (inside the container) reports whether identities are loaded; it does not unlock keys.

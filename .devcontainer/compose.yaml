@@ -95,8 +95,8 @@ services:
     restart: unless-stopped
     depends_on:
       - devcontainer
-    # Shares the devcontainer's network namespace, so listening on loopback here is listening in the devcontainer.
-    network_mode: "service:devcontainer"
+    networks:
+      - super_projects_default
     environment:
       # SUPER_PROJECTS_NAME is this compose project (skipped so the sidecar does not proxy the devcontainer); the workdir vars are workspace prefixes (see Watcher).
       SUPER_PROJECTS_NAME: ${SUPER_PROJECTS_NAME:-super_projects}

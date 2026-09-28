@@ -144,7 +144,6 @@ compose_yaml_quote() {
 
 write_compose_generated() {
   _name=$(compose_yaml_quote "$SUPER_PROJECTS_NAME")
-  _workspace=$(compose_yaml_quote "$HOST_WORKSPACE_DIR")
   _workspace_mount=$(compose_yaml_quote "$HOST_WORKSPACE_DIR:/workspaces:cached")
   _agent_mount=$(compose_yaml_quote "$COMPOSE_SSH_AUTH_SOCK:/ssh-agent.sock")
   _known_hosts_mount=$(compose_yaml_quote "$COMPOSE_HOST_HOME/.ssh/known_hosts:/home/developer/.ssh/known_hosts:ro")
@@ -159,16 +158,11 @@ write_compose_generated() {
       'services:' \
       '  devcontainer:' \
       "    hostname: ${_name}" \
-      '    environment:' \
-      "      SUPER_PROJECTS_NAME: ${_name}" \
-      "      HOST_WORKSPACE_DIR: ${_workspace}" \
       '    volumes:' \
       "      - ${_workspace_mount}" \
       "      - ${_agent_mount}" \
       "      - ${_known_hosts_mount}" \
       '  localhost_forward_proxy:' \
-      '    environment:' \
-      "      SUPER_PROJECTS_NAME: ${_name}" \
       '    volumes:' \
       "      - ${_proxy_mount}" \
       'networks:' \

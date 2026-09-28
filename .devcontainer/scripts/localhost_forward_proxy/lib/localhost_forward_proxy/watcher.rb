@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "socket"
 require_relative "docker"
 require_relative "tcp_proxy"
 
@@ -19,10 +20,10 @@ module LocalhostForwardProxy
 
     Forward = Struct.new(:listen_port, :target_ip, :target_port, :container_name, keyword_init: true)
 
-    def initialize(docker: Docker.new, env: ENV, proxy_class: TcpProxy)
+    def initialize(docker: Docker.new, proxy_class: TcpProxy, self_id: nil)
       @docker = docker
-      @env = env
       @proxy_class = proxy_class
+      @self_id = self_id
       @proxies = {}
       @sync_mutex = Mutex.new
       @last_status = nil
@@ -51,6 +52,7 @@ module LocalhostForwardProxy
     def sync
       @sync_mutex.synchronize do
         containers = @docker.running_containers
+        @compose_project_name = compose_label(own_container(containers), "project")
         devcontainer = containers.find { |container| devcontainer?(container) }
         raise "no running #{DEVCONTAINER_SERVICE} container in compose project #{compose_project_name}" if devcontainer.nil?
 
@@ -165,7 +167,21 @@ module LocalhostForwardProxy
     end
 
     def compose_project_name
-      @env.fetch("SUPER_PROJECTS_NAME", "super_projects")
+      @compose_project_name
+    end
+
+    # This sidecar's container. Its Compose project label is the project to skip and the project whose devcontainer to attach.
+    def own_container(containers)
+      if @self_id
+        found = containers.find { |container| container["Id"] == @self_id }
+        return found if found
+
+        raise "no running container with id #{@self_id}"
+      end
+
+      hostname = Socket.gethostname
+      containers.find { |container| container["Id"].start_with?(hostname) } ||
+        raise("no running container for hostname #{hostname}")
     end
 
     # Compose stacks started in the container have working_dir under /workspaces.

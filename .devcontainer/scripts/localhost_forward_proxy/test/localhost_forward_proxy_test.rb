@@ -139,8 +139,8 @@ fake_docker = FakeDocker.new(
 )
 watcher = LocalhostForwardProxy::Watcher.new(
   docker: fake_docker,
-  env: { "SUPER_PROJECTS_NAME" => "super_projects" },
-  proxy_class: RecordingProxy
+  proxy_class: RecordingProxy,
+  self_id: "sidecarid"
 )
 
 log = StringIO.new
@@ -188,7 +188,7 @@ failures += 1 unless assert(
 recreated_sample_app = Marshal.load(Marshal.dump(sample_app))
 recreated_sample_app["Id"] = "sampleid2"
 recreated_sample_app["NetworkSettings"]["Networks"]["sample_app_1_default"]["IPAddress"] = "172.18.0.5"
-fake_docker.containers = [devcontainer, recreated_sample_app]
+fake_docker.containers = [devcontainer, sidecar_in_super_projects_project, recreated_sample_app]
 watcher.sync
 sample_app_proxies = started.select { |proxy| proxy.listen_port == 3000 }
 failures += 1 unless assert(
@@ -200,7 +200,7 @@ failures += 1 unless assert(
   "proxies of containers that went away are stopped"
 )
 
-fake_docker.containers = [sample_app]
+fake_docker.containers = [sidecar_in_super_projects_project, sample_app]
 log = StringIO.new
 $stdout = log
 begin

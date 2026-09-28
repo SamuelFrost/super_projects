@@ -40,6 +40,7 @@
 .devcontainer/.env
 .devcontainer/.env.namespace_override
 .devcontainer/.selected-ssh-agent.env
+.devcontainer/compose.generated.yaml
 
 # Persist shortcut dirs are Docker mount points on the host (often empty); keep README tracked
 .devcontainer/persist/*

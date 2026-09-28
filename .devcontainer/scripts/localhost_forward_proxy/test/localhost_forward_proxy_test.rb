@@ -68,7 +68,7 @@ class FakeDocker
   end
 end
 
-def compose_container(id:, name:, project:, working_dir:, service: name, networks:, ports: {})
+def compose_container(id:, name:, project:, working_dir:, service: name, networks:, ports: {}, mounts: [])
   {
     "Id" => id,
     "Name" => "/#{name}",
@@ -79,7 +79,8 @@ def compose_container(id:, name:, project:, working_dir:, service: name, network
         "com.docker.compose.project.working_dir" => working_dir
       }
     },
-    "NetworkSettings" => { "Networks" => networks, "Ports" => ports }
+    "NetworkSettings" => { "Networks" => networks, "Ports" => ports },
+    "Mounts" => mounts
   }
 end
 
@@ -91,7 +92,8 @@ devcontainer = compose_container(
   id: "devcontainerid", name: "super_projects-devcontainer-1", project: "super_projects", service: "devcontainer",
   working_dir: "/host/super_projects/.devcontainer",
   networks: { "super_projects_default" => { "IPAddress" => "172.19.0.2" } },
-  ports: { "6080/tcp" => published(6080) }
+  ports: { "6080/tcp" => published(6080) },
+  mounts: [{ "Type" => "bind", "Source" => "/host/super_projects", "Destination" => "/workspaces" }]
 )
 sidecar_in_super_projects_project = compose_container(
   id: "sidecarid", name: "super_projects-localhost_forward_proxy-1", project: "super_projects",
@@ -137,7 +139,7 @@ fake_docker = FakeDocker.new(
 )
 watcher = LocalhostForwardProxy::Watcher.new(
   docker: fake_docker,
-  env: { "SUPER_PROJECTS_NAME" => "super_projects", "SUPER_PROJECTS_WORKDIR" => "workspaces", "HOST_WORKSPACE_DIR" => "/host/super_projects" },
+  env: { "SUPER_PROJECTS_NAME" => "super_projects" },
   proxy_class: RecordingProxy
 )
 

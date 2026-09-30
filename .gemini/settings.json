@@ -4,8 +4,8 @@
       "command": "docker",
       "args": [
         "compose",
-        "-f", ".devcontainer/compose.yaml",
-        "--project-directory", ".devcontainer",
+        "--project-directory", "${workspaceFolder}/.devcontainer",
+        "-f", "${workspaceFolder}/.devcontainer/compose.yaml",
         "exec", "-T",
         "devcontainer",
         "mise", "exec", "--",

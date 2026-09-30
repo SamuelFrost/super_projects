@@ -4,13 +4,11 @@
       "command": "docker",
       "args": [
         "compose",
-        "-f", ".devcontainer/compose.yaml",
-        "--project-directory", ".devcontainer",
+        "--project-directory", "${workspaceFolder}/.devcontainer",
+        "-f", "${workspaceFolder}/.devcontainer/compose.yaml",
         "exec", "-T",
         "devcontainer",
-        "mise",
-        "exec",
-        "--",
+        "mise", "exec", "--",
         "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"
       ]

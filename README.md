@@ -2,248 +2,114 @@
 
 A containerized parent-directory environment for software development teams.
 
-Fork this repository for your company, place your fork where you would normally keep your projects directory, and open it in VS Code or Cursor to get a fully configured development container your whole team can share.
+`super_projects` is a template for a containerized development environment designed to be your projects' parent directory. Rather than the traditional approach of configuring each machine individually or per project, the environment (Docker, tools, desktop GUI, AI tooling, internal company tools, common tooling, etc.) is codified here and shared via git.
 
-## What this is
+It is intended to be used as a template for your company's work environment with convenient tools for development and enhancing AI agent capabilities for every day tasks available by default.
 
-`super_projects` is designed to be your projects' parent directory. Rather than configuring each developer's machine individually, the dev environment (Docker, IDE settings, AI tooling) is codified here and shared via git.
-
-It is a template meant to be forked once per company (or team), customized, and shared across the organization:
-
-1. **Fork** this repo for your company.
-2. **Set `${SUPER_PROJECTS_NAME}`** immediately so this clone does not share volumes with another default copy — see [Forking for your company](#forking-for-your-company).
-3. **Customize** the agent setups and tools to match your company's needs.
-4. Developers clone the company fork where they keep their projects; individual project repositories live inside it as untracked subdirectories.
-
-Each company maintains its own version of the Docker image, devcontainer settings, agent setups, and IDE extensions — so every developer gets an identical, reproducible environment. Using the repo as a monorepo (tracking project code directly in it) is no longer a recommended pattern; keep projects as separate repositories cloned inside your fork.
-
-## Forking for your company
-
-The intended way to use this project is one fork per company (or team). Your fork becomes your organization's shared development environment: customize it, commit the changes, and every developer gets them on the next pull and container rebuild.
-
-### 1. Set `${SUPER_PROJECTS_NAME}` (do this first)
-
-`${SUPER_PROJECTS_NAME}` is the Compose project name. It determines the container (`${SUPER_PROJECTS_NAME}-devcontainer-1`), hostname (`${SUPER_PROJECTS_NAME}`), network (`${SUPER_PROJECTS_NAME}_default`), named-volume prefix (`${SUPER_PROJECTS_NAME}_gh-data`, `${SUPER_PROJECTS_NAME}_chrome-devtools-mcp-profile`, …), host ssh-agent socket (`$HOME/.cache/${SUPER_PROJECTS_NAME}-ssh-agent.sock` on WSLg, otherwise `$XDG_RUNTIME_DIR/${SUPER_PROJECTS_NAME}-ssh-agent.sock`), and the Cursor worker hint (`${SUPER_PROJECTS_NAME}_devcontainer`).
-
-Those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state, and git config. If two clones use the same `${SUPER_PROJECTS_NAME}` on one Docker daemon, they silently **share** that state. In other words, the project will share volumes and network space with any other clone with the same name on the same Docker daemon.
-
-Copy the tracked example to a gitignored override and set the name in all three places (`acme_projects` is used below):
-
-```sh
-cp .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.example.yaml .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml
-```
-
-```yaml
-name: "acme_projects"
-services:
-  devcontainer:
-    hostname: "acme_projects"
-    networks:
-      - super_projects_default
-  localhost_forward_proxy:
-    networks:
-      - super_projects_default
-networks:
-  super_projects_default:
-    name: "acme_projects_default"
-```
-
-`compose.naming.yaml` stays `super_projects`. The override is listed after it, so Compose uses the override. `initializeCommand` does not rewrite either naming file. It writes `docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml` (developer uid and Docker group id), `docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml` (repository directory at `/workspaces`), `docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml`, and `docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml`.
-
-`devcontainer.json` `"name"` stays `super_projects` (IDE label only). MCP configs `docker compose … exec` the `devcontainer` service and do not hardcode `${SUPER_PROJECTS_NAME}-devcontainer-1`. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
-
-**Manual Compose** can be run using the `./not_devcontainer` helper script, which automatically runs `initializeCommand` and supplies all Compose files in `devcontainer.json` order:
-
-```sh
-./not_devcontainer down
-```
-
-Do not set process-level `COMPOSE_PROJECT_NAME`; it overrides compose `name:` and the container name can diverge from hostname, network, and volumes.
-
-**Changing an existing `${SUPER_PROJECTS_NAME}`** does not migrate state. `compose down` the **old** project first; `gh` / Chrome / Cursor volumes look wiped because they stay under the old prefix. Orphans remain until `docker volume rm ${SUPER_PROJECTS_NAME}_…`.
-
-### 2. Customize the agent setups
-
-Adapt the AI agent configuration to your company's workflows:
-
-- Shared agent profiles and reusable behavior attributes live under `.agents/` — see [`.agents/agent_profiles/README.md`](.agents/agent_profiles/README.md). Each developer copies a profile to the untracked root `agents.md`; keep the shared templates in your fork up to date with your team's conventions.
-- MCP server wiring lives in `.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, and `.codex/config.toml` — add the servers your company uses and remove the ones it doesn't.
-
-### 3. Add or remove tools
-
-Match the toolset to your company's stack (details in [Customising for your team](#customising-for-your-team)):
-
-- Language runtimes and versions: `.mise.toml`.
-- System packages and CLIs: `.devcontainer/Dockerfile`.
-- IDE extensions: `customizations.vscode.extensions` in `.devcontainer/devcontainer.json`.
-- **Company-internal tools:** prefer installing them via Docker — bake them into `.devcontainer/Dockerfile`, or run them as additional services in `.devcontainer/compose.yaml` — so every developer gets them automatically instead of following manual setup steps.
-
-Commit and push these changes to your fork, then have your team clone it and follow [Getting started](#getting-started).
-
-### Pulling in upstream changes
-
-Your fork can keep receiving improvements from the original project. Add the upstream repository as a remote once:
-
-```sh
-git remote add upstream git@github.com:SamuelFrost/super_projects.git
-```
-
-Then, whenever you want to sync:
-
-```sh
-git fetch upstream
-git checkout main
-git merge upstream/main
-```
-
-A merge is preferred over a rebase because your fork's `main` is shared history that your whole team pulls from.
-
-Things to watch for when merging:
-
-- **Your customizations.** Changes you made to the Dockerfile, `.mise.toml`, agent profiles, and MCP configs (steps 2 and 3) may conflict with upstream edits to the same files; keep your company's version and port over anything useful from upstream. The clone's name lives in gitignored `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml`, so upstream merges do not overwrite it.
-- **Rebuild after merging.** If `.devcontainer/` changed, everyone should rebuild (_Dev Containers: Rebuild Container_, or `devcontainer up --remove-existing-container`) to pick up the new image and settings.
-
-Push the merged result to your fork so the whole team receives the update.
+Projects are meant to live as separate, repositories inside this folder untracked by this repository.
 
 ## Getting started
+
+Clone or fork (recommended) this repository and open it in your preferred editor (VS Code, Cursor, Dev Containers CLI, or Docker Compose directly) to get a fully configured development container your whole team/organization can share.
+
 
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux)
-- Atleast one of the following: 
-  - [Dev Containers CLI](https://github.com/devcontainers/cli)
-  - [VS Code](https://code.visualstudio.com/download) (with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers))
-  - [Cursor](https://cursor.com/download) (with the Dev Containers extension)
+- Any of:
+  - VS Code / Cursor (with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers))
+  - [Dev Containers CLI](https://github.com/devcontainers/cli) (`devcontainer`)
+  - Plain Docker Compose via `./not_devcontainer`
 
-Fork this repo for your company and set `${SUPER_PROJECTS_NAME}` first (see [Forking for your company](#forking-for-your-company)), then clone your fork where you keep your projects — it can be the parent directory of all your projects or just a few select ones.
+### 1. Clone or fork
+
 ```sh
 git clone git@github.com:<your-company>/<your-fork>.git
+cd <your-fork>
 ```
+
+### 2. (Recommended) Custom name
+
+By default, the project runs under the name `super_projects`. Change the `.devcontainers/docker_compose_configuration_customizations/naming/compose.naming.yaml` file to set a custom name for your project. 
+
+- If you have a special use-case and have multiple checkouts or otherwise need a different namespace on one machine, set a custom name in `.devcontainers/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` so they do not share Docker containers, volumes or networks.
+
+
+### 3. Start
+
+- **VS Code / Cursor:** Open the directory and click **Reopen in Container**.
+- **CLI (`devcontainer`):**
+  ```sh
+  devcontainer up --remove-existing-container
+  devcontainer exec bash
+  ```
+- **CLI (Docker Compose):**
+  ```sh
+  ./not_devcontainer up -d
+  ./not_devcontainer exec devcontainer bash
+  ```
+
+To stop: `./not_devcontainer down`.
 
 ---
 
-### Option A — CLI (no IDE required)
+## Features & details
 
-```sh
-# Build and start (runs initializeCommand → .devcontainer/scripts/shell/initializeCommand.sh, then builds + starts)
-devcontainer up --remove-existing-container
-
-# Open a shell inside the container
-devcontainer exec bash
-
-# Stop
-./not_devcontainer down
-```
-
-The VNC desktop and Chrome start automatically with the container — no extra steps needed.
-
----
-
-### Option B — VS Code / Cursor
-
-- **WSL users:** enable `dev.containers.executeInWSL` in your editor settings so SSH and UID mounts resolve correctly
-
-1. Open the directory in [VS Code](https://code.visualstudio.com/download) (with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)) or [Cursor](https://cursor.com/download) (with the Dev Containers extension).
-2. When prompted, click **Reopen in Container** (or run the _Dev Containers: Reopen in Container_ command).
-3. The container builds once; subsequent opens are fast.
-
-### SSH setup (passphrase-protected keys)
-
-Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
-
-Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `write-compose-ssh-agent-socket` (select or start the host agent using the Compose name from `compose.naming.override.yaml`, or `compose.naming.yaml` when the override is absent, and write the ssh-agent socket Compose file; may prompt once to unlock keys) and `write-compose-user-ids`, `write-compose-project-directory`, and `write-compose-ssh-known-hosts`. You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
-
-**Still useful:**
-
-- **macOS:** add to `~/.ssh/config` so later opens often skip prompts:
-  ```
-  Host *
-    AddKeysToAgent yes
-    UseKeychain yes
-  ```
-- **1Password SSH agent:** enable and unlock 1Password; initializeCommand reuses that agent when it already has identities.
-- **GitHub without SSH:** `gh auth login` and HTTPS remotes (inside the container after start).
-- **WSL:** use WSL end-to-end (`dev.containers.executeInWSL`); native Windows is not supported for this SSH flow.
-
-## Devcontainer details
-
-The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.devcontainer/Dockerfile`. It includes:
+The devcontainer is an **Ubuntu 24.04** image with:
 
 - `git`, `gh` (GitHub CLI), `openssh-client`
-- Docker CLI + Compose + Buildx plugins (docker-outside-of-docker via socket mount)
-- Node.js + npm
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini` command; free tier available)
-- `ffmpeg`, `poppler-utils`, `procps`, and other common dev utilities
-- Fully functioning desktop GUI (XFCE desktop + VNC + noVNC) at `http://localhost:6080/vnc.html`
-- Google Chrome, launched with remote debugging on port 9223 (accessible from the desktop GUI and via MCP)
-- `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `docker compose … exec` into the `devcontainer` service and `mise`, so the MCP server connects to Chrome at `127.0.0.1:9223` inside the container. Optional host publication of the debugging port is disabled by default in Compose.
-- [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, Java, and more
-- Recommended extensions and settings for VS Code and Cursor
+- Docker CLI + Compose (Docker outside of Docker via socket mount) + Devcontainer CLI
+- Node.js, npm, Python 3
+- [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, and more
+- Desktop GUI (XFCE + VNC + noVNC) available in your browser at `http://localhost:6080/vnc.html`
+- Google Chrome with remote debugging on port 9223 (used by MCP tools like [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp))
+- [Localhost Forward Proxy](https://github.com/docker/localhost-forward-proxy) for port forwarding to your projects so they can be accessed from the container's browser at `http://localhost:<port>` in addition to the standard docker network routes.
+- AI tooling configurations for Gemini, Cursor, VS Code, Claude, and Codex.
+- Unobtrusive collection of useful attributes to guide agent behavior.
 
-The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
+### SSH agent forwarding
 
-### Persisted data
+Host SSH keys are forwarded into the container at `/ssh-agent.sock` — private keys never leave your host.
 
-Tool state uses **named Docker volumes** (macOS-friendly I/O). Each volume is also mounted under `.devcontainer/persist/` as a discoverability shortcut — see [`.devcontainer/persist/README.md`](.devcontainer/persist/README.md).
+- **macOS:** Add `AddKeysToAgent yes` and `UseKeychain yes` to `~/.ssh/config`.
+- **1Password:** Enable 1Password's SSH agent; it is automatically detected and used.
+- **WSL2:** Use WSL directly (`dev.containers.executeInWSL`).
 
-| Volume | Home path | Persist shortcut | Purpose |
-|--------|-----------|------------------|---------|
-| `<compose-name>_gemini-data` | `~/.gemini` | `persist/gemini` | Gemini CLI sessions/config |
-| `<compose-name>_gh-data` | `~/.config/gh` | `persist/gh` | GitHub CLI auth |
-| `<compose-name>_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
-| `<compose-name>_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
-| `<compose-name>_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
-| `<compose-name>_cursor-data` | `~/.cursor` | `persist/cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
-| host ssh-agent socket | `/ssh-agent.sock` | — | Host-forwarded agent (private keys stay on the host) |
-| host `known_hosts` (ro bind) | `~/.ssh/known_hosts` | — | Shared SSH host keys |
+### Persisted volumes
 
-Named volumes survive container rebuilds. Remove one explicitly if you need a clean slate, for example:
-```sh
-docker volume rm <compose-name>_chrome-devtools-mcp-profile
-```
+State is preserved across container rebuilds via named Docker volumes:
 
-### Tool version management (mise)
+| Volume | Mount in container | Purpose |
+|--------|-------------------|---------|
+| `<name>_gemini-data` | `~/.gemini` | Gemini CLI sessions/config |
+| `<name>_gh-data` | `~/.config/gh` | GitHub CLI auth |
+| `<name>_git-config` | `~/.config/git` | Git configuration |
+| `<name>_mise-data` | `~/.local/share/mise` | Downloaded tools & runtimes |
+| `<name>_chrome-devtools-mcp-profile` | `~/chrome-profile` | Chrome browser logins & extensions |
+| `<name>_cursor-data` | `~/.cursor` | Cursor CLI sessions & agent transcripts |
 
-`mise` is pre-installed and activated in every shell. Configure the tools your project needs by editing `.mise.toml` or including a `mise.toml` or `.tool-versions` file in the a project's directory see [mise documentation](https://mise.jdx.dev/getting-started.html) for more details.
+These volumes are also dual-mounted under `.devcontainer/persist/` inside the container for easy inspection. To wipe state, delete the corresponding Docker volume (e.g., `docker volume rm <name>_gh-data`).
 
-Tools defined in the top level directory `.mise.toml` are installed automatically when the container starts (`mise install` in `compose.yaml`). Note: downloads and installs are stored in the `mise-data` Docker volume, so they will persist across container rebuilds unless you explicitly remove the volume with `docker volume rm <compose-name>_mise-data`.
+## Customization
 
-To install tools from mise in a particular project directory run `mise install` in the project directory.
-
-### Enabling Claude Code CLI
-
-The Claude Code CLI setup is included but commented out in the Dockerfile. To enable it, uncomment the relevant lines and rebuild the container.
-
-## Customising for your team
-
-These customizations belong in your company fork (see [Forking for your company](#forking-for-your-company)) so they are shared with the whole team via git:
-
-- **Add/modify tools:** edit `.devcontainer/Dockerfile` and rebuild, or pin versions in `.mise.toml`.
-- **Company-internal tools:** install them via Docker — bake them into `.devcontainer/Dockerfile`, or run them as additional services in `.devcontainer/compose.yaml` — rather than relying on manual per-developer setup.
-- **Agent setups:** edit the shared profiles and attributes under `.agents/` and the MCP configs (`.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`).
-- **Add/modify extensions:** add extension IDs to the `customizations.vscode.extensions` array in `.devcontainer/devcontainer.json`.
-- **Add/modify environment variables:** set them on the `devcontainer` service `environment` in `.devcontainer/compose.yaml` so every process in the container sees them.
-- **Project-specific services** take advantage of the GUI and add emulators / browsers / other gui tools to the dockerfile build.
+- **Tools & runtimes:** Edit `.mise.toml` or add project-level `.mise.toml` files.
+- **System packages:** Adjust installations in `.devcontainer/Dockerfile`.
+- **Extensions:** Add extension IDs to `customizations.vscode.extensions` in `.devcontainer/devcontainer.json`.
+- **AI agents & MCP:** Configure templates and attributes for agents `.agents/` and your preferred AI providers in `.cursor/`, `.vscode/`, `.gemini/`, `.codex/` etc.
 
 ## What's tracked in git
 
-The `.gitignore` is configured to ignore everything **except** the files that define the development environment:
-
 | Path | Purpose |
 |------|---------|
-| `.devcontainer/` | Dockerfile, compose, and devcontainer config |
-| `.agents/` | Shared agent profiles and behavior attributes (templates for `agents.md`) |
-| `.cursor/` / `.vscode/` / `.claude/` / `.codex/` / `.gemini/` | IDE and AI tool config (rules, settings, MCP wiring) |
-| `.mcp.json` | Shared MCP server config |
-| `.mise.toml` | Workspace-root tool versions |
-| `not_devcontainer` | Docker Compose helper script that runs `initializeCommand` and supplies all Compose files from `devcontainer.json` |
+| `.devcontainer/` | Dockerfile, compose, and devcontainer configuration |
+| `.agents/` | Shared AI agent templates |
+| `.cursor/`, `.vscode/`, `.gemini/`, `.codex/` | IDE & AI tool configs |
+| `.mise.toml` | Default tool versions |
+| `not_devcontainer` | Helper script to run Docker Compose matching devcontainer configuration |
 | `README.md` | This file |
-| `.samples/` | Practical example project setup docs for common use cases (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) |
-| `LICENSE` | Super Projects License (attribution required when reusing) |
+| `LICENSE` | Super Projects License |
 
-The root `agents.md` is **not tracked**: each developer copies a shared profile from `.agents/agent_profiles/` and customizes it locally (see [`.agents/agent_profiles/README.md`](.agents/agent_profiles/README.md)).
-
-Individual project directories cloned inside here are **not tracked** by this repo.
+The root `agents.md` and cloned project subdirectories are untracked.
 
 ## License
 

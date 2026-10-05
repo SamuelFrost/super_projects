@@ -1,0 +1,32 @@
+# Copy this file to compose.miscellaneous.override.yaml for local overrides:
+#   cp .devcontainer/docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.override.example.yaml .devcontainer/docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.override.yaml
+#
+# Listed last, so these values replace compose.miscellaneous.yaml. Do not commit the copy.
+services:
+  devcontainer:
+    ports:
+      - "6080-6099:6080" # noVNC  — browser GUI for VNC
+      - "5900-5919:5900" # VNC raw port (optional, for native VNC clients)
+      - "9223-9242:9223"  # Chrome remote debugging — (optional for host-side npx chrome-devtools-mcp to connect)
+    shm_size: '4gb'
+    # GPU: uncomment the block for this machine. Leave all of them commented on a Mac.
+    # Docker Desktop's Linux VM does not receive the Apple GPU.
+    #
+    # NVIDIA (NVIDIA container runtime):
+    # gpus: all
+    #
+    # AMD ROCm:
+    # devices:
+    #   - /dev/dri
+    #   - /dev/kfd
+    # group_add:
+    #   - video
+    #   - render
+    #
+    # Intel:
+    # devices:
+    #   - /dev/dri
+    # group_add:
+    #   - video
+    #   - render
+ 

@@ -1,0 +1,9 @@
+#!/bin/sh
+# Compose fails if this file is listed in devcontainer.json and is missing.
+set -eu
+
+cd "$(dirname "$0")"
+
+if [ ! -f "./compose.naming.override.yaml" ]; then
+  touch "./compose.naming.override.yaml"
+fi

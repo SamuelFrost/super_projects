@@ -46,6 +46,7 @@
 .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml
 .devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml
 .devcontainer/docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml
+.devcontainer/docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.override.yaml
 
 # Persist shortcut dirs are Docker mount points on the host (often empty); keep README tracked
 .devcontainer/persist/*

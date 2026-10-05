@@ -10,8 +10,7 @@ Projects are meant to live as separate, repositories inside this folder untracke
 
 ## Getting started
 
-Clone or fork (recommended) this repository and open it in your preferred editor (VS Code, Cursor, Dev Containers CLI, or Docker Compose directly) to get a fully configured development container your whole team/organization can share.
-
+Clone this repository and open it in your preferred editor (VS Code, Cursor, Dev Containers CLI, or Docker Compose directly) to get a fully configured development container your whole team/organization can share.
 
 ### Prerequisites
 
@@ -21,21 +20,29 @@ Clone or fork (recommended) this repository and open it in your preferred editor
   - [Dev Containers CLI](https://github.com/devcontainers/cli) (`devcontainer`)
   - Plain Docker Compose via `./not_devcontainer`
 
-### 1. Clone or fork
+<details>
+<summary>One time setup (per organization)</summary>
+
+### 1. Fork or clone
+
+On GitHub, open the upstream repository and choose **Fork**. Set the owner to your company and leave the repository name as `super_projects`. Then clone that fork:
 
 ```sh
-git clone git@github.com:<your-company>/<your-fork>.git
-cd <your-fork>
+git clone git@github.com:<your-company>/super_projects.git
+cd super_projects
 ```
 
-### 2. (Recommended) Custom name
+### 2. (Recommended) Customize name
 
 By default, the project runs under the name `super_projects`. Change the `.devcontainers/docker_compose_configuration_customizations/naming/compose.naming.yaml` file to set a custom name for your project. 
 
 - If you have a special use-case and have multiple checkouts or otherwise need a different namespace on one machine, set a custom name in `.devcontainers/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` so they do not share Docker containers, volumes or networks.
 
+</details>
 
-### 3. Start
+
+
+### Starting and stopping services
 
 - **VS Code / Cursor:** Open the directory and click **Reopen in Container**.
 - **CLI (`devcontainer`):**
@@ -51,7 +58,13 @@ By default, the project runs under the name `super_projects`. Change the `.devco
 
 To stop: `./not_devcontainer down`.
 
----
+### Accessing the container's GUI and CLI
+
+- **GUI:** Open `http://localhost:6080/vnc.html` in your browser and press **Connect**.
+- **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` to get a shell in the container.
+- **VS Code or Cursor:** Ensure the dev containers extension is installed and open the project folder. Remote - Containers will automatically detect the devcontainer and prompt you to open it - follow the prompts to open the project in the container.
+- **vim:** Run `devcontainer exec vim` to edit files in the container.
+note: while many IDEs can be configured to be installed and opened on the container, you will probably get the best experience by installing your preferred IDE on the host machine and open it on the container via the IDE's remote connection feature.
 
 ## Features & details
 

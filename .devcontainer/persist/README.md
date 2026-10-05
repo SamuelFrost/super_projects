@@ -53,6 +53,6 @@ After that, `~/.cursor` (agent-transcripts, CLI chats, MCP config, skills) survi
 
 Private keys are **not** mounted. Compose forwards a host `ssh-agent` socket to `/ssh-agent.sock`.
 
-`initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `write-compose-ssh-agent-socket`, `write-compose-user-ids`, `write-compose-project-directory`, and `write-compose-ssh-known-hosts`) to write those Compose files. The name comes from `compose.naming.yaml`, replaced by `compose.naming.override.yaml` when that file exists. Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts. Manual Compose must use `--project-directory .devcontainer` and the Compose files in `devcontainer.json` order.
+`initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `write-compose-ssh-agent-socket`, `write-compose-user-ids`, `write-compose-project-directory`, and `write-compose-ssh-known-hosts`) to write those Compose files. The name comes from `compose.naming.yaml`, replaced by `compose.naming.override.yaml` when that file exists. Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts. To run Compose directly, use `./not_devcontainer <command>` (for example `./not_devcontainer down`).
 
 `known_hosts` is bind-mounted read-only from the host.

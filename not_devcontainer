@@ -1,0 +1,28 @@
+#!/bin/sh
+# Same as typing:
+#   <initializeCommand from devcontainer.json>
+#   docker compose --project-directory .devcontainer -f <each dockerComposeFile> <your arguments>
+# Example: ./not_devcontainer up -d
+set -eu
+
+cd "$(dirname "$0")"
+
+compose_files=$(
+  sed -n '/"dockerComposeFile"/,/]/p' .devcontainer/devcontainer.json |
+    sed -n 's/.*"\([^"]*\.yaml\)".*/\1/p'
+)
+
+initialize_command=$(
+  sed -n 's/.*"initializeCommand"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' .devcontainer/devcontainer.json
+)
+if [ -n "$initialize_command" ]; then
+  sh -c "$initialize_command"
+fi
+
+flags=
+for compose_file in $compose_files; do
+  flags="$flags -f .devcontainer/$compose_file"
+done
+
+# shellcheck disable=SC2086
+docker compose --project-directory .devcontainer $flags "$@"

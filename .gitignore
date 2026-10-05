@@ -20,6 +20,7 @@
 !README.md
 !LICENSE
 !.mise.toml
+!not_devcontainer
 !.agents/
 !.agents/**
 !.samples/

@@ -179,17 +179,8 @@ The devcontainer is a standalone **Ubuntu 24.04** image defined entirely in `.de
 - `.cursor/mcp.json` wires up the official [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) via `docker compose … exec` into the `devcontainer` service and `mise`, so the MCP server connects to Chrome at `127.0.0.1:9223` inside the container. Optional host publication of the debugging port is disabled by default in Compose.
 - [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, Java, and more
 - Recommended extensions and settings for VS Code and Cursor
-- TODO: add ruby-lsp, stimulus-lsp, and herb-lsp for language servers
 
 The VNC/Chrome stack starts automatically when the container starts and can be restarted at any time by running `start-vnc` inside the container.
-
-Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (see that directory’s `.directory_information.md`): `dockerfile/` (copied into the image), `shell/` (host `initializeCommand` and runtime shell helpers), and `localhost_forward_proxy/` (Compose sidecar for super_projects default network localhost).
-
-### Compose apps at `localhost`
-
-A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the devcontainer Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; the `localhost_forward_proxy` sidecar mirrors it onto super_projects default network localhost. Stop that sidecar with `./not_devcontainer stop localhost_forward_proxy`. See [`.devcontainer/scripts/localhost_forward_proxy/.directory_information.md`](.devcontainer/scripts/localhost_forward_proxy/.directory_information.md).
-
-`.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml` is the tracked default name. Copy `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.example.yaml` to `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` to set this clone's name. `initializeCommand` writes the user-ids, project-directory, ssh-agent-socket, and ssh-known-hosts Compose files and does not rewrite the naming files. If you run Compose by hand, use `./not_devcontainer <command>` (for example `./not_devcontainer up -d`), which automatically runs `initializeCommand` and supplies all Compose files in `devcontainer.json` order.
 
 ### Persisted data
 
@@ -197,25 +188,25 @@ Tool state uses **named Docker volumes** (macOS-friendly I/O). Each volume is al
 
 | Volume | Home path | Persist shortcut | Purpose |
 |--------|-----------|------------------|---------|
-| `${SUPER_PROJECTS_NAME}_gemini-data` | `~/.gemini` | `persist/gemini` | Gemini CLI sessions/config |
-| `${SUPER_PROJECTS_NAME}_gh-data` | `~/.config/gh` | `persist/gh` | GitHub CLI auth |
-| `${SUPER_PROJECTS_NAME}_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
-| `${SUPER_PROJECTS_NAME}_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
-| `${SUPER_PROJECTS_NAME}_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
-| `${SUPER_PROJECTS_NAME}_cursor-data` | `~/.cursor` | `persist/cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
+| `<compose-name>_gemini-data` | `~/.gemini` | `persist/gemini` | Gemini CLI sessions/config |
+| `<compose-name>_gh-data` | `~/.config/gh` | `persist/gh` | GitHub CLI auth |
+| `<compose-name>_git-config` | `~/.config/git` | `persist/git` | Git XDG config |
+| `<compose-name>_mise-data` | `~/.local/share/mise` | `persist/mise` | mise downloads and tool installs |
+| `<compose-name>_chrome-devtools-mcp-profile` | `~/chrome-profile` | `persist/chrome` | Chrome logins, cookies, extensions |
+| `<compose-name>_cursor-data` | `~/.cursor` | `persist/cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
 | host ssh-agent socket | `/ssh-agent.sock` | — | Host-forwarded agent (private keys stay on the host) |
 | host `known_hosts` (ro bind) | `~/.ssh/known_hosts` | — | Shared SSH host keys |
 
 Named volumes survive container rebuilds. Remove one explicitly if you need a clean slate, for example:
 ```sh
-docker volume rm ${SUPER_PROJECTS_NAME}_chrome-devtools-mcp-profile
+docker volume rm <compose-name>_chrome-devtools-mcp-profile
 ```
 
 ### Tool version management (mise)
 
 `mise` is pre-installed and activated in every shell. Configure the tools your project needs by editing `.mise.toml` or including a `mise.toml` or `.tool-versions` file in the a project's directory see [mise documentation](https://mise.jdx.dev/getting-started.html) for more details.
 
-Tools defined in the top level directory `.mise.toml` are installed automatically when the container starts (`mise install` in `compose.yaml`). Note: downloads and installs are stored in the `mise-data` Docker volume, so they will persist across container rebuilds unless you explicitly remove the volume with `docker volume rm ${SUPER_PROJECTS_NAME}_mise-data`.
+Tools defined in the top level directory `.mise.toml` are installed automatically when the container starts (`mise install` in `compose.yaml`). Note: downloads and installs are stored in the `mise-data` Docker volume, so they will persist across container rebuilds unless you explicitly remove the volume with `docker volume rm <compose-name>_mise-data`.
 
 To install tools from mise in a particular project directory run `mise install` in the project directory.
 

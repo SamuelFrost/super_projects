@@ -19,6 +19,7 @@ This index lists the available agent attributes by category. Link text uses each
 ## Communication
 
 - [Communication guideline — prefer English unless convention asks otherwise](communication/communicate_in_english_unless_convention_asks_otherwise.md)
+- [Communication guideline — cite files in convenient formats in responses](communication/cite_files_in_convenient_formats_in_responses.md)
 
 ## Documentation
 

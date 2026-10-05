@@ -26,6 +26,9 @@ ruby    = "4.0"
 node    = "22"
 # chrome-devtools MCP server (pinned version for agent configs: .cursor/, .vscode/, .mcp.json, .codex/, .gemini/).
 "npm:chrome-devtools-mcp" = "1.6.0"
+# Playwright (CDP attach to devcontainer Chrome; no extra browser binary)
+"npm:playwright" = "1.49.1"
 # python  = "3.13"
+
 # go      = "1.22"
 # java    = "temurin-21"

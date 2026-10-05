@@ -3,15 +3,8 @@
   "servers": {
     "chrome-devtools": {
       "type": "stdio",
-      "command": "docker",
+      "command": "chrome-devtools-mcp",
       "args": [
-        "compose",
-        "--project-directory", "${workspaceFolder}/.devcontainer",
-        "-f", "${workspaceFolder}/.devcontainer/compose.yaml",
-        "exec", "-T",
-        "devcontainer",
-        "mise", "exec", "-C", "/workspaces", "--",
-        "chrome-devtools-mcp",
         "--browser-url=http://127.0.0.1:9223"
       ]
     },

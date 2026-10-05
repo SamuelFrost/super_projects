@@ -146,7 +146,7 @@ The VNC desktop and Chrome start automatically with the container — no extra s
 
 Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
 
-Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent using the Compose name from `compose.naming.override.yaml`, or `compose.naming.yaml` when the override is absent; may prompt once to unlock keys) and `write-compose-user-ids`, `write-compose-project-directory`, `write-compose-ssh-agent-socket`, and `write-compose-ssh-known-hosts`. You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
+Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `write-compose-ssh-agent-socket` (select or start the host agent using the Compose name from `compose.naming.override.yaml`, or `compose.naming.yaml` when the override is absent, and write the ssh-agent socket Compose file; may prompt once to unlock keys) and `write-compose-user-ids`, `write-compose-project-directory`, and `write-compose-ssh-known-hosts`. You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
 
 **Still useful:**
 

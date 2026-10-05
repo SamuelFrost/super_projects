@@ -1,22 +1,199 @@
 #!/bin/sh
-# Writes ssh_agent_socket/compose.ssh-agent-socket.yaml.
-# Argument: socket path chosen by ensure-host-ssh-agent.
-# On the Docker host that path is the bind source. Inside a devcontainer the
-# source is HOST_SSH_AUTH_SOCK in the enclosing devcontainer's
-# compose.ssh-agent-socket.yaml.
-# On Docker Desktop for WSL2, also bind-mounts that socket once so a stale
-# desktop relay exists before Compose starts an existing container.
+# Run from initializeCommand.sh (before the container starts).
+# VS Code, Cursor, and `devcontainer up` invoke this on the host or from an
+# outer devcontainer that manages nested devcontainers via docker.sock.
+#
+# Ensures a host ssh-agent socket (private keys stay on the host) and loads
+# default SSH keys when possible. Writes compose.ssh-agent-socket.yaml with
+# that socket. Inside a devcontainer the written path is HOST_SSH_AUTH_SOCK
+# from the enclosing devcontainer's compose.ssh-agent-socket.yaml.
 set -eu
 
 cd "$(dirname "$0")/../../.."
 
+SUPER_PROJECTS_NAME=super_projects
+# Name from docker_compose_configuration_customizations/naming/compose.naming.override.yaml when
+# that file exists, otherwise compose.naming.yaml in the same folder. The first
+# name: line is the Compose name.
+_naming_file=.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml
+if [ -f .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml ]; then
+  _naming_file=.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml
+fi
+if _line=$(grep -m1 '^name:' "$_naming_file"); then
+  SUPER_PROJECTS_NAME=$(printf '%s' "${_line#name:}" | tr -d ' "\r')
+fi
+
+# WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
+# Socket filename follows the Compose name.
+case "${XDG_RUNTIME_DIR:-}" in
+  /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/${SUPER_PROJECTS_NAME}-ssh-agent.sock" ;;
+  *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/${SUPER_PROJECTS_NAME}-ssh-agent.sock" ;;
+esac
+
+# Docker bind-mounts create a directory at a missing source path; if compose ever
+# ran before the agent socket existed, clear that directory so ssh-agent can bind.
+[ -d "$MANAGED_AGENT_SOCK" ] && rm -rf "$MANAGED_AGENT_SOCK"
+mkdir -p "$(dirname "$MANAGED_AGENT_SOCK")"
+
+known_hosts_writable() {
+  [ -e "$HOME/.ssh/known_hosts" ] && [ ! -w "$HOME/.ssh/known_hosts" ] && return 1
+  return 0
+}
+
+prepare_ssh_config_dir() {
+  mkdir -p "$HOME/.ssh"
+  touch "$HOME/.ssh/known_hosts"
+  chmod 700 "$HOME/.ssh" 2>/dev/null || true
+}
+
+if known_hosts_writable; then
+  prepare_ssh_config_dir
+else
+  echo "SSH: $HOME/.ssh/known_hosts is read-only; skipping local ssh config setup" >&2
+fi
+
+HOST_OS=$(uname -s)
+
+DEFAULT_KEY_PATHS="
+$HOME/.ssh/id_ed25519
+$HOME/.ssh/id_rsa
+$HOME/.ssh/id_ecdsa
+$HOME/.ssh/id_ed25519_sk
+$HOME/.ssh/id_ecdsa_sk
+"
+
+agent_has_loaded_keys() {
+  _socket_path=$1
+  [ -S "$_socket_path" ] || return 1
+  SSH_AUTH_SOCK="$_socket_path" ssh-add -l >/dev/null 2>&1
+}
+
+agent_is_running() {
+  _socket_path=$1
+  [ -S "$_socket_path" ] || return 1
+  _ssh_add_output=$(SSH_AUTH_SOCK="$_socket_path" ssh-add -l 2>&1) && return 0
+  echo "$_ssh_add_output" | grep -qi 'no identities' && return 0
+  return 1
+}
+
+# Prefer an agent that already has unlocked keys (zero prompt).
+SELECTED_AGENT_SOCK=
+if [ -n "${SSH_AUTH_SOCK:-}" ] && agent_has_loaded_keys "$SSH_AUTH_SOCK"; then
+  SELECTED_AGENT_SOCK=$SSH_AUTH_SOCK
+fi
+if [ -z "$SELECTED_AGENT_SOCK" ]; then
+  set -- \
+    "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" \
+    "$HOME/.1password/agent.sock"
+  for _onepassword_sock in "$@"; do
+    if agent_has_loaded_keys "$_onepassword_sock"; then
+      SELECTED_AGENT_SOCK=$_onepassword_sock
+      break
+    fi
+  done
+fi
+if [ -z "$SELECTED_AGENT_SOCK" ] && agent_has_loaded_keys "$MANAGED_AGENT_SOCK"; then
+  SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
+fi
+
+# No unlocked keys yet: use our managed socket so loads go to the path we forward.
+if [ -z "$SELECTED_AGENT_SOCK" ]; then
+  if agent_is_running "$MANAGED_AGENT_SOCK"; then
+    SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
+  else
+    # Path is unusable: Docker may have left a directory, or WSL/reboot may have
+    # left a dead socket. ssh-agent -a cannot bind until the leftover is gone.
+    if [ -d "$MANAGED_AGENT_SOCK" ]; then
+      rm -rf "$MANAGED_AGENT_SOCK"
+    elif [ -e "$MANAGED_AGENT_SOCK" ]; then
+      rm -f "$MANAGED_AGENT_SOCK"
+    fi
+    ssh-agent -a "$MANAGED_AGENT_SOCK" >/dev/null
+    SELECTED_AGENT_SOCK=$MANAGED_AGENT_SOCK
+  fi
+fi
+
+export SSH_AUTH_SOCK=$SELECTED_AGENT_SOCK
+
+add_key_without_prompt() {
+  _key_path=$1
+  [ -f "$_key_path" ] || return 0
+  if [ "$HOST_OS" = Darwin ]; then
+    ssh-add --apple-use-keychain "$_key_path" </dev/null >/dev/null 2>&1 || true
+  else
+    ssh-add -q "$_key_path" </dev/null >/dev/null 2>&1 || true
+  fi
+}
+
+add_key_with_prompt() {
+  _key_path=$1
+  [ -f "$_key_path" ] || return 0
+  if [ "$HOST_OS" = Darwin ]; then
+    echo "SSH: unlock $_key_path (macOS Keychain)..." >&2
+    ssh-add --apple-use-keychain "$_key_path" >&2 || true
+  else
+    echo "SSH: unlock $_key_path..." >&2
+    ssh-add "$_key_path" >&2 || true
+  fi
+}
+
+# 1) Non-interactive / Keychain cache hits
+for _key_path in $DEFAULT_KEY_PATHS; do
+  add_key_without_prompt "$_key_path"
+done
+
+# 2) Still empty: prompt as part of initializeCommand (not a separate user-run script)
+if ! agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
+  _found_default_key=0
+  for _key_path in $DEFAULT_KEY_PATHS; do
+    [ -f "$_key_path" ] || continue
+    _found_default_key=1
+    break
+  done
+
+  if [ "$_found_default_key" -eq 1 ]; then
+    if [ -t 0 ] || [ -t 1 ]; then
+      echo "SSH: no identities in the host agent yet; unlock keys for this devcontainer..." >&2
+      for _key_path in $DEFAULT_KEY_PATHS; do
+        add_key_with_prompt "$_key_path"
+      done
+    elif [ "$HOST_OS" = Darwin ]; then
+      # Cursor/VS Code initializeCommand often has no TTY; Keychain may still present UI.
+      echo "SSH: attempting Keychain unlock (may show a system prompt)..." >&2
+      for _key_path in $DEFAULT_KEY_PATHS; do
+        [ -f "$_key_path" ] || continue
+        ssh-add --apple-use-keychain "$_key_path" >&2 || true
+      done
+    else
+      _askpass_program=
+      if command -v ssh-askpass >/dev/null 2>&1; then
+        _askpass_program=$(command -v ssh-askpass)
+      elif command -v ksshaskpass >/dev/null 2>&1; then
+        _askpass_program=$(command -v ksshaskpass)
+      elif command -v lxqt-openssh-askpass >/dev/null 2>&1; then
+        _askpass_program=$(command -v lxqt-openssh-askpass)
+      fi
+      if [ -n "$_askpass_program" ] && { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; then
+        echo "SSH: unlocking keys via askpass (system prompt)..." >&2
+        for _key_path in $DEFAULT_KEY_PATHS; do
+          [ -f "$_key_path" ] || continue
+          SSH_ASKPASS=$_askpass_program SSH_ASKPASS_REQUIRE=force ssh-add "$_key_path" </dev/null >&2 || true
+        done
+      fi
+    fi
+  fi
+fi
+
+if agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
+  echo "SSH: host agent ready ($(SSH_AUTH_SOCK=$SELECTED_AGENT_SOCK ssh-add -l 2>/dev/null | wc -l | tr -d ' ') key(s))" >&2
+elif [ -n "${SSH_AUTH_SOCK:-}" ]; then
+  echo "SSH: host agent has no identities yet." >&2
+  echo "  Reopen/rebuild may prompt again, or enable 1Password SSH agent / macOS Keychain." >&2
+  echo "  GitHub HTTPS alternative: gh auth login (inside the container)." >&2
+fi
+
 COMPOSE_FILE=.devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml
 ENCLOSING_COMPOSE=../.devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml
-
-if [ -z "${1:-}" ]; then
-  echo "ssh agent socket: missing socket path; run ensure-host-ssh-agent first" >&2
-  exit 1
-fi
 
 validate_bind_path() {
   case "$1" in
@@ -39,7 +216,7 @@ compose_yaml_quote() {
 }
 
 if [ ! -f /.dockerenv ]; then
-  COMPOSE_SSH_AUTH_SOCK=$1
+  COMPOSE_SSH_AUTH_SOCK=$SELECTED_AGENT_SOCK
 else
   echo "ssh agent socket: resolving Docker host path from $ENCLOSING_COMPOSE" >&2
   if [ ! -f "$ENCLOSING_COMPOSE" ]; then

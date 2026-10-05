@@ -29,4 +29,31 @@ services:
     # group_add:
     #   - video
     #   - render
- 
+
+    # -- working directory rename --
+    # working_dir: /super_projects_development
+    # command:
+    #   - bash
+    #   - -c
+    #   - |
+    #     export SSH_AUTH_SOCK=/ssh-agent.sock
+    #     ensure-auth
+    #     print-cursor-worker-hint
+    #     start-vnc
+    #     cd /super_projects_development
+    #     mise install
+    #     exec tail -f /dev/null
+    # volumes:
+    #   - gemini-data:/super_projects_development/.devcontainer/persist/gemini
+    #   - gh-data:/super_projects_development/.devcontainer/persist/gh
+    #   - git-config:/super_projects_development/.devcontainer/persist/git
+    #   - chrome-devtools-mcp-profile:/super_projects_development/.devcontainer/persist/chrome
+    #   - mise-data:/super_projects_development/.devcontainer/persist/mise
+    #   - cursor-data:/super_projects_development/.devcontainer/persist/cursor
+    # args:
+    #   SUPER_PROJECTS_WORKDIR: /super_projects_development
+    # environment:
+    #   SUPER_PROJECTS_WORKDIR: /super_projects_development
+    # localhost_forward_proxy:
+    #   environment:
+    #     SUPER_PROJECTS_WORKDIR: /super_projects_development

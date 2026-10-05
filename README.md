@@ -38,6 +38,11 @@ name: "acme_projects"
 services:
   devcontainer:
     hostname: "acme_projects"
+    networks:
+      - super_projects_default
+  localhost_forward_proxy:
+    networks:
+      - super_projects_default
 networks:
   super_projects_default:
     name: "acme_projects_default"

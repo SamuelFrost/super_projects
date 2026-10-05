@@ -1,13 +1,8 @@
-name: super_projects
-
 services:
   devcontainer:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
-      args:
-        DEVELOPER_UID: ${DEVELOPER_UID:-501}
-        DOCKER_GID: ${DOCKER_GID:-1}
     pull_policy: never
     volumes:
       # - ${HOST_WORKSPACE_DIR:-../}:/workspaces:cached # WSL requires route specified, override file provides
@@ -57,7 +52,6 @@ services:
     working_dir: /workspaces
     user: developer
     environment:
-      UID: ${DEVELOPER_UID:-501}
       SSH_AUTH_SOCK: /ssh-agent.sock
       EDITOR: code
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
@@ -67,8 +61,6 @@ services:
       - "host.docker.internal:host-gateway"
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
-    networks:
-      - super_projects_default
 
   # Mirrors published TCP ports of docker compose stacks in the workspace onto super_projects default network localhost (127.0.0.1 and ::1) so
   # Chrome / chrome-devtools-mcp in the devcontainer can use http://localhost:<port> like on the host (see scripts/localhost_forward_proxy/.directory_information.md).
@@ -79,8 +71,6 @@ services:
     restart: unless-stopped
     depends_on:
       - devcontainer
-    networks:
-      - super_projects_default
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: ruby /opt/localhost_forward_proxy/bin/localhost_forward_proxy
@@ -102,6 +92,3 @@ volumes:
   # Cursor agent state (~/.cursor): agent-transcripts, CLI chats, MCP config, skills.
   # Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_cursor-data`.
   cursor-data: {}
-
-networks:
-  super_projects_default: {}

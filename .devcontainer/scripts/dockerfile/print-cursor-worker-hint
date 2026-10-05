@@ -1,5 +1,5 @@
 #!/bin/bash
-name=${SUPER_PROJECTS_NAME:-super_projects}
+name=$(hostname)
 echo ""
 echo "Cursor Cloud Agent (My Machines):"
 echo "  agent login"

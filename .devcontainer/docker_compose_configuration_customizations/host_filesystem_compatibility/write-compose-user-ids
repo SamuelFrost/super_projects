@@ -1,0 +1,35 @@
+#!/bin/sh
+# Run from initializeCommand.sh (before the container starts).
+# Writes host_filesystem_compatibility/compose.user-ids.yaml: the developer uid and the
+# Docker socket group, as literals so a parent process environment cannot replace them.
+set -eu
+
+cd "$(dirname "$0")/../../.."
+
+COMPOSE_USER_IDS_FILE=.devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml
+
+compose_yaml_quote() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/$$/g')"
+}
+
+case "$(uname -s)" in
+  Darwin) DOCKER_GID=$(stat -f '%g' /var/run/docker.sock) ;;
+  *) DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) ;;
+esac
+DEVELOPER_UID=$(id -u)
+
+_uid=$(compose_yaml_quote "$DEVELOPER_UID")
+_gid=$(compose_yaml_quote "$DOCKER_GID")
+
+{
+  printf '%s\n' \
+    '# Written by write-compose-user-ids. Do not edit.' \
+    'services:' \
+    '  devcontainer:' \
+    '    build:' \
+    '      args:' \
+    "        DEVELOPER_UID: ${_uid}" \
+    "        DOCKER_GID: ${_gid}" \
+    '    environment:' \
+    "      UID: ${_uid}"
+} >"$COMPOSE_USER_IDS_FILE"

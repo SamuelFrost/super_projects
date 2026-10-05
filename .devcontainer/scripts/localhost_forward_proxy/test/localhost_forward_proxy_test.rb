@@ -68,7 +68,7 @@ class FakeDocker
   end
 end
 
-def compose_container(id:, name:, project:, working_dir:, service: name, networks:, ports: {})
+def compose_container(id:, name:, project:, working_dir:, service: name, networks:, ports: {}, mounts: [])
   {
     "Id" => id,
     "Name" => "/#{name}",
@@ -79,7 +79,8 @@ def compose_container(id:, name:, project:, working_dir:, service: name, network
         "com.docker.compose.project.working_dir" => working_dir
       }
     },
-    "NetworkSettings" => { "Networks" => networks, "Ports" => ports }
+    "NetworkSettings" => { "Networks" => networks, "Ports" => ports },
+    "Mounts" => mounts
   }
 end
 
@@ -91,7 +92,8 @@ devcontainer = compose_container(
   id: "devcontainerid", name: "super_projects-devcontainer-1", project: "super_projects", service: "devcontainer",
   working_dir: "/host/super_projects/.devcontainer",
   networks: { "super_projects_default" => { "IPAddress" => "172.19.0.2" } },
-  ports: { "6080/tcp" => published(6080) }
+  ports: { "6080/tcp" => published(6080) },
+  mounts: [{ "Type" => "bind", "Source" => "/host/super_projects", "Destination" => "/workspaces" }]
 )
 sidecar_in_super_projects_project = compose_container(
   id: "sidecarid", name: "super_projects-localhost_forward_proxy-1", project: "super_projects",
@@ -137,8 +139,8 @@ fake_docker = FakeDocker.new(
 )
 watcher = LocalhostForwardProxy::Watcher.new(
   docker: fake_docker,
-  env: { "SUPER_PROJECTS_NAME" => "super_projects", "SUPER_PROJECTS_WORKDIR" => "workspaces", "HOST_WORKSPACE_DIR" => "/host/super_projects" },
-  proxy_class: RecordingProxy
+  proxy_class: RecordingProxy,
+  self_id: "sidecarid"
 )
 
 log = StringIO.new
@@ -186,7 +188,7 @@ failures += 1 unless assert(
 recreated_sample_app = Marshal.load(Marshal.dump(sample_app))
 recreated_sample_app["Id"] = "sampleid2"
 recreated_sample_app["NetworkSettings"]["Networks"]["sample_app_1_default"]["IPAddress"] = "172.18.0.5"
-fake_docker.containers = [devcontainer, recreated_sample_app]
+fake_docker.containers = [devcontainer, sidecar_in_super_projects_project, recreated_sample_app]
 watcher.sync
 sample_app_proxies = started.select { |proxy| proxy.listen_port == 3000 }
 failures += 1 unless assert(
@@ -198,7 +200,7 @@ failures += 1 unless assert(
   "proxies of containers that went away are stopped"
 )
 
-fake_docker.containers = [sample_app]
+fake_docker.containers = [sidecar_in_super_projects_project, sample_app]
 log = StringIO.new
 $stdout = log
 begin
@@ -210,6 +212,26 @@ $stdout = STDOUT
 failures += 1 unless assert(
   devcontainer_missing_error&.message == "no running devcontainer container in compose project super_projects",
   "sync fails loudly when the devcontainer is not running"
+)
+
+shared_namespace_sidecar = Marshal.load(Marshal.dump(sidecar_in_super_projects_project))
+shared_namespace_sidecar["Config"]["Hostname"] = "super_projects_test_environment"
+shared_namespace_sidecar["HostConfig"] = { "NetworkMode" => "container:devcontainerid" }
+shared_namespace_devcontainer = Marshal.load(Marshal.dump(devcontainer))
+shared_namespace_devcontainer["Config"]["Hostname"] = "super_projects_test_environment"
+shared_namespace_docker = FakeDocker.new([shared_namespace_devcontainer, shared_namespace_sidecar, sample_app])
+RecordingProxy.started = []
+shared_namespace_watcher = LocalhostForwardProxy::Watcher.new(docker: shared_namespace_docker, proxy_class: RecordingProxy)
+original_gethostname = Socket.method(:gethostname)
+Socket.define_singleton_method(:gethostname) { "super_projects_test_environment" }
+begin
+  shared_namespace_watcher.sync
+ensure
+  Socket.define_singleton_method(:gethostname, original_gethostname)
+end
+failures += 1 unless assert(
+  RecordingProxy.started.any? { |proxy| proxy.listen_port == 3000 && proxy.target_host == "172.18.0.2" },
+  "a sidecar sharing the devcontainer hostname still finds its own container"
 )
 
 backend_port = free_port

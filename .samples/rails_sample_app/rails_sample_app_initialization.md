@@ -3,9 +3,9 @@
 The following command creates a new Rails app as an untracked subdirectory of this repo (the parent-directory pattern).
 
 ```bash
-docker run --rm --volume ${LOCAL_WORKSPACE_FOLDER:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
+docker run --rm --volume ${HOST_WORKSPACE_DIR:-.}:/app --workdir /app -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) ruby:latest bash -c 'gem install rails && rails new sample_app_1 --database=postgresql && chown -R $HOST_UID:$HOST_GID sample_app_1'
 ```
-For best results, put a `docker-compose.yaml` in the sample app so Postgres and the app share a project network. `sample_app_1` already has this file; copy it when you create a new project.
+For best results, put a `docker-compose.yaml` in the sample app so Postgres and the app share a project network. Copy the example below when you create a new project.
 
 Example `sample_app_1/docker-compose.yaml`:
 ```yaml
@@ -26,8 +26,8 @@ services:
       # available from the devcontainer at http://sample_app_1 once the sidecar has attached the devcontainer to this stack's network
       # Note: To be able to access sample_app_1 (from within the devcontainer), Rails needs `config.hosts << "sample_app_1"` in development.rb
     volumes:
-      # Compose uses the host Docker socket, so bind sources must be host paths. Inside the devcontainer, HOST_WORKSPACE_DIR (initializeCommand) and LOCAL_WORKSPACE_FOLDER (devcontainer remoteEnv) are that host workspace. On the host those vars are unset, so `..` is this project's parent.
-      - ${HOST_WORKSPACE_DIR:-${LOCAL_WORKSPACE_FOLDER:-..}}/sample_app_1:/rails
+      # Compose uses the host Docker socket, so bind sources must be host paths. Inside the devcontainer, HOST_WORKSPACE_DIR is that host workspace. On the host it is unset, so `..` is this project's parent.
+      - ${HOST_WORKSPACE_DIR:-..}/sample_app_1:/rails
     depends_on:
       postgres:
         condition: service_healthy

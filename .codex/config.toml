@@ -3,8 +3,8 @@
 # Docs: https://openai-codex.mintlify.app/configuration/mcp-servers
 
 [mcp_servers.chrome-devtools]
-command = "docker"
-args = ["compose", "--project-directory", "${workspaceFolder}/.devcontainer", "-f", "${workspaceFolder}/.devcontainer/compose.yaml", "exec", "-T", "devcontainer", "mise", "exec", "--", "chrome-devtools-mcp", "--browser-url=http://127.0.0.1:9223"]
+command = "chrome-devtools-mcp"
+args = ["--browser-url=http://127.0.0.1:9223"]
 enabled = true
 startup_timeout_sec = 60
 tool_timeout_sec = 120

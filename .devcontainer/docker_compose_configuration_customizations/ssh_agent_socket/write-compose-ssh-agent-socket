@@ -4,29 +4,27 @@
 # outer devcontainer that manages nested devcontainers via docker.sock.
 #
 # Ensures a host ssh-agent socket (private keys stay on the host) and loads
-# default SSH keys when possible:
-# - Reuse an already-unlocked agent (desktop session, 1Password, prior Keychain).
-# - macOS Keychain / quiet add when no prompt is needed.
-# - If still empty: prompt via TTY or platform askpass/Keychain UI (still during initializeCommand).
-#
-# Writes .devcontainer/.selected-ssh-agent.env for write-devcontainer-env (parsed, not sourced).
+# default SSH keys when possible. Writes compose.ssh-agent-socket.yaml with
+# that socket. Inside a devcontainer the written path is HOST_SSH_AUTH_SOCK
+# from the enclosing devcontainer's compose.ssh-agent-socket.yaml.
 set -eu
 
 cd "$(dirname "$0")/../../.."
 
-SELECTED_SSH_AGENT_ENV_FILE=.devcontainer/.selected-ssh-agent.env
-
 SUPER_PROJECTS_NAME=super_projects
-# Optional gitignored override: copy only SUPER_PROJECTS_NAME. Missing file
-# or missing key keeps the default above.
-if [ -f .devcontainer/.env.namespace_override ]; then
-  if _line=$(grep -m1 '^SUPER_PROJECTS_NAME=' .devcontainer/.env.namespace_override); then
-    SUPER_PROJECTS_NAME=$(printf '%s' "${_line#*=}" | tr -d '\r')
-  fi
+# Name from docker_compose_configuration_customizations/naming/compose.naming.override.yaml when
+# that file exists, otherwise compose.naming.yaml in the same folder. The first
+# name: line is the Compose name.
+_naming_file=.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml
+if [ -f .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml ]; then
+  _naming_file=.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml
+fi
+if _line=$(grep -m1 '^name:' "$_naming_file"); then
+  SUPER_PROJECTS_NAME=$(printf '%s' "${_line#name:}" | tr -d ' "\r')
 fi
 
 # WSLg's XDG_RUNTIME_DIR can leave a directory at the socket path; use ~/.cache on WSL.
-# Socket filename follows SUPER_PROJECTS_NAME from .env.namespace_override (not generated .env).
+# Socket filename follows the Compose name.
 case "${XDG_RUNTIME_DIR:-}" in
   /mnt/wslg/*) MANAGED_AGENT_SOCK="$HOME/.cache/${SUPER_PROJECTS_NAME}-ssh-agent.sock" ;;
   *) MANAGED_AGENT_SOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/${SUPER_PROJECTS_NAME}-ssh-agent.sock" ;;
@@ -132,10 +130,10 @@ add_key_with_prompt() {
   [ -f "$_key_path" ] || return 0
   if [ "$HOST_OS" = Darwin ]; then
     echo "SSH: unlock $_key_path (macOS Keychain)..." >&2
-    ssh-add --apple-use-keychain "$_key_path" || true
+    ssh-add --apple-use-keychain "$_key_path" >&2 || true
   else
     echo "SSH: unlock $_key_path..." >&2
-    ssh-add "$_key_path" || true
+    ssh-add "$_key_path" >&2 || true
   fi
 }
 
@@ -164,7 +162,7 @@ if ! agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
       echo "SSH: attempting Keychain unlock (may show a system prompt)..." >&2
       for _key_path in $DEFAULT_KEY_PATHS; do
         [ -f "$_key_path" ] || continue
-        ssh-add --apple-use-keychain "$_key_path" 2>/dev/null || true
+        ssh-add --apple-use-keychain "$_key_path" >&2 || true
       done
     else
       _askpass_program=
@@ -179,20 +177,12 @@ if ! agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
         echo "SSH: unlocking keys via askpass (system prompt)..." >&2
         for _key_path in $DEFAULT_KEY_PATHS; do
           [ -f "$_key_path" ] || continue
-          SSH_ASKPASS=$_askpass_program SSH_ASKPASS_REQUIRE=force ssh-add "$_key_path" </dev/null 2>/dev/null || true
+          SSH_ASKPASS=$_askpass_program SSH_ASKPASS_REQUIRE=force ssh-add "$_key_path" </dev/null >&2 || true
         done
       fi
     fi
   fi
 fi
-
-mkdir -p .devcontainer
-# Drop legacy bridge filename from an earlier PR revision.
-[ -f .devcontainer/.host-ssh-agent.env ] && rm -f .devcontainer/.host-ssh-agent.env
-# Parsed by write-devcontainer-env; values may contain spaces (e.g. 1Password).
-{
-  printf 'SELECTED_AGENT_SOCK=%s\n' "$SELECTED_AGENT_SOCK"
-} >"$SELECTED_SSH_AGENT_ENV_FILE"
 
 if agent_has_loaded_keys "$SELECTED_AGENT_SOCK"; then
   echo "SSH: host agent ready ($(SSH_AUTH_SOCK=$SELECTED_AGENT_SOCK ssh-add -l 2>/dev/null | wc -l | tr -d ' ') key(s))" >&2
@@ -201,3 +191,59 @@ elif [ -n "${SSH_AUTH_SOCK:-}" ]; then
   echo "  Reopen/rebuild may prompt again, or enable 1Password SSH agent / macOS Keychain." >&2
   echo "  GitHub HTTPS alternative: gh auth login (inside the container)." >&2
 fi
+
+COMPOSE_FILE=.devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml
+ENCLOSING_COMPOSE=../.devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml
+
+validate_bind_path() {
+  case "$1" in
+    /*) ;;
+    *) echo "ssh agent socket: path must be absolute: $1" >&2; exit 1 ;;
+  esac
+  case "$1" in
+    *:*) echo "ssh agent socket: path must not contain ':': $1" >&2; exit 1 ;;
+  esac
+}
+
+compose_env_value() {
+  _line=$(grep -m1 -E "^[[:space:]]*${1}:" "$2") || return 1
+  _line=${_line#*:}
+  printf '%s' "$_line" | sed 's/^[[:space:]]*//; s/^"//; s/"$//; s/\$\$/$/g'
+}
+
+compose_yaml_quote() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/$$/g')"
+}
+
+if [ ! -f /.dockerenv ]; then
+  COMPOSE_SSH_AUTH_SOCK=$SELECTED_AGENT_SOCK
+else
+  echo "ssh agent socket: resolving Docker host path from $ENCLOSING_COMPOSE" >&2
+  if [ ! -f "$ENCLOSING_COMPOSE" ]; then
+    echo "ssh agent socket: expected $ENCLOSING_COMPOSE" >&2
+    exit 1
+  fi
+  COMPOSE_SSH_AUTH_SOCK=$(compose_env_value HOST_SSH_AUTH_SOCK "$ENCLOSING_COMPOSE") || COMPOSE_SSH_AUTH_SOCK=
+  if [ -z "$COMPOSE_SSH_AUTH_SOCK" ]; then
+    echo "ssh agent socket: $ENCLOSING_COMPOSE has no HOST_SSH_AUTH_SOCK" >&2
+    exit 1
+  fi
+fi
+validate_bind_path "$COMPOSE_SSH_AUTH_SOCK"
+
+_env=$(compose_yaml_quote "$COMPOSE_SSH_AUTH_SOCK")
+_mount=$(compose_yaml_quote "$COMPOSE_SSH_AUTH_SOCK:/ssh-agent.sock")
+{
+  printf '%s\n' \
+    '# Written by write-compose-ssh-agent-socket. Do not edit.' \
+    'services:' \
+    '  devcontainer:' \
+    '    environment:' \
+    "      HOST_SSH_AUTH_SOCK: ${_env}" \
+    '    volumes:' \
+    "      - ${_mount}"
+} >"$COMPOSE_FILE"
+
+case "$(docker info --format '{{.OperatingSystem}}' 2>/dev/null)" in *Docker\ Desktop*)
+  [ -S "$COMPOSE_SSH_AUTH_SOCK" ] && docker run --rm -v "$COMPOSE_SSH_AUTH_SOCK:/ssh-agent.sock:ro" alpine true >/dev/null 2>&1 || true
+;; esac

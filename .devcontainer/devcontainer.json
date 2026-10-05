@@ -1,26 +1,29 @@
 // For format details, see https://containers.dev/implementors/json_reference/.
 {
+  // devcontainer.json customization for name is pending for devcontainer extends feature (see status: https://github.com/devcontainers/spec/issues/22)
   "name": "super_projects",
-  "dockerComposeFile": "compose.yaml",
+  "dockerComposeFile": [
+    "compose.yaml",
+    "docker_compose_configuration_customizations/naming/compose.naming.yaml",
+    "docker_compose_configuration_customizations/naming/compose.naming.override.yaml",
+    "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml",
+    "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml",
+    "docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml",
+    "docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml",
+    "docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.yaml",
+    "docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.override.yaml"
+  ],
   "service": "devcontainer",
-  // IDE workspace path. Must match /${SUPER_PROJECTS_WORKDIR} (default /workspaces).
-  // This JSON field cannot interpolate the override file; change it if you change SUPER_PROJECTS_WORKDIR.
+
+  // devcontainer.json customization for workspaceFolder is pending for devcontainer extends feature (see status: https://github.com/devcontainers/spec/issues/22)
   "workspaceFolder": "/workspaces/",
   "shutdownAction": "none",
 
   // "remoteUser": "developer",
   // "updateRemoteUserUID": true,
 
-  // initializeCommand.sh (host): ssh-agent + key unlock, .devcontainer/.env, persist dirs.
+  // initializeCommand.sh (host): ssh-agent + key unlock, generated Compose files, persist dirs.
   "initializeCommand": "sh .devcontainer/scripts/shell/initializeCommand.sh",
-
-  // Expose localWorkspaceFolder so tools inside the container can reference the host path
-  "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },
-
-  "containerEnv": {
-    "EDITOR": "code",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
-  },
 
   "postStartCommand": "ensure-auth && print-cursor-worker-hint",
 

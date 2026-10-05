@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "socket"
 require_relative "docker"
 require_relative "tcp_proxy"
 
@@ -13,15 +14,16 @@ module LocalhostForwardProxy
     HEARTBEAT_SECONDS = 15
     EVENTS_RETRY_SECONDS = 2
     DEVCONTAINER_SERVICE = "devcontainer"
+    CONTAINER_WORKSPACE = "/workspaces"
     # Docker's built-in networks: skipped as attach targets. host/none cannot be used this way; default bridge is not a Compose project network.
     UNATTACHABLE_NETWORKS = %w[bridge host none].freeze
 
     Forward = Struct.new(:listen_port, :target_ip, :target_port, :container_name, keyword_init: true)
 
-    def initialize(docker: Docker.new, env: ENV, proxy_class: TcpProxy)
+    def initialize(docker: Docker.new, proxy_class: TcpProxy, self_id: nil)
       @docker = docker
-      @env = env
       @proxy_class = proxy_class
+      @self_id = self_id
       @proxies = {}
       @sync_mutex = Mutex.new
       @last_status = nil
@@ -30,7 +32,7 @@ module LocalhostForwardProxy
     def run
       $stdout.sync = true
       %w[INT TERM].each { |signal| Signal.trap(signal) { exit } }
-      log("mirroring published ports of compose stacks under #{workspace_prefixes.join(" or ")} onto 127.0.0.1 and ::1")
+      log("mirroring published ports of compose stacks under #{CONTAINER_WORKSPACE} (and the host path bound there) onto 127.0.0.1 and ::1")
 
       sync
       heartbeat = Thread.new do
@@ -50,6 +52,7 @@ module LocalhostForwardProxy
     def sync
       @sync_mutex.synchronize do
         containers = @docker.running_containers
+        @compose_project_name = compose_label(own_container(containers), "project")
         devcontainer = containers.find { |container| devcontainer?(container) }
         raise "no running #{DEVCONTAINER_SERVICE} container in compose project #{compose_project_name}" if devcontainer.nil?
 
@@ -64,10 +67,11 @@ module LocalhostForwardProxy
     private
 
     def desired_forwards(containers, devcontainer)
+      prefixes = workspace_prefixes(devcontainer)
       devcontainer_networks = network_names(devcontainer)
       forwards = {}
       containers.each do |container|
-        next unless workspace_stack_container?(container)
+        next unless workspace_stack_container?(container, prefixes)
 
         published_ports = published_tcp_ports(container)
         next if published_ports.empty?
@@ -89,11 +93,11 @@ module LocalhostForwardProxy
       forwards
     end
 
-    def workspace_stack_container?(container)
+    def workspace_stack_container?(container, prefixes)
       return false if compose_label(container, "project") == compose_project_name
 
       working_dir = compose_label(container, "project.working_dir").to_s
-      workspace_prefixes.any? { |prefix| working_dir == prefix || working_dir.start_with?("#{prefix}/") }
+      prefixes.any? { |prefix| working_dir == prefix || working_dir.start_with?("#{prefix}/") }
     end
 
     # { host_port => private_port } for every TCP port the container publishes.
@@ -163,16 +167,42 @@ module LocalhostForwardProxy
     end
 
     def compose_project_name
-      @env.fetch("SUPER_PROJECTS_NAME", "super_projects")
+      @compose_project_name
     end
 
-    # The workspace as seen from inside the devcontainer and from the Docker host: compose stacks started from
-    # either place carry that path in their working_dir label.
-    def workspace_prefixes
-      prefixes = ["/#{@env.fetch("SUPER_PROJECTS_WORKDIR", "workspaces")}"]
-      host_workspace_dir = @env["HOST_WORKSPACE_DIR"].to_s
-      prefixes << host_workspace_dir unless host_workspace_dir.empty?
+    # This sidecar's container. Its Compose project label is the project to skip and the project whose devcontainer to attach.
+    # With its own network namespace, the hostname is the container id. With network_mode service:devcontainer,
+    # the hostname is the devcontainer's, so the sidecar is the container that joined that namespace.
+    def own_container(containers)
+      if @self_id
+        found = containers.find { |container| container["Id"] == @self_id }
+        return found if found
+
+        raise "no running container with id #{@self_id}"
+      end
+
+      hostname = Socket.gethostname
+      by_id = containers.find { |container| container["Id"].start_with?(hostname) }
+      return by_id if by_id
+
+      containers.find { |container| container.dig("HostConfig", "NetworkMode").to_s.start_with?("container:") && container.dig("Config", "Hostname") == hostname } ||
+        raise("no running container for hostname #{hostname}")
+    end
+
+    # Compose stacks started in the container have working_dir under /workspaces.
+    # Stacks started on the host use the host path bound at that same mount.
+    def workspace_prefixes(devcontainer)
+      prefixes = [CONTAINER_WORKSPACE]
+      host_source = workspace_bind_source(devcontainer)
+      prefixes << host_source unless host_source.nil? || host_source.empty? || host_source == CONTAINER_WORKSPACE
       prefixes
+    end
+
+    def workspace_bind_source(devcontainer)
+      mount = (devcontainer["Mounts"] || []).find do |candidate|
+        candidate["Destination"].to_s.chomp("/") == CONTAINER_WORKSPACE
+      end
+      mount&.[]("Source")
     end
 
     def compose_label(container, key)

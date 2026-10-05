@@ -1,5 +1,6 @@
 // For format details, see https://containers.dev/implementors/json_reference/.
 {
+  // devcontainer.json customization for name is pending for devcontainer extends feature (see status: https://github.com/devcontainers/spec/issues/22)
   "name": "super_projects",
   "dockerComposeFile": [
     "compose.yaml",
@@ -11,6 +12,8 @@
     "docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml"
   ],
   "service": "devcontainer",
+
+  // devcontainer.json customization for workspaceFolder is pending for devcontainer extends feature (see status: https://github.com/devcontainers/spec/issues/22)
   "workspaceFolder": "/workspaces/",
   "shutdownAction": "none",
 
@@ -19,14 +22,6 @@
 
   // initializeCommand.sh (host): ssh-agent + key unlock, generated Compose files, persist dirs.
   "initializeCommand": "sh .devcontainer/scripts/shell/initializeCommand.sh",
-
-  // Expose localWorkspaceFolder so tools inside the container can reference the host path
-  "remoteEnv": { "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}" },
-
-  "containerEnv": {
-    "EDITOR": "code",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
-  },
 
   "postStartCommand": "ensure-auth && print-cursor-worker-hint",
 

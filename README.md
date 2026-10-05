@@ -226,7 +226,7 @@ These customizations belong in your company fork (see [Forking for your company]
 - **Company-internal tools:** install them via Docker — bake them into `.devcontainer/Dockerfile`, or run them as additional services in `.devcontainer/compose.yaml` — rather than relying on manual per-developer setup.
 - **Agent setups:** edit the shared profiles and attributes under `.agents/` and the MCP configs (`.cursor/mcp.json`, `.vscode/mcp.json`, `.mcp.json`, `.gemini/settings.json`, `.codex/config.toml`).
 - **Add/modify extensions:** add extension IDs to the `customizations.vscode.extensions` array in `.devcontainer/devcontainer.json`.
-- **Add/modify environment variables:** use `containerEnv` in `devcontainer.json` for variables that should always be set inside the container.
+- **Add/modify environment variables:** set them on the `devcontainer` service `environment` in `.devcontainer/compose.yaml` so every process in the container sees them.
 - **Project-specific services** take advantage of the GUI and add emulators / browsers / other gui tools to the dockerfile build.
 
 ## What's tracked in git

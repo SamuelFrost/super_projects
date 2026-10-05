@@ -59,6 +59,8 @@ services:
     environment:
       UID: ${DEVELOPER_UID:-501}
       SSH_AUTH_SOCK: /ssh-agent.sock
+      EDITOR: code
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
     ports:
       - "6080:6080"   # noVNC  — browser GUI for VNC
     extra_hosts:

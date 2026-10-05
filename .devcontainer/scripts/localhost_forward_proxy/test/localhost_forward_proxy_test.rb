@@ -214,6 +214,26 @@ failures += 1 unless assert(
   "sync fails loudly when the devcontainer is not running"
 )
 
+shared_namespace_sidecar = Marshal.load(Marshal.dump(sidecar_in_super_projects_project))
+shared_namespace_sidecar["Config"]["Hostname"] = "super_projects_test_environment"
+shared_namespace_sidecar["HostConfig"] = { "NetworkMode" => "container:devcontainerid" }
+shared_namespace_devcontainer = Marshal.load(Marshal.dump(devcontainer))
+shared_namespace_devcontainer["Config"]["Hostname"] = "super_projects_test_environment"
+shared_namespace_docker = FakeDocker.new([shared_namespace_devcontainer, shared_namespace_sidecar, sample_app])
+RecordingProxy.started = []
+shared_namespace_watcher = LocalhostForwardProxy::Watcher.new(docker: shared_namespace_docker, proxy_class: RecordingProxy)
+original_gethostname = Socket.method(:gethostname)
+Socket.define_singleton_method(:gethostname) { "super_projects_test_environment" }
+begin
+  shared_namespace_watcher.sync
+ensure
+  Socket.define_singleton_method(:gethostname, original_gethostname)
+end
+failures += 1 unless assert(
+  RecordingProxy.started.any? { |proxy| proxy.listen_port == 3000 && proxy.target_host == "172.18.0.2" },
+  "a sidecar sharing the devcontainer hostname still finds its own container"
+)
+
 backend_port = free_port
 listen_port = free_port
 backend = TCPServer.new("127.0.0.1", backend_port)

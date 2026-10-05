@@ -71,6 +71,8 @@ services:
     restart: unless-stopped
     depends_on:
       - devcontainer
+    # Listeners must be the devcontainer's 127.0.0.1, not this container's own.
+    network_mode: service:devcontainer
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: ruby /opt/localhost_forward_proxy/bin/localhost_forward_proxy

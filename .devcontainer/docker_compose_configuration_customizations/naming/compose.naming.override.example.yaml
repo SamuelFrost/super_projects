@@ -9,9 +9,6 @@ services:
     hostname: "super_projects"
     networks:
       - super_projects_default
-  localhost_forward_proxy:
-    networks:
-      - super_projects_default
 networks:
   super_projects_default:
     name: "super_projects_default"

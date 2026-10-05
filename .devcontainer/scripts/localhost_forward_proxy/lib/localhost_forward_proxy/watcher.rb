@@ -171,6 +171,8 @@ module LocalhostForwardProxy
     end
 
     # This sidecar's container. Its Compose project label is the project to skip and the project whose devcontainer to attach.
+    # With its own network namespace, the hostname is the container id. With network_mode service:devcontainer,
+    # the hostname is the devcontainer's, so the sidecar is the container that joined that namespace.
     def own_container(containers)
       if @self_id
         found = containers.find { |container| container["Id"] == @self_id }
@@ -180,7 +182,10 @@ module LocalhostForwardProxy
       end
 
       hostname = Socket.gethostname
-      containers.find { |container| container["Id"].start_with?(hostname) } ||
+      by_id = containers.find { |container| container["Id"].start_with?(hostname) }
+      return by_id if by_id
+
+      containers.find { |container| container.dig("HostConfig", "NetworkMode").to_s.start_with?("container:") && container.dig("Config", "Hostname") == hostname } ||
         raise("no running container for hostname #{hostname}")
     end
 

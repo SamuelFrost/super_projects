@@ -4,7 +4,7 @@
 # Listed last, so these values replace compose.miscellaneous.yaml. Do not commit the copy.
 services:
   devcontainer:
-    ports:
+    ports: !override
       - "6080-6099:6080" # noVNC  — browser GUI for VNC
       - "5900-5919:5900" # VNC raw port (optional, for native VNC clients)
       - "9223-9242:9223"  # Chrome remote debugging — (optional for host-side npx chrome-devtools-mcp to connect)

@@ -2,15 +2,15 @@
 
 Private keys stay on the host. Before the container starts, `initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (VS Code, Cursor, and `devcontainer up`):
 
-1. **`ensure-host-ssh-agent`** — reads `${SUPER_PROJECTS_NAME}` from `.devcontainer/.env.namespace_override` (not generated `.env`) for the managed socket filename; selects or starts a host agent; writes `.devcontainer/.selected-ssh-agent.env` with the chosen socket path
+1. **`ensure-host-ssh-agent`** — reads the Compose `name:` from `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` when that file exists, otherwise from `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml`, and uses it as the managed socket filename; selects or starts a host agent; prints the chosen socket path
 2. **`write-devcontainer-env`** — writes gitignored `.devcontainer/.env` (bind-mount vars plus `SUPER_PROJECTS_NAME` and mirrored `COMPOSE_PROJECT_NAME`) for Compose/Dockerfile bind mounts
 3. **`refresh-docker-desktop-ssh-relay`** — Docker Desktop on WSL2 only; one-shot bind mount of `HOST_SSH_AUTH_SOCK` so stale relay paths exist before compose starts an existing container
 
 Compose forwards the host agent at `/ssh-agent.sock` (from `HOST_SSH_AUTH_SOCK`) and mounts `known_hosts` read-only. `ensure-auth` (inside the container) reports whether identities are loaded; it does not unlock keys.
 
-If the agent is empty after start, reopen in the container (re-runs initializeCommand) or use `gh auth login` (HTTPS). Before manual `docker compose up`, re-run `initializeCommand.sh` on the host so `.env` and `compose.generated.yaml` reflect current host paths, then invoke Compose with `--project-directory .devcontainer` and both Compose files.
+If the agent is empty after start, reopen in the container (re-runs initializeCommand) or use `gh auth login` (HTTPS). Before manual `docker compose up`, re-run `initializeCommand.sh` on the host so the project-directory, ssh-agent-socket, and ssh-known-hosts Compose files reflect the current host paths, then invoke Compose with `--project-directory .devcontainer` and the Compose files in `devcontainer.json` order. The name comes from `docker_compose_configuration_customizations/naming/compose.naming.override.yaml` when that file exists.
 
-When `initializeCommand` runs inside an outer devcontainer, `write-devcontainer-env` resolves Docker-host bind paths from trusted `../.devcontainer/.env` (requires `../.devcontainer/compose.yaml`).
+A normal clone records bind-mount sources as paths on this machine. Inside the meta-development devcontainer, `../.devcontainer/scripts/shell/meta-development-compose-binds` supplies the Docker host paths instead.
 
 On WSLg, the managed agent socket path may differ between manual compose and the normal initialize flow — see [WSLg ssh-agent socket path](wslg_ssh_agent_socket_path.md).
 

@@ -2,7 +2,7 @@
 
 Durable tool state lives in **named Docker volumes** (good I/O on macOS). Each volume is mounted twice: at the conventional path under `/home/developer`, and again here as a shortcut so you can browse everything from one tree **inside the container**.
 
-Volume names are prefixed with `${SUPER_PROJECTS_NAME}` (Compose `name:`, default `super_projects`). Because these volumes hold credentials and other tool state, set `${SUPER_PROJECTS_NAME}` in `.devcontainer/.env.namespace_override` so two clones on the same machine don't silently share them — see "Forking for your company" in the root README.
+Volume names are prefixed with the Compose `name:` (`super_projects` in `compose.naming.yaml`, or the name in `compose.naming.override.yaml` when that file exists). Because these volumes hold credentials and other tool state, set a distinct name in the override so two clones on the same machine don't silently share them — see "Forking for your company" in the root README.
 
 On the **host**, these shortcut directories are mount points and often look empty. Inspect data with:
 
@@ -53,6 +53,6 @@ After that, `~/.cursor` (agent-transcripts, CLI chats, MCP config, skills) survi
 
 Private keys are **not** mounted. Compose forwards a host `ssh-agent` socket to `/ssh-agent.sock`.
 
-`initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `ensure-host-ssh-agent` and `write-devcontainer-env`) to write `.devcontainer/.env` and `.devcontainer/compose.generated.yaml` (bind-mount vars plus `SUPER_PROJECTS_NAME` from `.env.namespace_override`, with host paths as Compose literals). Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts. Manual Compose must use `--project-directory .devcontainer` and both Compose files.
+`initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `ensure-host-ssh-agent`, `write-compose-user-ids`, `write-compose-project-directory`, `write-compose-ssh-agent-socket`, and `write-compose-ssh-known-hosts`) to write those Compose files. The name comes from `compose.naming.yaml`, replaced by `compose.naming.override.yaml` when that file exists. Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts. Manual Compose must use `--project-directory .devcontainer` and the Compose files in `devcontainer.json` order.
 
 `known_hosts` is bind-mounted read-only from the host.

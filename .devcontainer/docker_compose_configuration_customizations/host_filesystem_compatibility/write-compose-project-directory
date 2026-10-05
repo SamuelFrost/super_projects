@@ -1,0 +1,71 @@
+#!/bin/sh
+# Writes host_filesystem_compatibility/compose.project-directory.yaml: the repository
+# directory bind-mounted at /workspaces. The path is a host filesystem path so
+# the bind works for WSL2 hosted on Windows, where the path inside the
+# devcontainer is not a path the Docker daemon can mount.
+# On the Docker host that source is this directory. Inside a devcontainer it is
+# taken from HOST_WORKSPACE_DIR in the enclosing devcontainer's
+# compose.project-directory.yaml.
+set -eu
+
+cd "$(dirname "$0")/../../.."
+
+COMPOSE_FILE=.devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml
+ENCLOSING_COMPOSE=../.devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml
+
+validate_bind_path() {
+  case "$1" in
+    /*) ;;
+    *) echo "project directory: path must be absolute: $1" >&2; exit 1 ;;
+  esac
+  case "$1" in
+    *:*) echo "project directory: path must not contain ':': $1" >&2; exit 1 ;;
+  esac
+}
+
+compose_env_value() {
+  _line=$(grep -m1 -E "^[[:space:]]*${1}:" "$2") || return 1
+  _line=${_line#*:}
+  printf '%s' "$_line" | sed 's/^[[:space:]]*//; s/^"//; s/"$//; s/\$\$/$/g'
+}
+
+compose_yaml_quote() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/$$/g')"
+}
+
+_repo_root=$(pwd)
+if [ ! -f /.dockerenv ]; then
+  HOST_WORKSPACE_DIR=$_repo_root
+else
+  echo "project directory: resolving Docker host path from $ENCLOSING_COMPOSE" >&2
+  if [ ! -f "$ENCLOSING_COMPOSE" ]; then
+    echo "project directory: expected $ENCLOSING_COMPOSE" >&2
+    exit 1
+  fi
+  _workspace=$(compose_env_value HOST_WORKSPACE_DIR "$ENCLOSING_COMPOSE") || _workspace=
+  if [ -z "$_workspace" ]; then
+    echo "project directory: $ENCLOSING_COMPOSE has no HOST_WORKSPACE_DIR" >&2
+    exit 1
+  fi
+  _enclosing_root=$(CDPATH= cd -- .. && pwd)
+  _rel=${_repo_root#"${_enclosing_root}/"}
+  if [ "$_rel" = "$_repo_root" ] || [ -z "$_rel" ]; then
+    echo "project directory: $_enclosing_root does not contain this repository" >&2
+    exit 1
+  fi
+  HOST_WORKSPACE_DIR="${_workspace}/${_rel}"
+fi
+validate_bind_path "$HOST_WORKSPACE_DIR"
+
+_env=$(compose_yaml_quote "$HOST_WORKSPACE_DIR")
+_mount=$(compose_yaml_quote "$HOST_WORKSPACE_DIR:/workspaces:cached")
+{
+  printf '%s\n' \
+    '# Written by write-compose-project-directory. Do not edit.' \
+    'services:' \
+    '  devcontainer:' \
+    '    environment:' \
+    "      HOST_WORKSPACE_DIR: ${_env}" \
+    '    volumes:' \
+    "      - ${_mount}"
+} >"$COMPOSE_FILE"

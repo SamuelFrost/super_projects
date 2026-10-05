@@ -1,0 +1,60 @@
+#!/bin/sh
+# Writes ssh_known_hosts/compose.ssh-known-hosts.yaml.
+# On the Docker host the source is $HOME/.ssh/known_hosts. Inside a devcontainer
+# HOST_HOME_DIR is read from the enclosing devcontainer's compose.ssh-known-hosts.yaml.
+set -eu
+
+cd "$(dirname "$0")/../../.."
+
+COMPOSE_FILE=.devcontainer/docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml
+ENCLOSING_COMPOSE=../.devcontainer/docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml
+
+validate_bind_path() {
+  case "$1" in
+    /*) ;;
+    *) echo "ssh known hosts: path must be absolute: $1" >&2; exit 1 ;;
+  esac
+  case "$1" in
+    *:*) echo "ssh known hosts: path must not contain ':': $1" >&2; exit 1 ;;
+  esac
+}
+
+compose_env_value() {
+  _line=$(grep -m1 -E "^[[:space:]]*${1}:" "$2") || return 1
+  _line=${_line#*:}
+  printf '%s' "$_line" | sed 's/^[[:space:]]*//; s/^"//; s/"$//; s/\$\$/$/g'
+}
+
+compose_yaml_quote() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/$$/g')"
+}
+
+if [ ! -f /.dockerenv ]; then
+  HOST_HOME_DIR=$HOME
+else
+  echo "ssh known hosts: resolving Docker host path from $ENCLOSING_COMPOSE" >&2
+  if [ ! -f "$ENCLOSING_COMPOSE" ]; then
+    echo "ssh known hosts: expected $ENCLOSING_COMPOSE" >&2
+    exit 1
+  fi
+  HOST_HOME_DIR=$(compose_env_value HOST_HOME_DIR "$ENCLOSING_COMPOSE") || HOST_HOME_DIR=
+  if [ -z "$HOST_HOME_DIR" ]; then
+    echo "ssh known hosts: $ENCLOSING_COMPOSE has no HOST_HOME_DIR" >&2
+    exit 1
+  fi
+fi
+KNOWN_HOSTS="${HOST_HOME_DIR}/.ssh/known_hosts"
+validate_bind_path "$KNOWN_HOSTS"
+
+_env=$(compose_yaml_quote "$HOST_HOME_DIR")
+_mount=$(compose_yaml_quote "$KNOWN_HOSTS:/home/developer/.ssh/known_hosts:ro")
+{
+  printf '%s\n' \
+    '# Written by write-compose-ssh-known-hosts. Do not edit.' \
+    'services:' \
+    '  devcontainer:' \
+    '    environment:' \
+    "      HOST_HOME_DIR: ${_env}" \
+    '    volumes:' \
+    "      - ${_mount}"
+} >"$COMPOSE_FILE"

@@ -1,7 +1,15 @@
 // For format details, see https://containers.dev/implementors/json_reference/.
 {
   "name": "super_projects",
-  "dockerComposeFile": ["compose.yaml", "compose.generated.yaml"],
+  "dockerComposeFile": [
+    "compose.yaml",
+    "docker_compose_configuration_customizations/naming/compose.naming.yaml",
+    "docker_compose_configuration_customizations/naming/compose.naming.override.yaml",
+    "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml",
+    "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml",
+    "docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml",
+    "docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml"
+  ],
   "service": "devcontainer",
   "workspaceFolder": "/workspaces/",
   "shutdownAction": "none",
@@ -9,7 +17,7 @@
   // "remoteUser": "developer",
   // "updateRemoteUserUID": true,
 
-  // initializeCommand.sh (host): ssh-agent + key unlock, .devcontainer/.env, persist dirs.
+  // initializeCommand.sh (host): ssh-agent + key unlock, generated Compose files, persist dirs.
   "initializeCommand": "sh .devcontainer/scripts/shell/initializeCommand.sh",
 
   // Expose localWorkspaceFolder so tools inside the container can reference the host path

@@ -1,0 +1,13 @@
+# Shared (default) naming for the devcontainer project and network.
+
+# The name isolates containers, the network, named volumes, and the host
+# ssh-agent socket. Two clones with this default on one Docker daemon share
+# those. Changing a name does not move existing volumes.
+
+name: "super_projects"
+services:
+  devcontainer:
+    hostname: "super_projects"
+networks:
+  super_projects_default:
+    name: "super_projects_default"

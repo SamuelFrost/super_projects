@@ -1,0 +1,72 @@
+#!/bin/sh
+# Writes ssh_agent_socket/compose.ssh-agent-socket.yaml.
+# Argument: socket path chosen by ensure-host-ssh-agent.
+# On the Docker host that path is the bind source. Inside a devcontainer the
+# source is HOST_SSH_AUTH_SOCK in the enclosing devcontainer's
+# compose.ssh-agent-socket.yaml.
+# On Docker Desktop for WSL2, also bind-mounts that socket once so a stale
+# desktop relay exists before Compose starts an existing container.
+set -eu
+
+cd "$(dirname "$0")/../../.."
+
+COMPOSE_FILE=.devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml
+ENCLOSING_COMPOSE=../.devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml
+
+if [ -z "${1:-}" ]; then
+  echo "ssh agent socket: missing socket path; run ensure-host-ssh-agent first" >&2
+  exit 1
+fi
+
+validate_bind_path() {
+  case "$1" in
+    /*) ;;
+    *) echo "ssh agent socket: path must be absolute: $1" >&2; exit 1 ;;
+  esac
+  case "$1" in
+    *:*) echo "ssh agent socket: path must not contain ':': $1" >&2; exit 1 ;;
+  esac
+}
+
+compose_env_value() {
+  _line=$(grep -m1 -E "^[[:space:]]*${1}:" "$2") || return 1
+  _line=${_line#*:}
+  printf '%s' "$_line" | sed 's/^[[:space:]]*//; s/^"//; s/"$//; s/\$\$/$/g'
+}
+
+compose_yaml_quote() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/$$/g')"
+}
+
+if [ ! -f /.dockerenv ]; then
+  COMPOSE_SSH_AUTH_SOCK=$1
+else
+  echo "ssh agent socket: resolving Docker host path from $ENCLOSING_COMPOSE" >&2
+  if [ ! -f "$ENCLOSING_COMPOSE" ]; then
+    echo "ssh agent socket: expected $ENCLOSING_COMPOSE" >&2
+    exit 1
+  fi
+  COMPOSE_SSH_AUTH_SOCK=$(compose_env_value HOST_SSH_AUTH_SOCK "$ENCLOSING_COMPOSE") || COMPOSE_SSH_AUTH_SOCK=
+  if [ -z "$COMPOSE_SSH_AUTH_SOCK" ]; then
+    echo "ssh agent socket: $ENCLOSING_COMPOSE has no HOST_SSH_AUTH_SOCK" >&2
+    exit 1
+  fi
+fi
+validate_bind_path "$COMPOSE_SSH_AUTH_SOCK"
+
+_env=$(compose_yaml_quote "$COMPOSE_SSH_AUTH_SOCK")
+_mount=$(compose_yaml_quote "$COMPOSE_SSH_AUTH_SOCK:/ssh-agent.sock")
+{
+  printf '%s\n' \
+    '# Written by write-compose-ssh-agent-socket. Do not edit.' \
+    'services:' \
+    '  devcontainer:' \
+    '    environment:' \
+    "      HOST_SSH_AUTH_SOCK: ${_env}" \
+    '    volumes:' \
+    "      - ${_mount}"
+} >"$COMPOSE_FILE"
+
+case "$(docker info --format '{{.OperatingSystem}}' 2>/dev/null)" in *Docker\ Desktop*)
+  [ -S "$COMPOSE_SSH_AUTH_SOCK" ] && docker run --rm -v "$COMPOSE_SSH_AUTH_SOCK:/ssh-agent.sock:ro" alpine true >/dev/null 2>&1 || true
+;; esac

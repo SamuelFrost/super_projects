@@ -1,6 +1,6 @@
 # Domain context — WSLg ssh-agent socket path
 
-When **WSLg** sets `XDG_RUNTIME_DIR` under `/mnt/wslg/` (often `/mnt/wslg/runtime-dir`), the **managed** agent socket path used by `ensure-host-ssh-agent` can differ from the compose fallback when `.devcontainer/.env` is missing. The socket filename is `${SUPER_PROJECTS_NAME}-ssh-agent.sock` (`SUPER_PROJECTS_NAME` from `.devcontainer/.env.namespace_override`, default `super_projects`).
+When **WSLg** sets `XDG_RUNTIME_DIR` under `/mnt/wslg/` (often `/mnt/wslg/runtime-dir`), the **managed** agent socket path used by `ensure-host-ssh-agent` can differ from the compose fallback when `.devcontainer/.env` is missing. The socket filename is the Compose `name:` (`docker_compose_configuration_customizations/naming/compose.naming.override.yaml` when that file exists, otherwise `docker_compose_configuration_customizations/naming/compose.naming.yaml`, default `super_projects`).
 
 | When | Typical managed-socket path |
 |------|----------------------------|

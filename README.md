@@ -27,24 +27,30 @@ The intended way to use this project is one fork per company (or team). Your for
 
 Those volumes hold GitHub CLI auth tokens, the Chrome profile (logins and cookies), Cursor CLI auth/session state, and git config. If two clones use the same `${SUPER_PROJECTS_NAME}` on one Docker daemon, they silently **share** that state. In other words, the project will share volumes and network space with any other clone with the same name on the same Docker daemon.
 
-Copy the tracked example to a gitignored override and set the name (`acme_projects` is used below):
+Copy the tracked example to a gitignored override and set the name in all three places (`acme_projects` is used below):
 
 ```sh
-cp .devcontainer/.env.namespace_override.example .devcontainer/.env.namespace_override
+cp .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.example.yaml .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml
 ```
 
-```
-SUPER_PROJECTS_NAME=acme_projects
+```yaml
+name: "acme_projects"
+services:
+  devcontainer:
+    hostname: "acme_projects"
+networks:
+  super_projects_default:
+    name: "acme_projects_default"
 ```
 
-Then start the container — `initializeCommand` reads `SUPER_PROJECTS_NAME` from the override and writes generated `.devcontainer/.env` plus `.devcontainer/compose.generated.yaml` (literal bind mounts and project identity, so a parent process environment cannot override them). Do not edit those generated files; they are overwritten on every initialize.
+`compose.naming.yaml` stays `super_projects`. The override is listed after it, so Compose uses the override. `initializeCommand` does not rewrite either naming file. It writes `docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml` (developer uid and Docker group id), `docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml` (repository directory at `/workspaces`), `docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml`, and `docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml`.
 
 `devcontainer.json` `"name"` stays `super_projects` (IDE label only). MCP configs `docker compose … exec` the `devcontainer` service and do not hardcode `${SUPER_PROJECTS_NAME}-devcontainer-1`. Leave `LICENSE` and the attribution text in this README's [License](#license) section as they are: they refer to the original project.
 
-**Manual Compose** always uses `--project-directory .devcontainer` and both Compose files (tracked `compose.yaml` then generated `compose.generated.yaml`). Initialize must have run after the override exists (VS Code / Cursor / `devcontainer up` already do this):
+**Manual Compose** always uses `--project-directory .devcontainer` and the Compose files in `devcontainer.json` order. The naming override must exist (copy the example first). Initialize must have run so the user-ids, project-directory, ssh-agent-socket, and ssh-known-hosts files exist (VS Code / Cursor / `devcontainer up` already do this):
 
 ```sh
-docker compose -f .devcontainer/compose.yaml -f .devcontainer/compose.generated.yaml --project-directory .devcontainer down
+docker compose -f .devcontainer/compose.yaml -f .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml -f .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml -f .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml -f .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml -f .devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml -f .devcontainer/docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml --project-directory .devcontainer down
 ```
 
 Do not set process-level `COMPOSE_PROJECT_NAME`; it overrides compose `name:` and the container name can diverge from hostname, network, and volumes.
@@ -89,7 +95,7 @@ A merge is preferred over a rebase because your fork's `main` is shared history 
 
 Things to watch for when merging:
 
-- **Your customizations.** Changes you made to the Dockerfile, `.mise.toml`, agent profiles, and MCP configs (steps 2 and 3) may conflict with upstream edits to the same files; keep your company's version and port over anything useful from upstream. `${SUPER_PROJECTS_NAME}` lives in gitignored `.devcontainer/.env.namespace_override`, so upstream merges do not overwrite it.
+- **Your customizations.** Changes you made to the Dockerfile, `.mise.toml`, agent profiles, and MCP configs (steps 2 and 3) may conflict with upstream edits to the same files; keep your company's version and port over anything useful from upstream. The clone's name lives in gitignored `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml`, so upstream merges do not overwrite it.
 - **Rebuild after merging.** If `.devcontainer/` changed, everyone should rebuild (_Dev Containers: Rebuild Container_, or `devcontainer up --remove-existing-container`) to pick up the new image and settings.
 
 Push the merged result to your fork so the whole team receives the update.
@@ -121,7 +127,7 @@ devcontainer up --remove-existing-container
 devcontainer exec bash
 
 # Stop
-docker compose -f .devcontainer/compose.yaml -f .devcontainer/compose.generated.yaml --project-directory .devcontainer down
+docker compose -f .devcontainer/compose.yaml -f .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml -f .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml -f .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml -f .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml -f .devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml -f .devcontainer/docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml --project-directory .devcontainer down
 ```
 
 The VNC desktop and Chrome start automatically with the container — no extra steps needed.
@@ -140,7 +146,7 @@ The VNC desktop and Chrome start automatically with the container — no extra s
 
 Private keys stay on the host; the container only gets a forwarded `ssh-agent` socket.
 
-Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent using the `${SUPER_PROJECTS_NAME}` socket path from `.env.namespace_override`; may prompt once to unlock keys) and `write-devcontainer-env` (writes `.devcontainer/.env` with bind-mount vars plus `SUPER_PROJECTS_NAME` and a `COMPOSE_PROJECT_NAME` mirror). You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
+Unlocking happens automatically in **`initializeCommand`** (`.devcontainer/scripts/shell/initializeCommand.sh`) before the container starts — the same hook used by **VS Code**, **Cursor** (“Reopen in Container”), and **`devcontainer up`**. That script runs `ensure-host-ssh-agent` (select or start the host agent using the Compose name from `compose.naming.override.yaml`, or `compose.naming.yaml` when the override is absent; may prompt once to unlock keys) and `write-compose-user-ids`, `write-compose-project-directory`, `write-compose-ssh-agent-socket`, and `write-compose-ssh-known-hosts`. You may see a one-time passphrase / Keychain / askpass prompt during that step; you should not need to run a separate shell script.
 
 **Still useful:**
 
@@ -176,9 +182,9 @@ Helper scripts live under [`.devcontainer/scripts/`](.devcontainer/scripts/) (se
 
 ### Compose apps at `localhost`
 
-A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the devcontainer Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; the `localhost_forward_proxy` sidecar mirrors it onto super_projects default network localhost. Stop that sidecar with `docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml -f .devcontainer/compose.generated.yaml stop localhost_forward_proxy`. See [`.devcontainer/scripts/localhost_forward_proxy/.directory_information.md`](.devcontainer/scripts/localhost_forward_proxy/.directory_information.md).
+A docker compose stack within the devcontainer (for example the [Rails sample app](.samples/rails_sample_app/rails_sample_app_initialization.md)) is reachable in the devcontainer Chrome at the same `http://localhost:<port>` URL as on the host. Publish the port in the project's Compose file; the `localhost_forward_proxy` sidecar mirrors it onto super_projects default network localhost. Stop that sidecar with `docker compose --project-directory .devcontainer -f .devcontainer/compose.yaml -f .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml -f .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml -f .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml -f .devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml -f .devcontainer/docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml stop localhost_forward_proxy`. See [`.devcontainer/scripts/localhost_forward_proxy/.directory_information.md`](.devcontainer/scripts/localhost_forward_proxy/.directory_information.md).
 
-`.devcontainer/.env` and `.devcontainer/compose.generated.yaml` are generated on the host by `initializeCommand` and are gitignored. Set `${SUPER_PROJECTS_NAME}` in `.devcontainer/.env.namespace_override` (copy the `.example`); initialize copies that key into `.env` and writes literal bind mounts into `compose.generated.yaml`. VS Code, Cursor, and `devcontainer up` regenerate both each time; if you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first, then pass `--project-directory .devcontainer` and both Compose files (`compose.yaml` then `compose.generated.yaml`).
+`.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml` is the tracked default name. Copy `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.example.yaml` to `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` to set this clone's name. `initializeCommand` writes the user-ids, project-directory, ssh-agent-socket, and ssh-known-hosts Compose files and does not rewrite the naming files. If you run Compose by hand, re-run `.devcontainer/scripts/shell/initializeCommand.sh` on the host first so those files exist, then pass `--project-directory .devcontainer` and the Compose files in `devcontainer.json` order.
 
 ### Persisted data
 

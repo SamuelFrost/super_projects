@@ -56,7 +56,7 @@
 
 ### Host access
 
-- Private keys stay on the host. The host ssh-agent is forwarded at `/ssh-agent.sock`; `ensure-auth` reports whether identities are loaded. The managed socket filename uses `${SUPER_PROJECTS_NAME}` from `.devcontainer/.env.namespace_override` (default `super_projects`).
+- Private keys stay on the host. The host ssh-agent is forwarded at `/ssh-agent.sock`; `ensure-auth` reports whether identities are loaded. The managed socket filename uses the Compose name from `docker_compose_configuration_customizations/naming/compose.naming.override.yaml` when that file exists, otherwise `docker_compose_configuration_customizations/naming/compose.naming.yaml`.
 - Passphrase unlock runs in host `initializeCommand` (VS Code / Cursor / `devcontainer up`) — not a separate user-run script. Prefer Keychain, 1Password, or `gh auth login` (HTTPS) to reduce prompts.
 - If SSH fails with `Permission denied`, check `ssh-add -l` in the container; if empty, reopen in the container (re-runs initializeCommand) or use HTTPS.
 

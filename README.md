@@ -37,10 +37,12 @@ The setup steps below use VS Code, Cursor, or the Dev Containers CLI. The [specâ
 
 If you're happy to not use an IDE, or otherwise prefer a terminal based approach, you can use the Dev Containers CLI (`devcontainer`) or the plain Docker Compose option via running [`./not_devcontainer`](./not_devcontainer). You may use the CLI to run `vim` (included by default) or your preferred CLI editor. It's not recommended, but you can also interact with the desktop GUI via the VNC server at `http://localhost:6080/vnc.html`.
 
+### Initial setup
+
 <details>
 <summary>Fork and rename (optional, recommended one time setup per organization)</summary>
 
-### 1. Fork the repository
+#### 1. Fork the repository
 
 This creates a copy of the repository under your account/organization using standard Git commands, while keeping a link to `upstream` for future updates:
 
@@ -72,7 +74,7 @@ This creates a copy of the repository under your account/organization using stan
 
 *(Alternatively, you can fork via the GitHub UI and clone your fork).*
 
-### 2. (Recommended, not required) Customize name
+#### 2. (Recommended, not required) Customize name
 
 By default, the project runs under the name `super_projects`. Change the `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml` file to set a custom name for your project. 
 

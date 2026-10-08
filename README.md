@@ -21,26 +21,57 @@ Clone this repository and open it in your preferred editor (VS Code, Cursor, Dev
   - Plain Docker Compose via `./not_devcontainer`
 
 <details>
-<summary>One time setup (per organization)</summary>
+<summary>Fork and rename (optional, recommended one time setup per organization)</summary>
 
-### 1. Fork or clone
+### 1. Fork the repository
 
-On GitHub, open the upstream repository and choose **Fork**. Set the owner to your company and leave the repository name as `super_projects`. Then clone that fork:
+This creates a copy of the repository under your account/organization using standard Git commands, while keeping a link to `upstream` for future updates:
 
-```sh
-git clone git@github.com:<your-company>/super_projects.git
-cd super_projects
-```
+1. Create a new, empty repository on your Git hosting server (e.g. GitHub or GitLab) for your company/account (e.g. `git@github.com:<your-company>/super_projects.git`).
 
-### 2. (Recommended) Customize name
+2. Clone this repository and enter it:
+   ```sh
+   git clone https://github.com/SamuelFrost/super_projects.git
+   cd super_projects
+   ```
 
-By default, the project runs under the name `super_projects`. Change the `.devcontainers/docker_compose_configuration_customizations/naming/compose.naming.yaml` file to set a custom name for your project. 
+3. Rename `origin` to `upstream` so you can pull future updates:
+   ```sh
+   git remote rename origin upstream
+   ```
 
-- If you have a special use-case and have multiple checkouts or otherwise need a different namespace on one machine, set a custom name in `.devcontainers/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` so they do not share Docker containers, volumes or networks.
+4. Set your new repository as `origin`:
+   ```sh
+   git remote add origin git@github.com:<your-company>/super_projects.git
+   ```
+
+5. Push all branches and tags to your new repository:
+   ```sh
+   git push -u origin --all
+   git push --tags
+   ```
+
+*(To pull upstream updates later: `git fetch upstream && git merge upstream/main`)*
+
+*(Alternatively, you can fork via the GitHub UI and clone your fork).*
+
+### 2. (Recommended, not required) Customize name
+
+By default, the project runs under the name `super_projects`. Change the `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml` file to set a custom name for your project. 
+
+- If you have a special use-case and have multiple checkouts or otherwise need a different namespace on one machine, set a custom name in `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` so they do not share Docker containers, volumes or networks.
 
 </details>
 
+<details>
+<summary>Clone the repository</summary>
 
+```sh
+git clone git@github.com:SamuelFrost/super_projects.git
+cd super_projects
+```
+
+</details>
 
 ### Starting and stopping services
 

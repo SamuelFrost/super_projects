@@ -168,6 +168,36 @@ Before starting the container, `initializeCommand` runs [`write-compose-ssh-agen
 
 </details>
 
+### SSH known hosts
+
+Your host's `~/.ssh/known_hosts` is mounted into the container as read-only at `/home/developer/.ssh/known_hosts`. Any host you have already trusted on your host machine will work immediately inside the container.
+
+<details>
+<summary>Adding or trusting new hosts</summary>
+
+Because the container mount is read-only, new hosts must be added from your host machine:
+
+- **Scan and add automatically (host terminal):**
+  ```sh
+  ssh-keyscan github.com >> ~/.ssh/known_hosts
+  ```
+- **Or connect once from the host:** SSH to the remote server from your host terminal and accept the fingerprint prompt.
+
+The container reflects updates to `~/.ssh/known_hosts` immediately without needing a rebuild or restart.
+
+</details>
+
+<details>
+<summary>Technical details (how known_hosts mounting works)</summary>
+
+During startup, `initializeCommand` (or `./not_devcontainer`) runs [`write-compose-ssh-known-hosts`](.devcontainer/docker_compose_configuration_customizations/ssh_known_hosts/write-compose-ssh-known-hosts):
+
+1. **Host path resolution:** Locates `$HOME/.ssh/known_hosts` on your host machine (ensuring the file exists so Docker doesn't mistakenly create a directory).
+2. **Mount generation:** Generates `compose.ssh-known-hosts.yaml`, mounting that file to `/home/developer/.ssh/known_hosts:ro`.
+3. **Nested containers:** When running inside another devcontainer, it reads `HOST_HOME_DIR` from the parent container's config so the volume mount resolves to the true host filesystem path.
+
+</details>
+
 ### Persisted volumes
 
 State is preserved across container rebuilds via named Docker volumes:

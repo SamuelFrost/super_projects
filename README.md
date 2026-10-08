@@ -10,15 +10,32 @@ Projects are meant to live as separate, repositories inside this folder untracke
 
 ## Getting started
 
-Clone this repository and open it in your preferred editor (VS Code, Cursor, Dev Containers CLI, or Docker Compose directly) to get a fully configured development container your whole team/organization can share.
+Clone this repository and open it with an IDE that supports Dev Containers, or use the Dev Containers CLI, to get a fully configured development container your whole team/organization can share.
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine on Linux)
-- Any of:
-  - VS Code / Cursor (with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers))
-  - [Dev Containers CLI](https://github.com/devcontainers/cli) (`devcontainer`)
-  - Plain Docker Compose via `./not_devcontainer`
+- Linux or macOS. On Windows, use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install)
+- Docker installed and running. [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- An IDE with Dev Container support is highly recommended
+
+<details>
+<summary>IDEs with Dev Container support</summary>
+
+- **[Visual Studio Code](https://code.visualstudio.com/docs/devcontainers/containers)** — [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
+- **Cursor** — Dev Containers extension included in Cursor.
+- **[Zed](https://zed.dev/docs/dev-containers)** — native support when `.devcontainer/devcontainer.json` is present (Docker or Podman).
+- **[IntelliJ IDEA](https://www.jetbrains.com/help/idea/connect-to-devcontainer.html)** — local Docker or remote SSH. PyCharm, GoLand, WebStorm, CLion, PhpStorm, Rider, and RubyMine can use the same flow by selecting that IDE backend, or connect through [JetBrains Gateway](https://www.jetbrains.com/remote-development/).
+- **Visual Studio 2022** (17.4+) — C++ projects that use CMake Presets, with the Linux and embedded development with C++ workload. The container is treated as a remote Linux target.
+- **Emacs** — community package [`devcontainer.el`](https://github.com/johannes-mueller/devcontainer.el) (MELPA). It needs the Dev Containers CLI.
+- **[GitHub Codespaces](https://docs.github.com/en/codespaces/setting-up-your-project-for-codespaces/adding-a-dev-container-configuration/introduction-to-dev-containers)**, **CodeSandbox**, and **Ona** (formerly Gitpod) — hosted environments that read `devcontainer.json`.
+
+[DevPod](https://github.com/loft-sh/devpod) can build the container and open it in VS Code, the JetBrains suite, Zed, or any editor that connects over SSH.
+
+The setup steps below use VS Code, Cursor, or the Dev Containers CLI. The [spec’s supporting-tools list](https://containers.dev/supporting) is the current source for which tools implement `devcontainer.json`.
+
+</details>
+
+If you're happy to not use an IDE, or otherwise prefer a terminal based approach, you can use the Dev Containers CLI (`devcontainer`) or the plain Docker Compose option via running [`./not_devcontainer`](./not_devcontainer). You may use the CLI to run `vim` (included by default) or your preferred CLI editor. It's not recommended, but you can also interact with the desktop GUI via the VNC server at `http://localhost:6080/vnc.html`.
 
 <details>
 <summary>Fork and rename (optional, recommended one time setup per organization)</summary>
@@ -75,7 +92,7 @@ cd super_projects
 
 ### Starting and stopping services
 
-- **VS Code / Cursor:** Open the directory and click **Reopen in Container**.
+- For IDEs that support Dev Containers: Open the directory and execute the command to Reopen it in the container. For vsCode and Cursor, use ctrl + shift + p to open the command palette and type something along the lines of `Reopen in Container` or `Rebuild Container` and select the option.
 - **CLI (`devcontainer`):**
   ```sh
   devcontainer up --remove-existing-container
@@ -87,15 +104,13 @@ cd super_projects
   ./not_devcontainer exec devcontainer bash
   ```
 
-To stop: `./not_devcontainer down`.
+To stop: `./not_devcontainer down` or otherwise perform a docker compose down equivalent such as docker desktop's stop button.
 
 ### Accessing the container's GUI and CLI
 
 - **GUI:** Open `http://localhost:6080/vnc.html` in your browser and press **Connect**.
-- **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` to get a shell in the container.
-- **VS Code or Cursor:** Ensure the dev containers extension is installed and open the project folder. Remote - Containers will automatically detect the devcontainer and prompt you to open it - follow the prompts to open the project in the container.
-- **vim:** Run `devcontainer exec vim` to edit files in the container.
-note: while many IDEs can be configured to be installed and opened on the container, you will probably get the best experience by installing your preferred IDE on the host machine and open it on the container via the IDE's remote connection feature.
+- **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to get a shell in the container.
+- **IDE:** Open the project folder in your preferred IDE that supports Dev Containers. VS code and Cursor will automatically detect the devcontainer and prompt you to open it - follow the prompts to open the project in the container.
 
 ## Features & details
 
@@ -134,12 +149,69 @@ State is preserved across container rebuilds via named Docker volumes:
 
 These volumes are also dual-mounted under `.devcontainer/persist/` inside the container for easy inspection. To wipe state, delete the corresponding Docker volume (e.g., `docker volume rm <name>_gh-data`).
 
+<details>
+<summary>To fully remove the containers and all associated data:</summary>
+
+Note, if you have set up projects with multiple names, you will need to run this command for each namespace.
+
+#### To fully remove the containers and volumes:
+
+This stops `devcontainer` and `localhost_forward_proxy`, removes the project network, and deletes the named volumes in the table above (Gemini, GitHub CLI auth, git config, mise installs, Chrome profile, and Cursor state). The built images stay, so the next start can reuse them.
+
+```sh
+./not_devcontainer down -v
+```
+
+#### To also remove this project's images:
+
+Same cleanup as above, and deletes the images Compose built for this project, plus containers left behind by services that are no longer in the Compose file.
+
+```sh
+./not_devcontainer down -v --rmi all --remove-orphans
+```
+
+</details>
+
 ## Customization
 
+### Docker compose customizations
+
+Docker compose has a chain of override files to modularize common customizations.
+
+<details>
+<summary>Namespace customization</summary>
+
+The override file is `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml`, it is recommended to copy the [example file](.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.example.yaml) and modify the name and network name fields to your needs.
+
+```sh
+cp .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.example.yaml .devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml
+```
+
+This is useful if you want to set up multiple codebases that can act mostly independently of each other by setting the docker compose override file to use a different namespace.
+
+*If you want to make these changes the new default for your whole team/organization*, you can write this customization to the `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.yaml` file instead.
+
+</details>
+
+<details>
+<summary>Miscellaneous overrides</summary>
+
+You may have special uses that require further customization of the devcontainer. This is done by writing your configuration to the `.devcontainer/docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.override.yaml` file.
+
+*If you want to make these changes the new default for your whole team/organization*, you can write this customization to the `.devcontainer/docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.yaml` file instead. Directly modifying the `.devcontainer/compose.yaml` file will achieve the same result, but may be more difficult to maintain if you want to pull upstream changes from the super_projects repository in the future.
+
+</details>
+
+Other compose files are intended to be programmatically generated by the [startup script](.devcontainer/scripts/shell/initializeCommand.sh).
+
+### Shared tools and runtimes
+
+You are encouraged to modify everything to your own company's needs. Some likely changes you will want to make are:
 - **Tools & runtimes:** Edit `.mise.toml` or add project-level `.mise.toml` files.
-- **System packages:** Adjust installations in `.devcontainer/Dockerfile`.
+- **System packages:** Add or remove installations in `.devcontainer/Dockerfile`.
 - **Extensions:** Add extension IDs to `customizations.vscode.extensions` in `.devcontainer/devcontainer.json`.
 - **AI agents & MCP:** Configure templates and attributes for agents `.agents/` and your preferred AI providers in `.cursor/`, `.vscode/`, `.gemini/`, `.codex/` etc.
+- **Sandboxing:** Remove host machine access methods for more tightly controlled environments. (recommended steps coming soonish / when I get around to it)
 
 ## What's tracked in git
 

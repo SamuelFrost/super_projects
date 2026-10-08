@@ -130,11 +130,43 @@ The devcontainer is an **Ubuntu 24.04** image with:
 
 ### SSH agent forwarding
 
-Host SSH keys are forwarded into the container at `/ssh-agent.sock` — private keys never leave your host.
+For developer convenience, the devcontainer automatically forwards your host's SSH agent into the container at `/ssh-agent.sock`. This lets tools like Git in the container use your existing SSH keys without copying private keys into Docker.
 
-- **macOS:** Add `AddKeysToAgent yes` and `UseKeychain yes` to `~/.ssh/config`.
-- **1Password:** Enable 1Password's SSH agent; it is automatically detected and used.
-- **WSL2:** Use WSL directly (`dev.containers.executeInWSL`).
+<details>
+<summary>How to set up your Host Machine's SSH keys so they can be used in the container</summary>
+
+The devcontainer looks for keys on your host in this order:
+
+- **Existing agent:** If `SSH_AUTH_SOCK` is already set in your host environment and has unlocked keys, it is used directly.
+- **1Password:** Turn on the 1Password SSH agent. If unlocked, the devcontainer detects and uses it automatically.
+- **macOS Keychain:** Add the following to `~/.ssh/config` so macOS can unlock keys without needing an interactive terminal:
+  ```ssh-config
+  AddKeysToAgent yes
+  UseKeychain yes
+  ```
+- **Default SSH keys (`~/.ssh/id_*`):** If no agent has keys loaded, the startup script starts a dedicated agent and tries to load standard keys (`id_ed25519`, `id_rsa`, etc.). It will prompt for your passphrase via terminal, macOS Keychain, or a GUI askpass dialog if available.
+- **Windows / WSL2:** The devcontainer must run inside WSL because container mounts require a Linux Unix socket (Windows OpenSSH uses named pipes, which cannot be forwarded here). If you run VS Code or Cursor from Windows, ensure your user `settings.json` has:
+  ```json
+  "dev.containers.executeInWSL": true
+  ```
+  *(Note: Must be in user settings, as workspace settings are ignored for this setting.)*
+
+</details>
+
+<details>
+<summary>Technical details (how socket forwarding works)</summary>
+
+Before starting the container, `initializeCommand` runs [`write-compose-ssh-agent-socket`](.devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/write-compose-ssh-agent-socket) (also executed by `./not_devcontainer`):
+
+1. **Socket discovery:** It checks for active keys (`ssh-add -l`) across:
+   1. `$SSH_AUTH_SOCK`
+   2. 1Password agent sockets (`~/Library/Group Containers/...` or `~/.1password/agent.sock`)
+   3. A project-managed socket in `$XDG_RUNTIME_DIR/` or `~/.cache/` (named after the Compose project)
+2. **Fallback loading:** If all agents are empty, it launches or reuses the project-managed socket and attempts to add standard keys from `~/.ssh/`.
+3. **Mount generation:** It writes `compose.ssh-agent-socket.yaml`, bind-mounting the selected socket to `/ssh-agent.sock` inside the container.
+4. **Nested containers:** When running inside another devcontainer, it automatically resolves `HOST_SSH_AUTH_SOCK` from the outer environment so the bind mount refers to the actual Docker host path.
+
+</details>
 
 ### Persisted volumes
 

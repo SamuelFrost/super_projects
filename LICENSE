@@ -25,7 +25,8 @@ This license does NOT apply to:
 When you fork, clone, or copy super_projects, this license covers the scaffold
 you received from that distribution. Your own additions and the work of your
 organization remain under terms you choose; they are not automatically licensed
-under the Super Projects License.
+under the Super Projects License, except for the mutual permission regarding
+generalized environment tooling in Section 5 below.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of the Software and associated documentation files included in that distribution,
@@ -65,6 +66,42 @@ furnished to do so, subject to the following conditions:
 
    "Based on super_projects by Samuel Anthony Frost
    (https://github.com/SamuelFrost)"
+
+5. Generalized Environment Tooling & Scaffolding.
+
+   (a) Respect for Proprietary Work. This license explicitly disclaims any
+   claim of ownership, rights, or interest in any proprietary materials,
+   including but not limited to application source code, product features,
+   business logic, proprietary algorithms, data, secrets, credentials, internal
+   infrastructure details, customer information, or company branding. All such
+   intellectual property remains exclusively with its respective owner.
+
+   (b) Upstream Sharing of General Scaffolding Improvements. Users,
+   contributors, and organizations that utilize the Software are encouraged to
+   benefit from and contribute back to the broader developer environment. To
+   foster collaboration without compromising proprietary assets, any person who
+   develops or enhances generic developer-environment scaffolding or tooling
+   while working with or adapting the Software (whether independently, as an
+   employee, or as a contractor) retains the right, and is granted permission,
+   to extract and reuse generalized, non-confidential versions of those
+   tooling improvements.
+
+   (c) Permitted Contributions. Samuel Anthony Frost and contributors may
+   reintegrate these generalized improvements into the public super_projects
+   project or other shared distributions under the terms of this license. A
+   "generalized version" refers solely to domain-agnostic development
+   scaffolding (such as generic Docker/devcontainer recipes, IDE configurations,
+   automation helper scripts, or workflow templates) from which all proprietary
+   names, company identifiers, trade secrets, private network details, and
+   confidential data have been completely stripped or rewritten in an abstract
+   manner.
+
+   (d) Scope of Grant. Use of the Software includes a non-exclusive, perpetual,
+   royalty-free authorization for the author of such generic tooling and Samuel
+   Anthony Frost to incorporate such abstract, sanitized scaffolding concepts
+   and code into upstream releases, ensuring that community improvements can
+   continue to evolve openly without infringing upon any company's proprietary
+   technology or business domains.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

@@ -320,6 +320,8 @@ The root `agents.md` and cloned project subdirectories are untracked.
 
 This project is licensed under the [Super Projects License](LICENSE). The license applies only to the **super_projects scaffold** tracked in this repository (devcontainer, IDE config, `README.md`, `LICENSE`, and related files listed in [What's tracked in git](#whats-tracked-in-git)). It does **not** apply to files you or your company add — application code, databases, assets, and other project directories remain yours under whatever terms you choose.
 
+All proprietary business logic, product code, secrets, and private infrastructure remain exclusively yours. The license includes a mutual permission clause (Section 5) that allows authors and maintainers to upstream generalized, sanitized developer tooling improvements (like generic devcontainer configurations, helper scripts, or workflow templates) without compromising any company's proprietary IP or confidential data.
+
 When reusing or redistributing super_projects scaffold files, you must:
 
 - Include a copy of the [Super Projects License](LICENSE) in any repository or distribution that incorporates that scaffold

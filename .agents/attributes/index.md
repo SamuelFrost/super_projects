@@ -70,6 +70,10 @@ This index lists the available agent attributes by category. Link text uses each
 - [Pull request content guidelines — write meaningful PR titles and bodies](tools/pull_requests/meaningful_pull_request_content_guidelines.md)
 - [Tool interaction guideline — run tests and linters for changed PR files](tools/pull_requests/run_tests_and_linters_for_changed_files.md)
 
+### User emulation
+
+- [Tool interaction guideline — emulate user input on the virtual desktop](tools/user_emulation/emulate_user_input_on_the_virtual_desktop.md)
+
 ### Testing
 
 - [Constraint — do not resolve failing tests by removing or modifying them](tools/testing/do_not_resolve_failing_tests_by_removing_or_modifying_them.md)

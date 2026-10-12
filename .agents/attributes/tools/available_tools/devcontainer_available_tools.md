@@ -69,6 +69,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `ruby`: workspace fallback version `4.0` from `.mise.toml`.
 - `node`: workspace fallback version `24` from `.mise.toml`, installed into the persisted `mise-data` volume.
 - `npm:chrome-devtools-mcp`: version `1.10.1` from `.mise.toml` (pinned for agent MCP configs).
+- `conda:tesseract`: version `5.5.3` from `.mise.toml` (Tesseract OCR for virtual-desktop labels; conda-forge package name is `tesseract`).
 - `python`: supported by the image build dependencies and mise, but currently commented out in `.mise.toml`.
 - `go`: supported by mise, but currently commented out in `.mise.toml`.
 - `java`: supported by mise, but currently commented out in `.mise.toml`.
@@ -88,6 +89,8 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `libgl1-mesa-dri`: Mesa OpenGL drivers.
 - `xvfb`: virtual X display.
 - `x11vnc`: VNC server for the X display.
+- `libx11-6`: X11 client library for the virtual display.
+- `libxtst6`: XTest pointer and keyboard injection (`XTestFakeMotionEvent`, `XTestFakeButtonEvent`, `XTestFakeKeyEvent`) on display `:99`.
 - `novnc`: browser-based VNC client.
 - `websockify`: WebSocket-to-TCP bridge for noVNC.
 - `x11-xserver-utils`: X11 utilities.

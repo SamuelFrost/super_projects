@@ -28,6 +28,8 @@ node    = "24"
 "npm:chrome-devtools-mcp" = "1.10.1"
 # Playwright (CDP attach to devcontainer Chrome; no extra browser binary)
 "npm:playwright" = "1.64.0"
+# Tesseract OCR for virtual-desktop labels. conda-forge package name is tesseract.
+"conda:tesseract" = "5.5.3"
 # python  = "3.13"
 
 # go      = "1.22"

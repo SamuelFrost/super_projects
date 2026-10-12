@@ -50,6 +50,7 @@ The workspace root (`/super_projects_development`) is a **development wrapper** 
 ### Browser and GUI
 
 - Use the devcontainer Chrome devtools mcp for confirming application behavior when relevant.
+- For desktop input emulation, see `.agents/attributes/tools/user_emulation/emulate_user_input_on_the_virtual_desktop.md`.
 - Avoid installing new browser binaries unless the project explicitly requires it. Prefer an already-configured browser or devcontainer Chrome instance when available. This applies to the chrome devtools mcp as well as when using playwright to interact with the browser for one-off tasks.
 - Keep screenshots, traces, and other evidence artifacts out of commits. Keep development artifacts under ignored local directories.
 
@@ -116,7 +117,8 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `procps`: process and system inspection utilities such as `ps`, `top`, and related tools.
 - `ripgrep` / `rg`: fast recursive search.
 - `poppler-utils`: PDF utilities such as `pdftotext`.
-- `ffmpeg`: media probing and audio/video processing.
+- `ffmpeg`: media probing and audio/video processing. Also captures the virtual desktop with `-f x11grab`.
+- `python3`: system Python from `python3-minimal`, including short scripts that call X11 libraries.
 - `tzdata`: timezone data.
 - `ca-certificates`: trusted CA certificates for HTTPS tooling.
 - `gnupg` / `gpg`: package repository key handling and signature verification.

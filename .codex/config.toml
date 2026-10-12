@@ -1,11 +1,30 @@
 # Project-scoped MCP servers for OpenAI Codex.
 # Requires trusting this directory in Codex before project config loads.
 # Docs: https://openai-codex.mintlify.app/configuration/mcp-servers
+# Commands are relative to this project. Codex does not expand ${workspaceFolder}.
 
-[mcp_servers.chrome-devtools]
-command = "chrome-devtools-mcp"
-args = ["--browser-url=http://127.0.0.1:9223"]
+# Off unless this Chrome is being used to test the app. Leaving it enabled
+# attaches the insecure tool set to the same browser used for ordinary sites.
+[mcp_servers."chrome-devtools-development(insecure)"]
+command = ".devcontainer/scripts/shell/chrome-devtools-mcp"
+args = ["development"]
+enabled = false
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+
+[mcp_servers.chrome-devtools-webBrowsing]
+command = ".devcontainer/scripts/shell/chrome-devtools-mcp"
+args = ["browsing"]
 enabled = true
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+
+# Off unless a Progressive Web App is being installed or launched. This starts
+# a separate Chrome and does not share the desktop Chrome profile.
+[mcp_servers.chrome-devtools-pwa]
+command = ".devcontainer/scripts/shell/chrome-devtools-mcp"
+args = ["pwa"]
+enabled = false
 startup_timeout_sec = 60
 tool_timeout_sec = 120
 

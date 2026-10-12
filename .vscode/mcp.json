@@ -1,12 +1,20 @@
 {
   "inputs": [],
   "servers": {
-    "chrome-devtools": {
+    "chrome-devtools-development(insecure)": {
       "type": "stdio",
-      "command": "chrome-devtools-mcp",
-      "args": [
-        "--browser-url=http://127.0.0.1:9223"
-      ]
+      "command": "${workspaceFolder}/.devcontainer/scripts/shell/chrome-devtools-mcp",
+      "args": ["development"]
+    },
+    "chrome-devtools-webBrowsing": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.devcontainer/scripts/shell/chrome-devtools-mcp",
+      "args": ["browsing"]
+    },
+    "chrome-devtools-pwa": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.devcontainer/scripts/shell/chrome-devtools-mcp",
+      "args": ["pwa"]
     },
     "figma": {
       "type": "http",

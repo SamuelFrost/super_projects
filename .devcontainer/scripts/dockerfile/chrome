@@ -9,13 +9,13 @@ _chrome_ready() {
 if ! _chrome_ready; then
   chown -R "$(id -u):$(id -g)" "$_profile" 2>/dev/null || true
   rm -f "$_profile/SingletonLock" "$_profile/SingletonSocket" "$_profile/SingletonCookie" 2>/dev/null
-  nohup env DISPLAY="${DISPLAY:-:99}" /usr/bin/google-chrome \
+  nohup env DISPLAY=:99 /usr/bin/google-chrome \
     --no-sandbox \
-    --ignore-gpu-blocklist \
     --enable-unsafe-swiftshader \
     --remote-debugging-port="${CHROME_PORT}" \
     --remote-debugging-address=0.0.0.0 \
     --remote-allow-origins="*" \
+    --enable-features=WebMCP \
     --user-data-dir="$_profile" \
     "${@:-about:blank}" >/tmp/chrome.log 2>&1 &
   for i in $(seq 20); do

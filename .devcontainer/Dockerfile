@@ -227,7 +227,7 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
 #   A wrapper at /usr/local/bin/chrome applies the container-required flags:
 #     --no-sandbox              Chrome cannot create a user namespace sandbox inside Docker.
 #     --enable-unsafe-swiftshader  Software WebGL (no GPU in the container).
-#     --ignore-gpu-blocklist    Allow SwiftShader when Chrome would blocklist the GPU.
+#     --enable-features=WebMCP  WebMCP tools for chrome-devtools-mcp (Chrome 150+).
 # ------------------------------------------------------------------------------
 RUN install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \

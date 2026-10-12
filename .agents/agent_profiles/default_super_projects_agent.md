@@ -32,7 +32,7 @@
 
 ### Browser and GUI
 
-- Use the devcontainer Chrome devtools mcp for confirming application behavior when relevant.
+- Use `chrome-devtools-webBrowsing` for general web browsing purposes Chrome. Use `chrome-devtools-development(insecure)` only when the user is testing a trusted application in the browser. Use `chrome-devtools-pwa` to install or launch a Progressive Web App. That server starts its own Chrome.
 - For desktop input emulation, see `.agents/attributes/tools/user_emulation/emulate_user_input_on_the_virtual_desktop.md`.
 - Avoid installing new browser binaries unless the project explicitly requires it. Prefer an already-configured browser or devcontainer Chrome instance when available. This applies to the chrome devtools mcp as well as when using playwright to interact with the browser for one-off tasks.
 - Keep screenshots, traces, and other evidence artifacts out of commits. Keep development artifacts under ignored local directories.
@@ -168,4 +168,4 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `x11-xserver-utils`: X11 utilities.
 - `xterm`: lightweight fallback terminal.
 - noVNC is published on host port `6080` when the compose port mapping is enabled (by default).
-- Chrome remote debugging is configured for container port `9223`; host publication is optional in compose (off by default).
+- Chrome remote debugging listens on `CHROME_REMOTE_DEBUGGING_PORT` (default `9223`) on `0.0.0.0`. Publishing that port in compose is optional and off by default, for a host-side client.

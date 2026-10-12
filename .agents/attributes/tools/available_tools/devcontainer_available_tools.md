@@ -96,4 +96,4 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `x11-xserver-utils`: X11 utilities.
 - `xterm`: lightweight fallback terminal.
 - noVNC is published on host port `6080` when the compose port mapping is enabled (by default).
-- Chrome remote debugging is configured for container port `9223`; host publication is optional in compose (off by default).
+- Chrome remote debugging is configured for container port `9223` (can be overridden by the `CHROME_REMOTE_DEBUGGING_PORT` environment variable); host publication is optional in compose (off by default).

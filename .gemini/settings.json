@@ -1,10 +1,19 @@
 {
+  // Commands are relative to this project. Gemini does not expand ${workspaceFolder}.
   "mcpServers": {
-    "chrome-devtools": {
-      "command": "chrome-devtools-mcp",
-      "args": [
-        "--browser-url=http://127.0.0.1:9223"
-      ],
+    "chrome-devtools-development(insecure)": {
+      "command": ".devcontainer/scripts/shell/chrome-devtools-mcp",
+      "args": ["development"],
+      "timeout": 120000
+    },
+    "chrome-devtools-webBrowsing": {
+      "command": ".devcontainer/scripts/shell/chrome-devtools-mcp",
+      "args": ["browsing"],
+      "timeout": 120000
+    },
+    "chrome-devtools-pwa": {
+      "command": ".devcontainer/scripts/shell/chrome-devtools-mcp",
+      "args": ["pwa"],
       "timeout": 120000
     },
     "figma": {

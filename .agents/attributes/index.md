@@ -51,6 +51,7 @@ This index lists the available agent attributes by category. Link text uses each
 - [Constraint — do not ignore push hooks without approval](tools/git/do_not_ignore_push_hooks_without_approval.md)
 - [Tool interaction guideline — enforce git commit hooks and formatters](tools/git/enforce_git_commit_hooks_and_formatters.md)
 - [Git workflow guideline — fetch and pull before branching](tools/git/fetch_and_pull_before_branching.md)
+- [Tool interaction guideline — attach images and videos with GitHub CLI](tools/git/attach_files_with_github_cli.md)
 - [Domain context — GitHub CLI auth persistence](tools/git/github_cli_auth_persistence.md)
 - [Constraint — never commit development artifacts](tools/git/never_commit_development_artifacts.md)
 - [Constraint — never use git push without approval](tools/git/never_use_git_push_without_approval.md)

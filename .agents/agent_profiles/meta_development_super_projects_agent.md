@@ -81,6 +81,7 @@ The workspace root (`/super_projects_development`) is a **development wrapper** 
 ### Git
 
 - GitHub CLI auth persists in the `gh-data` volume (`~/.config/gh` / `persist/gh`). Run `gh auth login` **inside the container** once when needed.
+- Attach local images and videos to issues, pull requests, and comments with `gh --attach` (`gh pr create`, `gh pr edit`, `gh pr comment`, and the matching `gh issue` commands). Reference the local path in the Markdown body so GitHub CLI rewrites it to the uploaded URL. Do not commit the file.
 
 ### Devcontainer
 

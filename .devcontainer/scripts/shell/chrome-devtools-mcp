@@ -48,7 +48,6 @@ case "$mode" in
       --category-pwa \
       --executable-path=/usr/bin/google-chrome \
       --user-data-dir=/home/developer/chrome-profile/pwa \
-      --chrome-arg=--no-sandbox \
       --chrome-arg=--enable-unsafe-swiftshader \
       "$@"
     ;;

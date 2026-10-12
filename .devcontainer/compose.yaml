@@ -59,6 +59,11 @@ services:
       - "6080:6080"   # noVNC  — browser GUI for VNC
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Chrome's sandbox creates user, PID, and network namespaces. Docker's
+    # built-in seccomp profile blocks those unless the container has CAP_SYS_ADMIN.
+    # This profile is that built-in profile plus those three namespaces.
+    security_opt:
+      - seccomp=seccomp/chrome-sandbox.json
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
 

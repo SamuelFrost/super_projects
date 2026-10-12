@@ -10,7 +10,6 @@ if ! _chrome_ready; then
   chown -R "$(id -u):$(id -g)" "$_profile" 2>/dev/null || true
   rm -f "$_profile/SingletonLock" "$_profile/SingletonSocket" "$_profile/SingletonCookie" 2>/dev/null
   nohup env DISPLAY=:99 /usr/bin/google-chrome \
-    --no-sandbox \
     --enable-unsafe-swiftshader \
     --remote-debugging-port="${CHROME_PORT}" \
     --remote-debugging-address=0.0.0.0 \

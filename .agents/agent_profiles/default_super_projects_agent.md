@@ -132,7 +132,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `docker compose`: Docker Compose plugin from `docker-compose-plugin`.
 - `docker buildx`: Docker Buildx plugin from `docker-buildx-plugin`.
 - `az`: Azure CLI.
-- `node`: Node.js 20 from NodeSource in the base image.
+- `node`: Node.js 24 LTS from NodeSource in the base image.
 - `npm`: bundled with the NodeSource Node.js install.
 - `mise`: system-installed runtime/version manager; interactive terminals use mise shims.
 - `gemini`: Google Gemini CLI installed globally with npm as `@google/gemini-cli`.
@@ -141,8 +141,8 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 #### mise-managed Workspace Runtimes
 
 - `ruby`: workspace fallback version `4.0` from `.mise.toml`.
-- `node`: workspace fallback version `22` from `.mise.toml`, installed into the persisted `mise-data` volume.
-- `npm:chrome-devtools-mcp`: version `1.6.0` from `.mise.toml` (pinned for agent MCP configs).
+- `node`: workspace fallback version `24` from `.mise.toml`, installed into the persisted `mise-data` volume.
+- `npm:chrome-devtools-mcp`: version `1.10.1` from `.mise.toml` (pinned for agent MCP configs).
 - `python`: supported by the image build dependencies and mise, but currently commented out in `.mise.toml`.
 - `go`: supported by mise, but currently commented out in `.mise.toml`.
 - `java`: supported by mise, but currently commented out in `.mise.toml`.

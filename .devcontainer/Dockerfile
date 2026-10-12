@@ -263,12 +263,13 @@ RUN sed -i \
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# Node.js 20 LTS via NodeSource (Ubuntu ships v18; Gemini CLI requires v20+)
+# Node.js 24 LTS via NodeSource (Ubuntu ships an older Node; Gemini CLI and
+# chrome-devtools-mcp require a current LTS).
 # npm is bundled with the NodeSource nodejs package — no separate install needed.
 # ------------------------------------------------------------------------------
 RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
        | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
        > /etc/apt/sources.list.d/nodesource.list \
   && apt-get update -qq \
   && apt-get install -y --no-install-recommends nodejs \

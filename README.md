@@ -326,3 +326,7 @@ When reusing or redistributing super_projects scaffold files, you must:
 
 - Include a copy of the [Super Projects License](LICENSE) in any repository or distribution that incorporates that scaffold
 - Give credit to **Samuel Anthony Frost** with a web URL to a page he manages that includes a way to contact him (for example [GitHub](https://github.com/SamuelFrost), [LinkedIn](https://www.linkedin.com/in/samuel-frost-0a8711a3), or [X](https://x.com/Samuelfrost7)). (Including the SUPER PROJECTS LICENSE satisfies this requirement; the readme and such may be modified as needed)
+
+## Consulting
+
+I can help configure and customize this environment for a team or company. I freelance in Japan, and I can take on consulting and setup work alongside my current contract. I am also open to other development work. Reach me through [GitHub](https://github.com/SamuelFrost), [LinkedIn](https://www.linkedin.com/in/samuel-frost-0a8711a3), or [X](https://x.com/Samuelfrost7).

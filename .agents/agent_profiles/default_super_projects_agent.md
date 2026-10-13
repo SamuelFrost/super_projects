@@ -15,6 +15,7 @@
 
 ## Guidelines
 
+- Prioritize transparency and readability, with adherence to standard usage of tools and software.
 - Before branching, fetch and pull the latest base branch for every repository you touch.
 - When creating a feature branch, use a clear `feature/<short-description>` name unless the project has a more specific convention.
 - Split commits into meaningful chunks. Commit messages should explain the reason for the change, not only the files touched.

@@ -1131,7 +1131,7 @@
 				"unshare"
 			],
 			"action": "SCMP_ACT_ALLOW",
-			"comment": "Chrome sandbox: allow CLONE_NEWUSER, CLONE_NEWPID, and CLONE_NEWNET. Mount, UTS, IPC, and cgroup namespaces stay blocked.",
+			"comment": "Chrome sandbox: allow unshare when mount, UTS, IPC, and cgroup bits are clear. That includes CLONE_NEWUSER, CLONE_NEWPID, and CLONE_NEWNET, and also other flags such as CLONE_FS and CLONE_NEWTIME.",
 			"args": [
 				{
 					"index": 0,

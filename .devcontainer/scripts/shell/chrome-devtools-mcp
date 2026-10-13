@@ -2,9 +2,12 @@
 # Shared Chrome DevTools MCP launcher for Cursor, VS Code, Codex, and Gemini.
 # development and browsing attach to the desktop Chrome started by /usr/local/bin/chrome.
 # The port is CHROME_REMOTE_DEBUGGING_PORT (default 9223).
-
-# development — app work only. Extra experimental features.
-# browsing — general web browsing purposes network headers that carry credentials are redacted and performance metrics are disabled.
+#
+# browsing — ordinary browsing. Redacts sensitive request headers and does not
+#   send performance-trace URLs to the CrUX API. Performance tools stay enabled.
+# development — testing an application you trust. Experimental DevTools, vision,
+#   memory, structured content, all pages, screencast, WebMCP, and third-party
+#   page tools. WebMCP also needs --enable-features=WebMCP on the desktop Chrome wrapper.
 # pwa — install and launch Progressive Web Apps. Starts a separate Chrome over a
 #   pipe; those tools cannot attach to the shared desktop Chrome.
 #
@@ -13,8 +16,9 @@
 # Editors start this script with cwd outside the workspace (often $HOME). mise
 # then has two installed chrome-devtools-mcp versions and no pin, so the shim
 # exits. -C loads the workspace .mise.toml for every devcontainer user.
-script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-workspace_root=$(CDPATH= cd -- "$script_dir/../../.." && pwd)
+# exec replaces this shell so the editor's process is chrome-devtools-mcp.
+script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd) || exit 1
+workspace_root=$(CDPATH= cd -- "$script_dir/../../.." && pwd) || exit 1
 chrome_port="${CHROME_REMOTE_DEBUGGING_PORT:-9223}"
 mode="${1:-}"
 if [ "$#" -gt 0 ]; then
@@ -23,7 +27,7 @@ fi
 
 case "$mode" in
   development)
-    mise exec -C "$workspace_root" -- chrome-devtools-mcp \
+    exec mise exec -C "$workspace_root" -- chrome-devtools-mcp \
       --browser-url="http://127.0.0.1:${chrome_port}" \
       --category-experimental-third-party \
       --category-experimental-webmcp \
@@ -36,15 +40,15 @@ case "$mode" in
       "$@"
     ;;
   browsing)
-    mise exec -C "$workspace_root" -- chrome-devtools-mcp \
+    exec mise exec -C "$workspace_root" -- chrome-devtools-mcp \
       --browser-url="http://127.0.0.1:${chrome_port}" \
       --redact-network-headers \
       --no-performance-crux \
       "$@"
     ;;
   pwa)
-    # The container desktop is Xvfb :99.
-    env DISPLAY=:99 mise exec -C "$workspace_root" -- chrome-devtools-mcp \
+    # The container desktop is Xvfb :99, the same display start-vnc uses.
+    exec env DISPLAY=:99 mise exec -C "$workspace_root" -- chrome-devtools-mcp \
       --category-pwa \
       --executable-path=/usr/bin/google-chrome \
       --user-data-dir=/home/developer/chrome-profile/pwa \

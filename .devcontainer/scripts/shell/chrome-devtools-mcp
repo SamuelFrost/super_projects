@@ -48,11 +48,14 @@ case "$mode" in
     ;;
   pwa)
     # The container desktop is Xvfb :99, the same display start-vnc uses.
+    # Stopping this server kills Chrome. --restore-last-session reopens the
+    # previous tabs and app windows from the profile on the next launch.
     exec env DISPLAY=:99 mise exec -C "$workspace_root" -- chrome-devtools-mcp \
       --category-pwa \
       --executable-path=/usr/bin/google-chrome \
       --user-data-dir=/home/developer/chrome-profile/pwa \
       --chrome-arg=--enable-unsafe-swiftshader \
+      --chrome-arg=--restore-last-session \
       "$@"
     ;;
   *)

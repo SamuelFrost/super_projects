@@ -2,21 +2,31 @@
 
 ## Domain context — super_projects_development meta-development workspace
 
-The workspace root (`/super_projects_development`) is a **development wrapper** around the primary `super_projects` template. It is a renamed fork of `super_projects` used while developing features for the template itself. This outer repository tracks the `meta-development/main` branch.
+The workspace root (`/workspaces`) is a **development wrapper** around the primary development target `/workspaces/super_projects` subdirectory. It is a renamed fork of `super_projects` used while developing features for the template itself.
 
-**Purpose:** Provide a fully containerized development environment without colliding with a normal `super_projects` install on the same machine. The wrapper renames Docker Compose project names, container hostnames, workspace mount paths, named volumes, MCP `docker exec` targets, ssh-agent socket filenames, and host port mappings (for example noVNC on host port `6081` instead of `6080`) so both stacks can run side by side.
+The workspace root is the standard `/workspaces` path, and this environment is isolated under the `super_projects_development` container/project name so it can run side by side with a normal `super_projects` container without port or volume collisions (e.g. noVNC on host port `6081` instead of `6080`).
 
 **Layout:**
 
-- **Wrapper (this workspace):** `/super_projects_development` — the active devcontainer, root `.devcontainer/` config, and development-only customizations. Open this directory in the IDE. Git branch: `meta-development/main`.
-- **Primary template (nested repo):** `/super_projects_development/super_projects/` — the `super_projects` git repository being modified. Feature work on the template belongs here unless the change is wrapper-specific (namespace/port isolation or other development ergonomics).
+- **Wrapper (aka, this workspace, meta-development workspace, parent workspace):** `/workspaces` — the active devcontainer environment (`super_projects_development`). Open this directory in the IDE.
+- **Primary template (aka: nested repo, working directory, development target, subdirectory):** `/workspaces/super_projects/` — the `super_projects` repository being developed. Feature work on the template belongs here. Has a name override of `super_projects_test_environment` and port override of `6082` for noVNC to avoid port or volume collisions with a standard `super_projects` container.
 
 **When editing:**
 
-- The standard workflow for modifying the primary template: make changes in `super_projects/`, confirm and push them from that repository. After everything is finalized (confirmed and pushed to main) the `meta-development/main` branch should be rebased to pick up those changes. Never modify the `meta-development/main` branch without consulting the user first.
 - Changes intended for end users of `super_projects` → edit files under `super_projects/` and commit from that repository.
-- Changes that only affect the development wrapper → edit the workspace root on `meta-development/main`.
+- Changes that affect this meta-development workspace should not be made without consulting the user first.
 - Do not assume the nested `super_projects/.devcontainer/` is the running container; the wrapper's `.devcontainer/` at the root is what the IDE uses when this workspace is open.
+
+**Meta-development setup:**
+
+Local compose overrides (not committed) give this wrapper and the nested template their own container names and host ports. Copy each example, then set the name and the noVNC host port. Recreate the container after changing them.
+
+- **Wrapper** (`/workspaces`):
+  - `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` — name, hostname, and network `super_projects_development`.
+  - `.devcontainer/docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.override.yaml` — noVNC `6081:6080`.
+- **Nested template** (`/workspaces/super_projects/`):
+  - `.devcontainer/docker_compose_configuration_customizations/naming/compose.naming.override.yaml` — name, hostname, and network `super_projects_test_environment`.
+  - `.devcontainer/docker_compose_configuration_customizations/miscellaneous_overrides/compose.miscellaneous.override.yaml` — noVNC `6082:6080`.
 
 ## Strong rules
 
@@ -33,8 +43,9 @@ The workspace root (`/super_projects_development`) is a **development wrapper** 
 
 ## Guidelines
 
+- Prioritize transparency and readability, with adherence to standard usage of tools and software.
 - Before branching, fetch and pull the latest base branch for every repository you touch.
-- When creating a feature branch, use a clear `feature/<short-description>` name unless the project has a more specific convention. The meta-development outer repository uses the `meta-development/main` branch rather than `feature/` branches.
+- When creating a feature branch, use a clear `feature/<short-description>` name unless the project has a more specific convention.
 - Split commits into meaningful chunks. Commit messages should explain the reason for the change, not only the files touched.
 - Prefer existing project patterns, helper APIs, and local conventions over introducing new abstractions.
 - Consider refactoring shared behavior before adding a similar feature, but avoid abstractions that make the implementation harder to follow.
@@ -82,13 +93,38 @@ The workspace root (`/super_projects_development`) is a **development wrapper** 
 ### Git
 
 - GitHub CLI auth persists in the `gh-data` volume (`~/.config/gh` / `persist/gh`). Run `gh auth login` **inside the container** once when needed.
-- Attach local images and videos to issues, pull requests, and comments with `gh --attach` (`gh pr create`, `gh pr edit`, `gh pr comment`, and the matching `gh issue` commands). Reference the local path in the Markdown body so GitHub CLI rewrites it to the uploaded URL. Do not commit the file.
 
 ### Devcontainer
 
 - We are typically working within a devcontainer when doing work in this project, so assume the system is configured as described under `.devcontainer/` (`Dockerfile`, `compose.yaml`, `devcontainer.json`, `scripts/`, `persist/`).
 - When installing new tools/binaries, prefer modifying the Dockerfile or using mise. User state (auth, caches, profiles) belongs in the named volumes documented under `.devcontainer/persist/`.
 - Integrated terminals should prefer mise shims so `node`, `ruby`, `python`, and similar tools resolve from the nearest `.mise.toml` or `.tool-versions`.
+- When modifying `super_projects/.devcontainer/Dockerfile`, `super_projects/.devcontainer/compose.yaml`, `super_projects/.devcontainer/devcontainer.json`, or otherwise changing the setup of a target devcontainer (typically the nested `super_projects/` clone), apply the configuration change and then recreate that container from the workspace folder that owns that `.devcontainer/`:
+  ```sh
+  cd super_projects
+  docker compose -f .devcontainer/compose.yaml down
+  devcontainer up
+  ```
+- When you need to run something **inside that target container**, use `devcontainer exec` from the folder that owns its `.devcontainer/` (`cd super_projects`). This meta shell is a different container; do not `curl 127.0.0.1`, inspect `/tmp`, or assume tools/network state here are the target’s.
+  ```sh
+  cd super_projects
+  devcontainer exec bash                          # interactive shell
+  devcontainer exec -- bash -c 'whoami && pwd'    # one-shot (`-c` is required; otherwise bash treats the next word as a script file)
+  ```
+  `devcontainer exec` is not a TTY. Commands that need a progress UI, pager, or curses output will look silent unless you wrap them in `script -qec '…' /dev/null`.
+  ```sh
+  # quiet checks (stdout still captured if the command prints)
+  devcontainer exec -- bash -c 'cat /tmp/localhost-forward/status'
+  devcontainer exec -- bash -c 'curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/up'
+  devcontainer exec -- bash -c 'git -C /workspaces status -sb'
+  devcontainer exec -- bash -c 'mise ls'
+
+  # need a TTY (Compose progress, test runners, pagers)
+  devcontainer exec -- bash -c 'script -qec "cd /workspaces/sample_app_1 && docker compose up -d" /dev/null'
+  devcontainer exec -- bash -c 'script -qec "cd /workspaces && bundle exec rspec" /dev/null'
+  ```
+  Nested-up extras for child Compose: prefer `up -d` (foreground `up` attaches until Ctrl+C). Bind mounts must use **host** paths; the parent exports `HOST_WORKSPACE_DIR` from `.devcontainer/.env`. `LOCAL_WORKSPACE_FOLDER` is a container path after nested `devcontainer up` and will mount an empty tree if used as a Docker bind source.
+
 
 ### Other available tools
 
@@ -96,7 +132,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 
 #### Docker Compose
 
-- One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/super_projects_development`, Docker socket mounted for docker-outside-of-docker.
+- One service (`devcontainer`) built from `.devcontainer/Dockerfile`; workspace at `/workspaces`, Docker socket mounted for docker-outside-of-docker. Uses the `super_projects_development` project/container name.
 - Host `initializeCommand` (`.devcontainer/scripts/shell/initializeCommand.sh`) writes `.env` (`DEVELOPER_UID`, `DOCKER_GID`, `HOST_HOME_DIR`, `HOST_SSH_AUTH_SOCK`, `HOST_WORKSPACE_DIR`) and may unlock SSH keys; startup then runs `ensure-auth`, VNC, and `mise install`; noVNC on host port `6081` (+1 vs `super_projects` on 6080).
 - Do not mount whole `/home/developer` — that freezes image-owned installs after the first named-volume create.
 

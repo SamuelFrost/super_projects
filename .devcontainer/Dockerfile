@@ -275,6 +275,18 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
   && apt-get install -y --no-install-recommends nodejs \
   && rm -rf /var/lib/apt/lists/*
 
+# Herb LSP 0.11 starts a language server that requires vscode-html-languageservice,
+# but the published extension does not include it. The editor installs that
+# extension under the developer home directory, and Node walks upward from the
+# server file until it reaches /home/developer/node_modules. The symlink makes
+# that lookup succeed in every container built from this image. This can be
+# removed once a Herb release ships a self-contained server or a way to
+# run via mise managed software.
+RUN mkdir -p /opt/herb-lsp-deps \
+  && npm install --prefix /opt/herb-lsp-deps --omit=dev \
+       vscode-html-languageservice@^5.1.0 \
+  && ln -sfn /opt/herb-lsp-deps/node_modules /home/developer/node_modules
+
 # ------------------------------------------------------------------------------
 # Dev Containers CLI (devcontainer)
 #   Create, build, and run dev containers from the terminal (up, exec, build, …).

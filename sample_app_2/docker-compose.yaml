@@ -1,0 +1,44 @@
+name: sample_app_2
+
+services:
+  sample_app_2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - RAILS_ENV=development
+      - SECRET_KEY_BASE=secret
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/sample_app_2_development
+    ports:
+      - "3001:80"
+      # Herb dev server, embedded in the Rails process when config.slots is on.
+      # Chrome reaches it through the localhost forward proxy at ws://localhost:8592.
+      - "8592:8592"
+      # available on the host machine and at super_projects default network localhost (http://localhost:3001)
+      # available from the devcontainer at http://sample_app_2 once the sidecar has attached the devcontainer to this stack's network
+      # Note: To be able to access sample_app_2 (from within the devcontainer), Rails needs `config.hosts << "sample_app_2"` in development.rb
+    volumes:
+      # Compose uses the host Docker socket, so bind sources must be host paths. Inside the devcontainer, HOST_WORKSPACE_DIR is that host workspace. On the host it is unset, so `..` is this project's parent.
+      - ${HOST_WORKSPACE_DIR:-..}/sample_app_2:/rails
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18.3
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sample_app_2_development
+    volumes:
+      - sample_app_2_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sample_app_2_postgres_data:
+    external: false
+    name: sample_app_2_postgres_data

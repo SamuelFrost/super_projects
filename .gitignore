@@ -26,6 +26,12 @@
 !.samples/
 !.samples/**
 
+# This debugging branch vendors sample_app_2 so the Herb LSP example is in the diff.
+!sample_app_2/
+!sample_app_2/**
+sample_app_2/config/*.key
+sample_app_2/.env*
+
 # ignore Agent-generated plans by default
 .cursor/plans/**
 .claude/plans/**

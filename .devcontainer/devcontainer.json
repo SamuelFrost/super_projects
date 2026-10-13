@@ -47,7 +47,11 @@
         "Shopify.ruby-lsp",
         "streetsidesoftware.code-spell-checker",
         "eamodio.gitlens",
-        "marcoroth.herb-lsp",
+        // Published Herb LSP 0.11.0 crashes: its server requires vscode-html-languageservice,
+        // which the VSIX does not ship. This VSIX is built in the image by install-bundled-herb-lsp
+        // and bundles that package the same way as https://github.com/marcoroth/herb/pull/2780
+        // Switch back to "marcoroth.herb-lsp" once a release includes that fix.
+        "/opt/herb-lsp/marcoroth.herb-lsp-0.11.0.vsix",
         "marcoroth.stimulus-lsp",
         "biomejs.biome",
         "vitest.explorer",

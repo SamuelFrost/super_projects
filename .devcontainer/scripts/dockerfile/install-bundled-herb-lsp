@@ -1,0 +1,75 @@
+#!/bin/bash
+# Install Herb LSP from the esbuild change in
+# https://github.com/marcoroth/herb/pull/2780
+#
+# Checks out that pull request and runs its javascript/packages/vscode/esbuild.js
+# --production. The language-server input is the published @herb-tools/language-server
+# 0.11.0 dist, which is the file that esbuild.js bundles and which is not stored in git.
+set -euo pipefail
+
+vsix_path="${HERB_LSP_VSIX:-/opt/herb-lsp/marcoroth.herb-lsp-0.11.0.vsix}"
+patch_installed=0
+if [ "${1:-}" = "--patch-installed" ]; then
+  patch_installed=1
+fi
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+git init -q "$work/herb"
+git -C "$work/herb" fetch --depth 1 https://github.com/marcoroth/herb.git pull/2780/head
+git -C "$work/herb" checkout --detach FETCH_HEAD
+echo "Herb pull/2780 $(git -C "$work/herb" rev-parse HEAD)"
+
+vscode="$work/herb/javascript/packages/vscode"
+npm install --prefix "$vscode" --ignore-scripts
+node "$vscode/node_modules/esbuild/install.js"
+# issue-reporter.ts imports dedent, which the monorepo provides from the root
+# package rather than the vscode package. Install that same range so esbuild.js
+# can resolve it.
+npm install --prefix "$vscode" --no-save --ignore-scripts 'dedent@^1.7.2'
+
+mkdir -p "$work/herb/javascript/packages/language-server/dist"
+cp "$vscode/node_modules/@herb-tools/language-server/dist/herb-language-server.js" \
+  "$work/herb/javascript/packages/language-server/dist/herb-language-server.js"
+npm install --prefix "$work/html-service" --omit=dev --ignore-scripts 'vscode-html-languageservice@^5.1.0'
+mkdir -p "$work/herb/javascript/packages/language-server/node_modules"
+cp -a "$work/html-service/node_modules/." "$work/herb/javascript/packages/language-server/node_modules/"
+
+(cd "$vscode" && node esbuild.js --production)
+
+# vsce treats this checkout as the monorepo git root and would pack the whole
+# repository. Copy the extension out of that repo, then pack that copy.
+# vscode:prepublish calls yarn; esbuild.js --production has already run.
+extension="$work/extension"
+mkdir -p "$extension"
+tar -C "$vscode" --exclude node_modules --exclude src --exclude .git -cf - . | tar -C "$extension" -xf -
+PACKAGE_JSON="$extension/package.json" node -e '
+const fs = require("fs")
+const manifest = JSON.parse(fs.readFileSync(process.env.PACKAGE_JSON, "utf8"))
+delete manifest.scripts["vscode:prepublish"]
+fs.writeFileSync(process.env.PACKAGE_JSON, JSON.stringify(manifest, null, 2) + "\n")
+'
+
+mkdir -p "$(dirname "$vsix_path")"
+(cd "$extension" && npx --yes @vscode/vsce package --no-yarn --out "$vsix_path" --allow-missing-repository)
+
+if [ "$patch_installed" -eq 1 ]; then
+  patched=0
+  for extension_dir in /home/developer/.cursor-server/extensions/marcoroth.herb-lsp-*; do
+    [ -d "$extension_dir/dist" ] || continue
+    cp "$vscode/dist/extension.js" "$vscode/dist/herb-language-server.js" "$vscode/dist/parse-worker.js" \
+      "$extension_dir/dist/"
+    rm -f "$extension_dir/dist/extension.js.map" \
+      "$extension_dir/dist/herb-language-server.js.map" \
+      "$extension_dir/dist/parse-worker.js.map"
+    patched=1
+    echo "Patched $extension_dir/dist"
+  done
+  if [ "$patched" -eq 0 ]; then
+    echo "No installed marcoroth.herb-lsp extension to patch." >&2
+    exit 1
+  fi
+fi
+
+echo "Wrote $vsix_path"

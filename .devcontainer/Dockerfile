@@ -275,17 +275,9 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
   && apt-get install -y --no-install-recommends nodejs \
   && rm -rf /var/lib/apt/lists/*
 
-# Herb LSP 0.11 starts a language server that requires vscode-html-languageservice,
-# but the published extension does not include it. The editor installs that
-# extension under the developer home directory, and Node walks upward from the
-# server file until it reaches /home/developer/node_modules. The symlink makes
-# that lookup succeed in every container built from this image. This can be
-# removed once a Herb release ships a self-contained server or a way to
-# run via mise managed software.
-RUN mkdir -p /opt/herb-lsp-deps \
-  && npm install --prefix /opt/herb-lsp-deps --omit=dev \
-       vscode-html-languageservice@^5.1.0 \
-  && ln -sfn /opt/herb-lsp-deps/node_modules /home/developer/node_modules
+# Herb LSP is installed from the bundled VSIX produced by install-bundled-herb-lsp
+# at the end of this file. The published 0.11.0 extension crashes because its
+# server requires vscode-html-languageservice and the VSIX does not ship it.
 
 # ------------------------------------------------------------------------------
 # Dev Containers CLI (devcontainer)
@@ -368,6 +360,13 @@ COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr
 #   echo "$CHECKSUM  /tmp/claude" | sha256sum -c -; \
 #   chmod 755 /tmp/claude; \
 #   mv /tmp/claude /usr/local/bin/claude
+
+# Herb LSP 0.11.0: bundle vscode-html-languageservice into the language server,
+# matching https://github.com/marcoroth/herb/pull/2780. devcontainer.json installs
+# the resulting VSIX instead of the published extension. Remove this once a Herb
+# release ships a server that starts without that package.
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/install-bundled-herb-lsp /usr/local/bin/install-bundled-herb-lsp
+RUN install-bundled-herb-lsp
 
 USER developer:developer
 # USER root

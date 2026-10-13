@@ -16,7 +16,7 @@ devcontainer exec --workspace-folder . -- ls -la /workspaces/.devcontainer/persi
 | `gh/` | `${SUPER_PROJECTS_NAME}_gh-data` | `~/.config/gh` | GitHub CLI auth |
 | `git/` | `${SUPER_PROJECTS_NAME}_git-config` | `~/.config/git` | Git XDG config (`config`, etc.) |
 | `mise/` | `${SUPER_PROJECTS_NAME}_mise-data` | `~/.local/share/mise` | mise downloads and tool installs |
-| `chrome/` | `${SUPER_PROJECTS_NAME}_chrome-devtools-mcp-profile` | `~/chrome-profile` | Chrome profile (logins, cookies, extensions) |
+| `chrome/` | `${SUPER_PROJECTS_NAME}_chrome-devtools-mcp-profile` | `~/chrome-profile` | Desktop Chrome profile (logins, cookies, extensions). `pwa/` is the separate profile for the PWA launcher |
 | `cursor/` | `${SUPER_PROJECTS_NAME}_cursor-data` | `~/.cursor` | Cursor CLI auth/session state, agent transcripts, MCP config, skills |
 
 ## Reset a store

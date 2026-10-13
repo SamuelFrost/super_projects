@@ -123,7 +123,7 @@ The devcontainer is an **Ubuntu 24.04** image with:
 - Node.js, npm, Python 3
 - [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, and more
 - Desktop GUI (XFCE + VNC + noVNC) available in your browser at `http://localhost:6080/vnc.html`
-- Google Chrome with remote debugging on port 9223 (used by MCP tools like [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp))
+- Google Chrome with remote debugging on `CHROME_REMOTE_DEBUGGING_PORT` (default 9223), used by MCP tools like [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) and playwright.
 - [Localhost Forward Proxy](https://github.com/docker/localhost-forward-proxy) for port forwarding to your projects so they can be accessed from the container's browser at `http://localhost:<port>` in addition to the standard docker network routes.
 - AI tooling configurations for Gemini, Cursor, VS Code, Claude, and Codex.
 - Unobtrusive collection of useful attributes to guide agent behavior.

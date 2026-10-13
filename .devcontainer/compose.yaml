@@ -59,6 +59,12 @@ services:
       - "6080:6080"   # noVNC  — browser GUI for VNC
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Chrome's sandbox creates user, PID, and network namespaces. Docker's
+    # built-in seccomp profile blocks those unless the container has CAP_SYS_ADMIN.
+    # Base profile: moby/profiles seccomp/default.json @ 6fe7deb1b9fb7c0397a4593480d7d22b9ee8caef (2026-09-17), 
+    # plus three allow rules for those namespaces added in this project (2026-10-13).
+    security_opt:
+      - seccomp=seccomp/chrome-sandbox.json
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
 
@@ -81,6 +87,7 @@ volumes:
   # Gemini CLI sessions/config. Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_gemini-data`.
   gemini-data: {}
   # Chrome profile data: logins, cookies, extensions, history.
+  # pwa/ is the separate profile used by the PWA launcher.
   # Survives container stop/start and rebuilds; lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_chrome-devtools-mcp-profile`.
   chrome-devtools-mcp-profile: {}
   # mise downloads and installs (~/.local/share/mise).

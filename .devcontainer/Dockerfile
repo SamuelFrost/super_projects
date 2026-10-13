@@ -225,9 +225,9 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
 #   ~250 MB; amd64-only (Google does not publish arm64 Chrome debs).
 #   fonts-liberation: core fonts Chrome needs for proper text rendering.
 #   A wrapper at /usr/local/bin/chrome applies the container-required flags:
-#     --no-sandbox              Chrome cannot create a user namespace sandbox inside Docker.
 #     --enable-unsafe-swiftshader  Software WebGL (no GPU in the container).
-#     --ignore-gpu-blocklist    Allow SwiftShader when Chrome would blocklist the GPU.
+#     --enable-features=WebMCP  WebMCP tools for chrome-devtools-mcp (Chrome 150+).
+#   The namespace sandbox is enabled by .devcontainer/seccomp/chrome-sandbox.json.
 # ------------------------------------------------------------------------------
 RUN install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \

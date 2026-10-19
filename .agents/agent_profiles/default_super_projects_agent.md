@@ -12,6 +12,7 @@
 - If a new tool is needed and mise can manage it, add it to the relevant `.mise.toml`. If it cannot be installed through mise, document the local setup requirement before relying on it.
 - Never use `git push` without explicit approval.
 - Never commit screenshots, local notes, or temporary evidence files. Keep development artifacts under ignored local directories.
+- If a credential is required, stop and ask the user to handle it. Inform the user of the standard login process. Do not ask the user to provide a password or key. Do not search for credentials or work-arounds. If the work can be accomplished without the elevated privileges from credentials and without bypassing any standard human user flows, you may do so. Never attempt to bypass the intended security of a system.
 
 ## Guidelines
 

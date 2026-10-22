@@ -65,6 +65,12 @@ This index lists the available agent attributes by category. Link text uses each
 - [Tool interaction guideline — prefer mise shims in integrated terminals](tools/mise/prefer_mise_shims_in_integrated_terminals.md)
 - [Tool interaction guideline — use mise to execute commands](tools/mise/use_mise_to_execute_commands.md)
 
+### On-disk search
+
+- [Tool interaction guideline — ripgrep follows the gitignore of its search root](tools/on_disk_search/ripgrep_follows_gitignore_of_search_root.md)
+- [Tool interaction guideline — Glob returns no files in gitignored nested projects](tools/on_disk_search/glob_returns_no_files_in_gitignored_nested_projects.md)
+- [Tool interaction guideline — Grep returns no matches in gitignored nested projects](tools/on_disk_search/grep_returns_no_matches_in_gitignored_nested_projects.md)
+
 ### Pull requests
 
 - [Pull request content guidelines — write meaningful PR titles and bodies](tools/pull_requests/meaningful_pull_request_content_guidelines.md)

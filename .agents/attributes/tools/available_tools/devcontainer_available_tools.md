@@ -23,7 +23,9 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `openssh-client`: SSH, `ssh-agent`, `ssh-add`, `ssh-keygen`, and Git-over-SSH support.
 - `vim`: quick terminal edits.
 - `procps`: process and system inspection utilities such as `ps`, `top`, and related tools.
-- `ripgrep` / `rg`: fast recursive search.
+- `ripgrep` / `rg`: fast recursive search. Follows the gitignore of the directory it is rooted in. A search rooted at the workspace skips nested project directories because the parent `.gitignore` rule is `*`. A search rooted inside a nested repo uses that repo's gitignore and finds its tracked files. `--no-ignore` skips `.gitignore`. Hidden directories such as `.devcontainer` also need `--hidden`. `-uu` is those two flags. An explicit file path overrides ignore rules.
+- Glob: file-name search. Returns no files under a nested project directory ignored by the workspace `.gitignore`, including when that directory is the search root. An empty result does not mean the directory is missing. Read those paths directly.
+- Grep: content search. Returns no matches under a nested project directory ignored by the workspace `.gitignore`, including when the file path is given directly. An empty result does not mean the file is missing. Read those paths directly.
 - `poppler-utils`: PDF utilities such as `pdftotext`.
 - `ffmpeg`: media probing and audio/video processing.
 - `tzdata`: timezone data.

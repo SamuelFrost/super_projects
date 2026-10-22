@@ -1,0 +1,3 @@
+# Tool interaction guideline — ripgrep follows the gitignore of its search root
+
+`rg` follows the gitignore of the directory it is rooted in. The workspace `.gitignore` starts with `*`, which ignores nested project directories. A search rooted at the workspace skips those directories. A search rooted inside a nested repository uses that repository's gitignore and finds its tracked files. An empty result from a workspace-rooted search does not mean the nested directory is missing. `--no-ignore` skips `.gitignore`. Hidden directories such as `.devcontainer` also need `--hidden`. `-uu` is those two flags. An explicit file path overrides ignore rules.

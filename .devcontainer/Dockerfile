@@ -351,6 +351,11 @@ COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/en
 # print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
 
+# Ollama client only, same image tag as the gemma service. `gemma` chats with that
+# one server through OLLAMA_HOST. The runners stay in the gemma container.
+COPY --from=ollama/ollama:0.40.8 /usr/bin/ollama /usr/local/bin/ollama
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/gemma /usr/local/bin/gemma
+
 # ------------------------------------------------------------------------------
 # Claude Code CLI (commented out; uncomment and rebuild to enable)
 #   Requires ANTHROPIC_API_KEY or a Claude Pro/Max/Console login.

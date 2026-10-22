@@ -1,0 +1,44 @@
+# Gemma 4 via Ollama, on this checkout's Compose project and network.
+# Model weights live in the project-scoped gemma-models volume.
+# Defaults are the smallest CPU setup from local_llm_spec_guideline.md: gemma4:e2b and a 12g RAM cap.
+# compose.gemma.override.yaml replaces these when a bigger model or a GPU needs a different cap.
+
+services:
+  gemma:
+    image: ollama/ollama:0.40.8
+    restart: unless-stopped
+    mem_limit: 12g
+    volumes:
+      - gemma-models:/root/.ollama
+    networks:
+      - super_projects_default
+    environment:
+      # Listen address inside this container. Clients use http://gemma:11434.
+      OLLAMA_HOST: 0.0.0.0:11434
+      GEMMA_MODEL: gemma4:e2b
+    # Uncomment to leave Gemma stopped on devcontainer up.
+    # Start it later with: COMPOSE_PROFILES=gemma devcontainer up
+    # profiles: ["gemma"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        server_pid=$$!
+        i=0
+        while [ "$$i" -lt 60 ]; do
+          ollama list >/dev/null 2>&1 && break
+          i=$$((i + 1))
+          sleep 1
+        done
+        if [ -n "$${GEMMA_MODEL:-}" ]; then
+          ollama pull "$$GEMMA_MODEL" || echo "gemma: pull of $$GEMMA_MODEL failed" >&2
+        fi
+        wait "$$server_pid"
+
+  devcontainer:
+    environment:
+      OLLAMA_HOST: http://gemma:11434
+      GEMMA_MODEL: gemma4:e2b
+
+volumes:
+  gemma-models: {}

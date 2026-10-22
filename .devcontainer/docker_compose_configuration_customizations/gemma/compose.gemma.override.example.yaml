@@ -1,0 +1,62 @@
+# Copy this file to compose.gemma.override.yaml:
+#   cp .devcontainer/docker_compose_configuration_customizations/gemma/compose.gemma.override.example.yaml .devcontainer/docker_compose_configuration_customizations/gemma/compose.gemma.override.yaml
+#
+# The file below is a working default for a 16 GB RAM machine: gemma4:e2b with a 12g cap.
+# Swap the tag and mem_limit using local_llm_spec_guideline.md for a bigger model or a GPU. Then run devcontainer up.
+# Do not commit the copy.
+#
+# The settings below are Compose keys in this file. Do not export them in your shell.
+# Use the same model tag in both places.
+
+services:
+  gemma:
+    # See local_llm_spec_guideline.md for recommendations on system specs and model choice.
+    mem_limit: 12g
+    # Uncomment to allow this container extra disk swap on top of mem_limit.
+    # memswap_limit is RAM plus swap, so 20g here means 12g RAM and 8g swap.
+    # The host needs a swap file of at least that extra. See local_llm_spec_guideline.md.
+    # memswap_limit: 20g
+    environment:
+      GEMMA_MODEL: gemma4:e4b
+      # Tokens reserved when the model loads. 8192 matches the memory tables for CPU and smaller GPUs. See local_llm_spec_guideline.md.
+      OLLAMA_CONTEXT_LENGTH: "8192"
+
+    # Uncomment to leave Gemma stopped on devcontainer up.
+    # Start it later with: COMPOSE_PROFILES=gemma devcontainer up
+    # profiles: ["gemma"]
+
+    # Uncomment to cap CPUs.
+    # cpus: 4
+
+    # Uncomment to open the API on the host at http://127.0.0.1:11434
+    # ports:
+    #   - "127.0.0.1:11434:11434"
+
+    # GPU: uncomment one block depending on your GPU. Leave all of them commented on a Mac.
+    # Docker Desktop's Linux VM does not receive the Apple GPU.
+    #
+    # NVIDIA (NVIDIA container runtime):
+    # gpus: all
+    #
+    # AMD ROCm:
+    # image: ollama/ollama:0.40.8-rocm
+    # devices:
+    #   - /dev/dri
+    #   - /dev/kfd
+    # group_add:
+    #   - video
+    #   - render
+    #
+    # Intel:
+    # devices:
+    #   - /dev/dri
+    # group_add:
+    #   - video
+    #   - render
+
+  devcontainer:
+    environment:
+      # OLLAMA_HOST informs the .devcontainer/scripts/dockerfile/gemma script how to reach the Gemma server.
+      OLLAMA_HOST: http://gemma:11434
+      # GEMMA_MODEL informs the .devcontainer/scripts/dockerfile/gemma script which model to use.
+      GEMMA_MODEL: gemma4:e2b

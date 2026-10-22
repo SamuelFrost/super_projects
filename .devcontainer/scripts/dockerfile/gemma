@@ -1,0 +1,10 @@
+#!/bin/sh
+# Chat with this checkout's one Gemma server.
+# OLLAMA_HOST and GEMMA_MODEL are set when compose.gemma.override.yaml is valid.
+# The server runs in the gemma container; this command does not start one.
+if [ -z "${OLLAMA_HOST:-}" ] || [ -z "${GEMMA_MODEL:-}" ]; then
+  echo "gemma: the local model is not configured." >&2
+  echo "Set mem_limit and GEMMA_MODEL in .devcontainer/docker_compose_configuration_customizations/gemma/compose.gemma.override.yaml, then run devcontainer up." >&2
+  exit 1
+fi
+exec ollama run "$GEMMA_MODEL" "$@"

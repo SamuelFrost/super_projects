@@ -221,6 +221,21 @@ Inside the devcontainer you are the `developer` user. That user is created with 
 
 The `developer` user also belongs to a `docker` group created with that socket's group id, which is what allows it to use the socket. The group id is set when the image is built, so a different socket group needs a rebuild.
 
+#### Gemma 4
+
+Gemma 4 is an Ollama service on this checkout's Compose network. The default is `gemma4:e2b` with a `12g` RAM cap. See `local_llm_spec_guideline.md` for configuration and setup guidelines-- it's highly recommended to adjust settings for your machine to get the most out of the model.
+
+From the repository root, `devcontainer up` starts Gemma with the devcontainer. Inside the container, `gemma` is a chat with that one model. It streams the reply. With no arguments it stays open until `/bye`. A sentence asks once:
+
+```sh
+devcontainer up
+devcontainer exec bash
+gemma "hi"
+```
+
+Note, the first reply can take a while as it loads up the model. And the terminal stays quiet until the first token is generated.
+
+
 </details>
 
 ### Persisted volumes

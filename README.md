@@ -225,7 +225,7 @@ The `developer` user also belongs to a `docker` group created with that socket's
 
 Gemma 4 is an Ollama service on this checkout's Compose network. The default is `gemma4:e2b` with a `12g` RAM cap. See `local_llm_spec_guideline.md` for configuration and setup guidelines-- it's highly recommended to adjust settings for your machine to get the most out of the model.
 
-From the repository root, `devcontainer up` starts Gemma with the devcontainer. Inside the container, `lllm` starts the Agent Development Kit session for that model. Chrome DevTools is one of its tools. With no arguments the session stays open until you type `exit` or press ctrl + c.
+From the repository root, `devcontainer up` starts Gemma with the devcontainer. Inside the container, `lllm` starts the Agent Development Kit session for that model. It can inspect the browser and list, search, read, or edit workspace files. It does not run shell commands. With no arguments the session stays open until you type `exit` or press ctrl + c.
 
 The first reply can take a while while the model loads. After that, characters stream as they are generated.
 

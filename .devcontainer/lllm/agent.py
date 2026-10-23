@@ -64,8 +64,7 @@ root_agent = LlmAgent(
                     args=["browsing"],
                     env={"CHROME_REMOTE_DEBUGGING_PORT": chrome_port},
                 ),
-                # The launcher starts mise, so allow longer than the 5 second example.
-                timeout=30,
+                timeout=120,
             ),
             tool_filter=chrome_devtools_tools,
         )

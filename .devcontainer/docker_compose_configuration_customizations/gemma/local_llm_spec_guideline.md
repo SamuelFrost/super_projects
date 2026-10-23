@@ -11,6 +11,8 @@ Inside `compose.gemma.override.yaml`, you configure three main settings:
 2. `mem_limit`: The maximum system RAM Docker is allowed to use.
 3. `OLLAMA_CONTEXT_LENGTH`: How much text (chat history + code) the model remembers at once.
 
+`OLLAMA_KEEP_ALIVE` controls how long that loaded model stays in memory after the last request. The tracked compose file sets it to `5m`, which is Ollama's own default. The example override sets `20m`. `-1` keeps the model loaded until the Gemma container stops. Loading it again rebuilds the context slot, which is the slow part of the next request.
+
 ---
 
 ## Quick Reference (Pick Your Machine)

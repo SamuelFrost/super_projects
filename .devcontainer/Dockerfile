@@ -336,6 +336,15 @@ RUN curl https://cursor.com/install -fsS | bash
 ENV PATH="/home/developer/.npm-global/bin:/home/developer/.local/bin:${PATH}"
 USER root
 
+# Google Agent Development Kit and LiteLLM. ADK talks to the local Ollama
+# server and to MCP tools. litellm>=1.84 avoids the 1.82.7 and 1.82.8 releases.
+RUN apt-get update -qq && apt-get install -y --no-install-recommends python3-venv \
+  && python3 -m venv /opt/google-adk \
+  && /opt/google-adk/bin/pip install --upgrade pip \
+  && /opt/google-adk/bin/pip install "litellm>=1.84" "google-adk[mcp]" \
+  && ln -sf /opt/google-adk/bin/adk /usr/local/bin/adk \
+  && rm -rf /var/lib/apt/lists/*
+
 # ------------------------------------------------------------------------------
 # start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
 #   Safe to call repeatedly — kills stale processes first.

@@ -20,6 +20,8 @@ services:
       GEMMA_MODEL: gemma4:e4b
       # Tokens reserved when the model loads. 8192 matches the memory tables for CPU and smaller GPUs. See local_llm_spec_guideline.md.
       OLLAMA_CONTEXT_LENGTH: "8192"
+      # How long the model stays loaded after the last request. The tracked default is 5m.
+      OLLAMA_KEEP_ALIVE: "20m"
 
     # Uncomment to leave Gemma stopped on devcontainer up.
     # Start it later with: COMPOSE_PROFILES=gemma devcontainer up

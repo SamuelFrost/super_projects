@@ -1,10 +1,29 @@
 #!/bin/sh
-# Chat with this checkout's one Gemma server.
-# OLLAMA_HOST and GEMMA_MODEL are set when compose.gemma.override.yaml is valid.
-# The server runs in the gemma container; this command does not start one.
+# Chat with this checkout's Gemma server through the Agent Development Kit.
+# OLLAMA_HOST and GEMMA_MODEL come from Compose. The server runs in the gemma
+# container; this command does not start one.
+set -eu
+
 if [ -z "${OLLAMA_HOST:-}" ] || [ -z "${GEMMA_MODEL:-}" ]; then
   echo "gemma: the local model is not configured." >&2
   echo "Set mem_limit and GEMMA_MODEL in .devcontainer/docker_compose_configuration_customizations/gemma/compose.gemma.override.yaml, then run devcontainer up." >&2
   exit 1
 fi
-exec ollama run "$GEMMA_MODEL" "$@"
+
+# LiteLLM routes Ollama calls from this variable. Keep the server root, without /v1.
+OLLAMA_API_BASE=${OLLAMA_HOST%/}
+export OLLAMA_API_BASE
+
+workspace=${SUPER_PROJECTS_WORKDIR:-/workspaces}
+agent_dir=${workspace}/.devcontainer/gemma_agent
+agents_dir=$(CDPATH= cd -- "$(dirname "$agent_dir")" && pwd)
+
+# adk web serves every agent under this directory. The event view is the
+# development UI for model requests, thinking, and tool calls.
+if [ "${1:-}" = "web" ]; then
+  shift
+  exec adk web --port 8000 "$agents_dir" "$@"
+fi
+
+export PYTHONPATH="${agents_dir}${PYTHONPATH:+:$PYTHONPATH}"
+exec /opt/google-adk/bin/python3 -m gemma_agent.cli "$@"

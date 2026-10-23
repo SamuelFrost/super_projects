@@ -225,16 +225,31 @@ The `developer` user also belongs to a `docker` group created with that socket's
 
 Gemma 4 is an Ollama service on this checkout's Compose network. The default is `gemma4:e2b` with a `12g` RAM cap. See `local_llm_spec_guideline.md` for configuration and setup guidelines-- it's highly recommended to adjust settings for your machine to get the most out of the model.
 
-From the repository root, `devcontainer up` starts Gemma with the devcontainer. Inside the container, `gemma` is a chat with that one model. It streams the reply. With no arguments it stays open until `/bye`. A sentence asks once:
+From the repository root, `devcontainer up` starts Gemma with the devcontainer. Inside the container, `gemma` starts the Agent Development Kit session for that model. Chrome DevTools is one of its tools. With no arguments the session stays open until you type `exit` or press ctrl + c.
+
+The first reply can take a while while the model loads. After that, characters stream as they are generated.
 
 ```sh
-devcontainer up
-devcontainer exec bash
-gemma "hi"
+gemma
+> hi
 ```
 
-Note, the first reply can take a while as it loads up the model. And the terminal stays quiet until the first token is generated.
+If you prefer a GUI for the Agent Development Kit, you can run `gemma web` to open the development UI at `http://127.0.0.1:8000` inside the container (set up port forwarding as needed).
 
+With no channel options, a turn shows thinking, the answer, and tool names such as `[new_page]`. Pass any channel option to show only the ones you name.
+
+| Option | Effect |
+|---|---|
+| `--thinking` | Model thinking |
+| `--answer` | The reply. Use this for subagents |
+| `--tools` | Tool names |
+| `--tool-results` | Tool results |
+| `--stderr` | Thinking and tool lines go to stderr |
+| `--no-stream` | Print the turn when it finishes |
+| `--json` | One JSON object on stdout |
+| `--timeout SECONDS` | Stop the turn after this many seconds |
+
+`gemma --help` prints the above options.
 
 </details>
 

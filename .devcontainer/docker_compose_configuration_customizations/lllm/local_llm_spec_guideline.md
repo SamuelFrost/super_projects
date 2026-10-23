@@ -2,20 +2,22 @@
 
 To run Gemma locally, copy the example file:
 ```sh
-cp .devcontainer/docker_compose_configuration_customizations/gemma/compose.gemma.override.example.yaml \
-   .devcontainer/docker_compose_configuration_customizations/gemma/compose.gemma.override.yaml
+cp .devcontainer/docker_compose_configuration_customizations/lllm/compose.lllm.override.example.yaml \
+   .devcontainer/docker_compose_configuration_customizations/lllm/compose.lllm.override.yaml
 ```
 
-Inside `compose.gemma.override.yaml`, you configure three main settings:
+Inside `compose.lllm.override.yaml`, you configure three main settings:
 1. `GEMMA_MODEL`: Which Gemma 4 model size to download (`e2b`, `e4b`, `12b`, `26b`, `31b`).
 2. `mem_limit`: The maximum system RAM Docker is allowed to use.
 3. `OLLAMA_CONTEXT_LENGTH`: How much text (chat history + code) the model remembers at once.
 
-`OLLAMA_KEEP_ALIVE` controls how long that loaded model stays in memory after the last request. The tracked compose file sets it to `5m`, which is Ollama's own default. The example override sets `20m`. `-1` keeps the model loaded until the Gemma container stops. Loading it again rebuilds the context slot, which is the slow part of the next request.
+`OLLAMA_KEEP_ALIVE` controls how long that loaded model stays in memory after the last request. The tracked compose file sets it to `5m`, which is Ollama's own default. The example override sets `20m`. `-1` keeps the model loaded until the local-llm container stops. Loading it again rebuilds the context slot, which is the slow part of the next request.
 
 ---
 
-## Quick Reference (Pick Your Machine)
+## Quick Reference
+
+Picking your model and resources basically boils down to adding up your fast available memory (VRAM and/or system RAM) and picking a set of trade-offs that make sense for you within that constraint (VRAM is nice, but system RAM feels fine for most use-cases so don't stress over it; using memory swap will generally feel very slow, but may fit some use cases). Here's a table for a quick choice of model and resource settings.
 
 | Your Hardware | Recommended Model | `mem_limit` | `OLLAMA_CONTEXT_LENGTH` | Expected Speed |
 |---------------|-------------------|-------------|-------------------------|----------------|
@@ -60,7 +62,7 @@ rocm-smi     # AMD
 
 ---
 
-## Step 2: Configure `compose.gemma.override.yaml`
+## Step 2: Configure `compose.lllm.override.yaml`
 
 Choose the scenario below that matches your machine:
 
@@ -84,7 +86,7 @@ Ensure your host machine retains enough headroom for your specific workload (OS,
 *Example override for 16 GB of system RAM, with inference on the CPU or on a Mac:*
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 12g
     environment:
       GEMMA_MODEL: gemma4:e2b
@@ -100,7 +102,7 @@ services:
 
 If your graphics card has enough VRAM, inference runs entirely on the GPU for maximum speed. System RAM is only used for light container overhead.
 
-1. Uncomment your GPU in `compose.gemma.override.yaml` (e.g. `gpus: all` for NVIDIA).
+1. Uncomment your GPU in `compose.lllm.override.yaml` (e.g. `gpus: all` for NVIDIA).
 2. Set `mem_limit: 8g` for any model tag that fits in VRAM.
 
 | Model Tag | Required GPU VRAM | `mem_limit` |
@@ -114,7 +116,7 @@ If your graphics card has enough VRAM, inference runs entirely on the GPU for ma
 *Example override for an NVIDIA GPU with 8 GB of VRAM:*
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 8g
     gpus: all
     environment:
@@ -189,7 +191,7 @@ That many MiB comes out of VRAM when the GPU has room after the weights. Otherwi
 
 Weight quantization is separate from the KV cache. Using fewer bits per weight shrinks the model file, which lets you fit a larger, smarter parameter size into the same RAM or VRAM budget.
 
-By default, the standard tags (`gemma4:e2b` through `gemma4:31b`) already use 4-bit mixed precision (`Q4_K_M`). To pick a specific quantization variant, set `GEMMA_MODEL` on both services in `compose.gemma.override.yaml`:
+By default, the standard tags (`gemma4:e2b` through `gemma4:31b`) already use 4-bit mixed precision (`Q4_K_M`). To pick a specific quantization variant, set `GEMMA_MODEL` on both services in `compose.lllm.override.yaml`:
 - **26B MoE variants** use the `gemma4:26b-a4b-it-<quant>` naming pattern.
 - **All other sizes** use `gemma4:<size>-it-<quant>`.
 
@@ -225,7 +227,7 @@ When RAM fills up, your operating system moves inactive memory to an SSD swap fi
    `memswap_limit` represents **RAM + Swap combined**:
    ```yaml
    services:
-     gemma:
+     local-llm:
        mem_limit: 12g        # Physical RAM cap
        memswap_limit: 20g    # 12g RAM + 8g disk swap
    ```
@@ -276,7 +278,7 @@ If you aren't sure which one to pick, **start with Setup 1 (`gemma4:e4b-it-qat` 
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 8g
     gpus: all
     environment:
@@ -295,7 +297,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 8g
     gpus: all
     environment:
@@ -315,7 +317,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 8g
     gpus: all
     environment:
@@ -334,7 +336,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 8g
     gpus: all
     environment:
@@ -354,7 +356,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 6g
     gpus: all
     environment:
@@ -373,7 +375,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 6g
     gpus: all
     environment:
@@ -393,7 +395,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 8g
     gpus: all
     environment:
@@ -412,7 +414,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 13g
     gpus: all
     environment:
@@ -432,7 +434,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 13g
     memswap_limit: 20g
     gpus: all
@@ -453,7 +455,7 @@ services:
 
 ```yaml
 services:
-  gemma:
+  local-llm:
     mem_limit: 13g
     memswap_limit: 48g
     gpus: all
@@ -469,7 +471,7 @@ services:
 
 ## Testing & Verifying Your Setup
 
-After editing `compose.gemma.override.yaml`, apply changes by rebuilding or restarting:
+After editing `compose.lllm.override.yaml`, apply changes by rebuilding or restarting:
 ```sh
 devcontainer up
 ```

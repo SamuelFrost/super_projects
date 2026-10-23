@@ -360,10 +360,10 @@ COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/en
 # print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
 
-# Ollama client only, same image tag as the gemma service. `gemma` chats with that
-# one server through OLLAMA_HOST. The runners stay in the gemma container.
+# Ollama client only, same image tag as the local-llm service. `lllm` chats with that
+# one server through OLLAMA_HOST. The runners stay in the local-llm container.
 COPY --from=ollama/ollama:0.40.8 /usr/bin/ollama /usr/local/bin/ollama
-COPY --chmod=0755 .devcontainer/scripts/dockerfile/gemma /usr/local/bin/gemma
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/lllm /usr/local/bin/lllm
 
 # ------------------------------------------------------------------------------
 # Claude Code CLI (commented out; uncomment and rebuild to enable)

@@ -1,9 +1,0 @@
-#!/bin/sh
-# Compose fails if compose.gemma.override.yaml is listed in devcontainer.json and is missing.
-set -eu
-
-cd "$(dirname "$0")"
-
-if [ ! -f "./compose.gemma.override.yaml" ]; then
-  touch "./compose.gemma.override.yaml"
-fi

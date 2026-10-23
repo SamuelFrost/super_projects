@@ -47,11 +47,11 @@ chrome_devtools_tools = [
 ]
 
 root_agent = LlmAgent(
-    name="gemma",
+    name="lllm",
     model=LiteLlm(model=f"ollama_chat/{model_name}"),
-    description="Local Gemma with Chrome DevTools in the devcontainer.",
+    description="Local model with Chrome DevTools in the devcontainer.",
     instruction=(
-        "You are Gemma in the super_projects devcontainer. "
+        "You are the local model in the super_projects devcontainer. "
         "Use the Chrome DevTools tools to open and inspect pages when the user "
         "asks about a web page or the browser. Answer directly when a page is "
         "not needed."
@@ -72,4 +72,4 @@ root_agent = LlmAgent(
     ],
 )
 
-app = App(name="gemma", root_agent=root_agent)
+app = App(name="lllm", root_agent=root_agent)

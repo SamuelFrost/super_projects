@@ -1,5 +1,5 @@
-# Copy this file to compose.gemma.override.yaml:
-#   cp .devcontainer/docker_compose_configuration_customizations/gemma/compose.gemma.override.example.yaml .devcontainer/docker_compose_configuration_customizations/gemma/compose.gemma.override.yaml
+# Copy this file to compose.lllm.override.yaml:
+#   cp .devcontainer/docker_compose_configuration_customizations/lllm/compose.lllm.override.example.yaml .devcontainer/docker_compose_configuration_customizations/lllm/compose.lllm.override.yaml
 #
 # The file below is a working default for a 16 GB RAM machine: gemma4:e2b with a 12g cap.
 # Swap the tag and mem_limit using local_llm_spec_guideline.md for a bigger model or a GPU. Then run devcontainer up.
@@ -9,7 +9,7 @@
 # Use the same model tag in both places.
 
 services:
-  gemma:
+  local-llm:
     # See local_llm_spec_guideline.md for recommendations on system specs and model choice.
     mem_limit: 12g
     # Uncomment to allow this container extra disk swap on top of mem_limit.
@@ -24,8 +24,8 @@ services:
       OLLAMA_KEEP_ALIVE: "20m"
 
     # Uncomment to leave Gemma stopped on devcontainer up.
-    # Start it later with: COMPOSE_PROFILES=gemma devcontainer up
-    # profiles: ["gemma"]
+    # Start it later with: COMPOSE_PROFILES=lllm devcontainer up
+    # profiles: ["lllm"]
 
     # Uncomment to cap CPUs.
     # cpus: 4
@@ -58,7 +58,7 @@ services:
 
   devcontainer:
     environment:
-      # OLLAMA_HOST informs the .devcontainer/scripts/dockerfile/gemma script how to reach the Gemma server.
-      OLLAMA_HOST: http://gemma:11434
-      # GEMMA_MODEL informs the .devcontainer/scripts/dockerfile/gemma script which model to use.
-      GEMMA_MODEL: gemma4:e2b
+      # OLLAMA_HOST informs the lllm command how to reach the Gemma server.
+      OLLAMA_HOST: http://local-llm:11434
+      # GEMMA_MODEL informs the lllm command which model to use.
+      GEMMA_MODEL: gemma4:e4b

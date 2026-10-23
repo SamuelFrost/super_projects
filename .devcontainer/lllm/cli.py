@@ -1,4 +1,4 @@
-"""Stream Gemma's reply as it is generated.
+"""Stream the local model's reply as it is generated.
 
 `adk run` waits for a finished response. This uses the same agent with
 server-sent streaming, and writes each selected text delta as it arrives.
@@ -22,7 +22,7 @@ from google.adk.agents._streaming_mode import StreamingMode
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from gemma_agent.agent import app
+from lllm.agent import app
 
 _RUN_CONFIG = RunConfig(streaming_mode=StreamingMode.SSE)
 
@@ -231,9 +231,9 @@ async def _session(runner: InMemoryRunner, user_id: str):
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="gemma",
+        prog="lllm",
         description=(
-            "Talk to the local Gemma agent. Channel options choose what is printed. "
+            "Talk to the local model. Channel options choose what is printed. "
             "With none of them, thinking, the answer, and tool names are shown."
         ),
     )
@@ -245,7 +245,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--answer",
         action="store_true",
-        help="Print only the reply when this is the only channel option. Use this when another agent is calling gemma.",
+        help="Print only the reply when this is the only channel option. Use this when another agent is calling lllm.",
     )
     parser.add_argument(
         "--tools",
@@ -306,7 +306,7 @@ async def main() -> None:
             try:
                 await asyncio.wait_for(turn, args.timeout)
             except asyncio.TimeoutError:
-                print(f"gemma: timed out after {args.timeout:g}s", file=sys.stderr)
+                print(f"lllm: timed out after {args.timeout:g}s", file=sys.stderr)
                 raise SystemExit(124) from None
 
         if args.query:

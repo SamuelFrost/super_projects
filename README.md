@@ -251,14 +251,12 @@ With no channel options, a turn shows thinking, the answer, and tool names such 
 
 `lllm --help` prints the above options.
 
-Tags you no longer use stay in the `local-llm` volume. From the repository root, list them and remove one:
+The service downloads `GEMMA_MODEL` each time it starts. Models stay in the `local-llm` volume. If you'd like to save disk space, remove a tag after it is no longer the configured model (or leave it around for future use if you expect to use it again).
 
 ```sh
 ./not_devcontainer exec local-llm ollama list
 ./not_devcontainer exec local-llm ollama rm gemma4:e2b
 ```
-
-The service downloads `GEMMA_MODEL` each time it starts, so if you'd like to save disk space, remove a tag only after it is no longer the configured model.
 
 </details>
 

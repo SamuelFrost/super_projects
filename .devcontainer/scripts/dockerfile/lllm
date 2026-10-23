@@ -14,16 +14,19 @@ fi
 OLLAMA_API_BASE=${OLLAMA_HOST%/}
 export OLLAMA_API_BASE
 
-workspace=${SUPER_PROJECTS_WORKDIR:-/workspaces}
-agent_dir=${workspace}/.devcontainer/lllm
-agents_dir=$(CDPATH= cd -- "$(dirname "$agent_dir")" && pwd)
+workspace_dir=${SUPER_PROJECTS_WORKDIR:-/workspaces}
+devcontainer_dir=$(CDPATH= cd -- "${workspace_dir}/.devcontainer" && pwd)
+
+if ! ollama show "$GEMMA_MODEL" >/dev/null 2>&1; then
+  ollama pull "$GEMMA_MODEL" >&2
+fi
 
 # adk web serves every agent under this directory. The event view is the
 # development UI for model requests, thinking, and tool calls.
 if [ "${1:-}" = "web" ]; then
   shift
-  exec adk web --port 8000 "$agents_dir" "$@"
+  exec adk web --port 8000 "$devcontainer_dir" "$@"
 fi
 
-export PYTHONPATH="${agents_dir}${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="${devcontainer_dir}${PYTHONPATH:+:$PYTHONPATH}"
 exec /opt/google-adk/bin/python3 -m lllm.cli "$@"

@@ -14,6 +14,7 @@ import asyncio
 import json
 import sys
 from dataclasses import dataclass
+from typing import TextIO
 
 import readline  # noqa: F401  GNU readline for input()
 
@@ -24,7 +25,7 @@ from google.genai import types
 
 from lllm.agent import app
 
-_RUN_CONFIG = RunConfig(streaming_mode=StreamingMode.SSE)
+STREAMING_RUN_CONFIG = RunConfig(streaming_mode=StreamingMode.SSE)
 
 
 @dataclass
@@ -35,13 +36,23 @@ class OutputChannels:
     tool_results: bool
 
     @classmethod
-    def from_args(cls, args: argparse.Namespace) -> "OutputChannels":
-        if args.thinking or args.answer or args.tools or args.tool_results:
-            return cls(args.thinking, args.answer, args.tools, args.tool_results)
+    def from_parsed_arguments(cls, parsed_args: argparse.Namespace) -> "OutputChannels":
+        if (
+            parsed_args.thinking
+            or parsed_args.answer
+            or parsed_args.tools
+            or parsed_args.tool_results
+        ):
+            return cls(
+                thinking=parsed_args.thinking,
+                answer=parsed_args.answer,
+                tools=parsed_args.tools,
+                tool_results=parsed_args.tool_results,
+            )
         return cls(thinking=True, answer=True, tools=True, tool_results=False)
 
-    def allows_text(self, thought: bool | None) -> bool:
-        if thought:
+    def includes_text_part(self, is_thought: bool | None) -> bool:
+        if is_thought:
             return self.thinking
         return self.answer
 
@@ -52,184 +63,215 @@ class TurnWriter:
         channels: OutputChannels,
         *,
         trace_to_stderr: bool,
-        stream: bool,
-        as_json: bool,
+        stream_output: bool,
+        output_as_json: bool,
     ) -> None:
         self.channels = channels
-        self.stream = stream and not as_json
-        self.as_json = as_json
-        self._answer_file = sys.stdout
-        self._trace_file = sys.stderr if trace_to_stderr and not as_json else sys.stdout
-        self._parts: dict[str, list] = {
+        self.stream_output = stream_output and not output_as_json
+        self.output_as_json = output_as_json
+        self._answer_stream: TextIO = sys.stdout
+        self._trace_stream: TextIO = (
+            sys.stderr if trace_to_stderr and not output_as_json else sys.stdout
+        )
+        self._collected_parts_by_channel: dict[str, list] = {
             "thinking": [],
             "answer": [],
             "tools": [],
             "tool_results": [],
         }
-        self._last_channel: dict[object, str] = {}
-        self._pending_newline: dict[object, bool] = {}
+        self._last_channel_by_stream: dict[TextIO, str] = {}
+        self._has_pending_newline_by_stream: dict[TextIO, bool] = {}
 
-    def text(self, thought: bool | None, value: str) -> None:
-        if not value or not self.channels.allows_text(thought):
+    def write_text_delta(self, is_thought: bool | None, text_delta: str) -> None:
+        if not text_delta or not self.channels.includes_text_part(is_thought):
             return
-        channel = "thinking" if thought else "answer"
-        self._parts[channel].append(value)
-        if self.stream:
-            self._emit(channel, value)
+        channel_name = "thinking" if is_thought else "answer"
+        self._collected_parts_by_channel[channel_name].append(text_delta)
+        if self.stream_output:
+            self._write_streaming_chunk(channel_name, text_delta)
 
-    def tool(self, name: str) -> None:
+    def write_tool_call(self, tool_name: str) -> None:
         if not self.channels.tools:
             return
-        self._parts["tools"].append(name)
-        if self.stream:
-            self._emit("tools", f"[{name}]\n")
+        self._collected_parts_by_channel["tools"].append(tool_name)
+        if self.stream_output:
+            self._write_streaming_chunk("tools", f"[{tool_name}]\n")
 
-    def tool_result(self, name: str, response: object) -> None:
+    def write_tool_result(self, tool_name: str, tool_response: object) -> None:
         if not self.channels.tool_results:
             return
-        text = _result_text(response)
-        self._parts["tool_results"].append({"name": name, "text": text})
-        if self.stream:
-            self._emit("tool_results", f"[{name} result]\n{text}\n")
+        result_text = _extract_tool_result_text(tool_response)
+        self._collected_parts_by_channel["tool_results"].append(
+            {"name": tool_name, "text": result_text}
+        )
+        if self.stream_output:
+            self._write_streaming_chunk(
+                "tool_results", f"[{tool_name} result]\n{result_text}\n"
+            )
 
-    def finish(self) -> None:
-        if self.as_json:
-            _write(json.dumps(self._payload(), ensure_ascii=False) + "\n")
+    def finish_turn(self) -> None:
+        if self.output_as_json:
+            _write_to_stdout(
+                json.dumps(self._build_json_payload(), ensure_ascii=False) + "\n"
+            )
             return
-        if self.stream:
-            for stream, pending in self._pending_newline.items():
-                if pending:
-                    stream.write("\n")
-                    stream.flush()
+        if self.stream_output:
+            for output_stream, has_pending_newline in (
+                self._has_pending_newline_by_stream.items()
+            ):
+                if has_pending_newline:
+                    output_stream.write("\n")
+                    output_stream.flush()
             return
-        self._write_buffered()
+        self._write_buffered_output()
 
-    def _payload(self) -> dict:
-        payload = {}
+    def _build_json_payload(self) -> dict[str, object]:
+        payload: dict[str, object] = {}
         if self.channels.thinking:
-            payload["thinking"] = "".join(self._parts["thinking"])
+            payload["thinking"] = "".join(self._collected_parts_by_channel["thinking"])
         if self.channels.answer:
-            payload["answer"] = "".join(self._parts["answer"])
+            payload["answer"] = "".join(self._collected_parts_by_channel["answer"])
         if self.channels.tools:
-            payload["tools"] = self._parts["tools"]
+            payload["tools"] = self._collected_parts_by_channel["tools"]
         if self.channels.tool_results:
-            payload["tool_results"] = self._parts["tool_results"]
+            payload["tool_results"] = self._collected_parts_by_channel["tool_results"]
         return payload
 
-    def _write_buffered(self) -> None:
-        trace = []
-        if self.channels.thinking and self._parts["thinking"]:
-            trace.append("".join(self._parts["thinking"]).rstrip("\n"))
-        if self.channels.tools and self._parts["tools"]:
-            trace.append("\n".join(f"[{name}]" for name in self._parts["tools"]))
-        if self.channels.tool_results and self._parts["tool_results"]:
-            trace.append(
+    def _write_buffered_output(self) -> None:
+        trace_blocks: list[str] = []
+        if self.channels.thinking and self._collected_parts_by_channel["thinking"]:
+            trace_blocks.append(
+                "".join(self._collected_parts_by_channel["thinking"]).rstrip("\n")
+            )
+        if self.channels.tools and self._collected_parts_by_channel["tools"]:
+            trace_blocks.append(
                 "\n".join(
-                    f"[{item['name']} result]\n{item['text']}"
-                    for item in self._parts["tool_results"]
+                    f"[{tool_name}]"
+                    for tool_name in self._collected_parts_by_channel["tools"]
                 )
             )
-        answer = ""
-        if self.channels.answer and self._parts["answer"]:
-            answer = "".join(self._parts["answer"]).rstrip("\n")
-        if self._trace_file is self._answer_file:
-            blocks = [*trace, answer] if answer else trace
-            if blocks:
-                _write("\n".join(blocks) + "\n")
+        if (
+            self.channels.tool_results
+            and self._collected_parts_by_channel["tool_results"]
+        ):
+            trace_blocks.append(
+                "\n".join(
+                    f"[{tool_result['name']} result]\n{tool_result['text']}"
+                    for tool_result in self._collected_parts_by_channel["tool_results"]
+                )
+            )
+        answer_text = ""
+        if self.channels.answer and self._collected_parts_by_channel["answer"]:
+            answer_text = "".join(self._collected_parts_by_channel["answer"]).rstrip(
+                "\n"
+            )
+        if self._trace_stream is self._answer_stream:
+            output_blocks = [*trace_blocks, answer_text] if answer_text else trace_blocks
+            if output_blocks:
+                _write_to_stdout("\n".join(output_blocks) + "\n")
             return
-        if trace:
-            self._trace_file.write("\n".join(trace) + "\n")
-            self._trace_file.flush()
-        if answer:
-            _write(answer + "\n")
+        if trace_blocks:
+            self._trace_stream.write("\n".join(trace_blocks) + "\n")
+            self._trace_stream.flush()
+        if answer_text:
+            _write_to_stdout(answer_text + "\n")
 
-    def _emit(self, channel: str, text: str) -> None:
-        stream = self._answer_file if channel == "answer" else self._trace_file
-        previous = self._last_channel.get(stream)
-        if previous not in (None, channel) and self._pending_newline.get(stream):
-            stream.write("\n")
-            self._pending_newline[stream] = False
-        self._last_channel[stream] = channel
-        stream.write(text)
-        stream.flush()
-        self._pending_newline[stream] = not text.endswith("\n")
+    def _write_streaming_chunk(self, channel_name: str, text_chunk: str) -> None:
+        output_stream = (
+            self._answer_stream if channel_name == "answer" else self._trace_stream
+        )
+        previous_channel = self._last_channel_by_stream.get(output_stream)
+        if previous_channel not in (
+            None,
+            channel_name,
+        ) and self._has_pending_newline_by_stream.get(output_stream):
+            output_stream.write("\n")
+            self._has_pending_newline_by_stream[output_stream] = False
+        self._last_channel_by_stream[output_stream] = channel_name
+        output_stream.write(text_chunk)
+        output_stream.flush()
+        self._has_pending_newline_by_stream[output_stream] = not text_chunk.endswith(
+            "\n"
+        )
 
 
-async def _resolve(value):
+async def _await_if_coroutine(value):
     if asyncio.iscoroutine(value):
         return await value
     return value
 
 
-def _write(text: str) -> None:
+def _write_to_stdout(text: str) -> None:
     sys.stdout.write(text)
     sys.stdout.flush()
 
 
-def _result_text(response: object) -> str:
-    if not isinstance(response, dict):
-        return "" if response is None else str(response)
-    content = response.get("content")
+def _extract_tool_result_text(tool_response: object) -> str:
+    if not isinstance(tool_response, dict):
+        return "" if tool_response is None else str(tool_response)
+    content = tool_response.get("content")
     if isinstance(content, list):
-        texts = [
+        text_items = [
             item.get("text", "")
             for item in content
             if isinstance(item, dict) and item.get("text")
         ]
-        if texts:
-            return "\n".join(texts)
+        if text_items:
+            return "\n".join(text_items)
     if isinstance(content, str):
         return content
-    return str(response)
+    return str(tool_response)
 
 
 async def run_turn(
     runner: InMemoryRunner,
     session_id: str,
     user_id: str,
-    text: str,
+    prompt_text: str,
     channels: OutputChannels,
     *,
     trace_to_stderr: bool = False,
-    stream: bool = True,
-    as_json: bool = False,
+    stream_output: bool = True,
+    output_as_json: bool = False,
 ) -> None:
     writer = TurnWriter(
         channels,
         trace_to_stderr=trace_to_stderr,
-        stream=stream,
-        as_json=as_json,
+        stream_output=stream_output,
+        output_as_json=output_as_json,
     )
     async for event in runner.run_async(
         user_id=user_id,
         session_id=session_id,
-        new_message=types.Content(role="user", parts=[types.Part(text=text)]),
-        run_config=_RUN_CONFIG,
+        new_message=types.Content(role="user", parts=[types.Part(text=prompt_text)]),
+        run_config=STREAMING_RUN_CONFIG,
     ):
         content = event.content
         if content is None or not content.parts:
             continue
         for part in content.parts:
             if part.text and event.partial:
-                writer.text(part.thought, part.text)
+                writer.write_text_delta(part.thought, part.text)
                 continue
-            call = part.function_call
-            if call is not None and not event.partial and call.name:
-                writer.tool(call.name)
+            function_call = part.function_call
+            if function_call is not None and not event.partial and function_call.name:
+                writer.write_tool_call(function_call.name)
                 continue
-            response = part.function_response
-            if response is not None and not event.partial:
-                writer.tool_result(response.name or "tool", response.response)
-    writer.finish()
+            function_response = part.function_response
+            if function_response is not None and not event.partial:
+                writer.write_tool_result(
+                    function_response.name or "tool", function_response.response
+                )
+    writer.finish_turn()
 
 
-async def _session(runner: InMemoryRunner, user_id: str):
-    return await _resolve(
+async def _create_session(runner: InMemoryRunner, user_id: str):
+    return await _await_if_coroutine(
         runner.session_service.create_session(app_name=app.name, user_id=user_id)
     )
 
 
-def _parser() -> argparse.ArgumentParser:
+def _build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lllm",
         description=(
@@ -278,53 +320,58 @@ def _parser() -> argparse.ArgumentParser:
         metavar="SECONDS",
         help="Stop the turn after this many seconds.",
     )
-    parser.add_argument("query", nargs="*", help="One turn. With no query, the session stays open.")
+    parser.add_argument(
+        "query", nargs="*", help="One turn. With no query, the session stays open."
+    )
     return parser
 
 
 async def main() -> None:
-    args = _parser().parse_args()
-    channels = OutputChannels.from_args(args)
+    parsed_args = _build_argument_parser().parse_args()
+    channels = OutputChannels.from_parsed_arguments(parsed_args)
     user_id = "user"
     runner = InMemoryRunner(app=app)
-    session = await _session(runner, user_id)
+    session = await _create_session(runner, user_id)
     try:
-        async def one_turn(text: str) -> None:
-            turn = run_turn(
+        async def run_single_turn(prompt_text: str) -> None:
+            turn_coroutine = run_turn(
                 runner,
                 session.id,
                 user_id,
-                text,
+                prompt_text,
                 channels,
-                trace_to_stderr=args.stderr,
-                stream=not args.no_stream,
-                as_json=args.json,
+                trace_to_stderr=parsed_args.stderr,
+                stream_output=not parsed_args.no_stream,
+                output_as_json=parsed_args.json,
             )
-            if args.timeout is None:
-                await turn
+            if parsed_args.timeout is None:
+                await turn_coroutine
                 return
             try:
-                await asyncio.wait_for(turn, args.timeout)
+                await asyncio.wait_for(turn_coroutine, parsed_args.timeout)
             except asyncio.TimeoutError:
-                print(f"lllm: timed out after {args.timeout:g}s", file=sys.stderr)
+                print(
+                    f"lllm: timed out after {parsed_args.timeout:g}s",
+                    file=sys.stderr,
+                )
                 raise SystemExit(124) from None
 
-        if args.query:
-            await one_turn(" ".join(args.query))
+        if parsed_args.query:
+            await run_single_turn(" ".join(parsed_args.query))
             return
         while True:
             try:
-                line = input("> ")
+                user_input = input("> ")
             except (EOFError, KeyboardInterrupt):
-                _write("\n")
+                _write_to_stdout("\n")
                 return
-            if line.strip().lower() in {"exit", "quit"}:
+            if user_input.strip().lower() in {"exit", "quit"}:
                 return
-            if not line.strip():
+            if not user_input.strip():
                 continue
-            await one_turn(line)
+            await run_single_turn(user_input)
     finally:
-        await _resolve(runner.close())
+        await _await_if_coroutine(runner.close())
 
 
 if __name__ == "__main__":

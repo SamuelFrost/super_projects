@@ -26,17 +26,17 @@ services:
     command:
       - |
         ollama serve &
-        server_pid=$$!
-        i=0
-        while [ "$$i" -lt 60 ]; do
+        ollama_server_pid=$$!
+        startup_wait_seconds=0
+        while [ "$$startup_wait_seconds" -lt 60 ]; do
           ollama list >/dev/null 2>&1 && break
-          i=$$((i + 1))
+          startup_wait_seconds=$$((startup_wait_seconds + 1))
           sleep 1
         done
         if [ -n "$${GEMMA_MODEL:-}" ]; then
           ollama pull "$$GEMMA_MODEL" || echo "lllm: pull of $$GEMMA_MODEL failed" >&2
         fi
-        wait "$$server_pid"
+        wait "$$ollama_server_pid"
 
   devcontainer:
     environment:

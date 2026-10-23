@@ -62,3 +62,5 @@ services:
       OLLAMA_HOST: http://local-llm:11434
       # GEMMA_MODEL informs the lllm command which model to use.
       GEMMA_MODEL: gemma4:e4b
+      # OLLAMA_CONTEXT_LENGTH inside the devcontainer is used to inform the ADK and agent management tools know how much context is available to the model.
+      OLLAMA_CONTEXT_LENGTH: "8192"

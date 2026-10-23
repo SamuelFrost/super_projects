@@ -94,6 +94,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:e2b
+      OLLAMA_CONTEXT_LENGTH: "8192"
 ```
 
 ---
@@ -125,6 +126,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:e2b
+      OLLAMA_CONTEXT_LENGTH: "8192"
 ```
 
 ---
@@ -287,6 +289,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:e4b-it-qat
+      OLLAMA_CONTEXT_LENGTH: "32768"
 ```
 
 #### 2. Web Research Agent: `gemma4:12b-it-qat` at 256K (`q8_0` Cache)
@@ -307,6 +310,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:12b-it-qat
+      OLLAMA_CONTEXT_LENGTH: "262144"
 ```
 
 #### 3. Fast Log & Diff Reader: `gemma4:e2b` at 128K
@@ -326,6 +330,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:e2b
+      OLLAMA_CONTEXT_LENGTH: "131072"
 ```
 
 #### 4. Long-Context Daily Driver: `gemma4:e4b-it-qat` at 128K (`q4_0` Cache)
@@ -346,6 +351,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:e4b-it-qat
+      OLLAMA_CONTEXT_LENGTH: "131072"
 ```
 
 #### 5. Stronger Code & Bug Solver: `gemma4:12b-it-qat` at 8K
@@ -365,6 +371,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:12b-it-qat
+      OLLAMA_CONTEXT_LENGTH: "8192"
 ```
 
 #### 6. Whole-Module Analyst: `gemma4:12b-it-qat` at 256K (`q4_0` Cache)
@@ -385,6 +392,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:12b-it-qat
+      OLLAMA_CONTEXT_LENGTH: "262144"
 ```
 
 #### 7. Higher-Precision E4B: `gemma4:e4b-it-q8_0` at 8K
@@ -404,6 +412,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:e4b-it-q8_0
+      OLLAMA_CONTEXT_LENGTH: "8192"
 ```
 
 #### 8. Heavy Reasoner (No Disk Swap) (Sam's choice): `gemma4:26b-a4b-it-qat` at 8K or 256K
@@ -424,6 +433,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:26b-a4b-it-qat
+      OLLAMA_CONTEXT_LENGTH: "262144"
 ```
 
 #### 9. Extreme: Maximum Reasoning + 256K Context (`gemma4:31b-it-qat` with Light SSD Swap)
@@ -445,6 +455,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:31b-it-qat
+      OLLAMA_CONTEXT_LENGTH: "262144"
 ```
 
 #### 10. Extreme (10×–50× Slower): Uncompressed 26B (`gemma4:26b-a4b-it-bf16` with Heavy SSD Swap)
@@ -465,6 +476,7 @@ services:
   devcontainer:
     environment:
       GEMMA_MODEL: gemma4:26b-a4b-it-bf16
+      OLLAMA_CONTEXT_LENGTH: "8192"
 ```
 
 ---

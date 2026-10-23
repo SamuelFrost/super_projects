@@ -326,12 +326,21 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _clear_task_cancellation() -> None:
+    current_task = asyncio.current_task()
+    if current_task is None:
+        return
+    while current_task.cancelling():
+        current_task.uncancel()
+
+
 async def main() -> None:
     parsed_args = _build_argument_parser().parse_args()
     channels = OutputChannels.from_parsed_arguments(parsed_args)
     user_id = "user"
     runner = InMemoryRunner(app=app)
     session = await _create_session(runner, user_id)
+    interrupted = False
     try:
         async def run_single_turn(prompt_text: str) -> None:
             turn_coroutine = run_turn(
@@ -370,9 +379,22 @@ async def main() -> None:
             if not user_input.strip():
                 continue
             await run_single_turn(user_input)
+    except asyncio.CancelledError:
+        interrupted = True
     finally:
+        # Ctrl+C cancels this task. Clear that so closing the runner can finish.
+        _clear_task_cancellation()
         await _await_if_coroutine(runner.close())
+    if interrupted:
+        _write_to_stdout("\n")
+        print("lllm: interrupted", file=sys.stderr)
+        raise SystemExit(130)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        _write_to_stdout("\n")
+        print("lllm: interrupted", file=sys.stderr)
+        raise SystemExit(130) from None

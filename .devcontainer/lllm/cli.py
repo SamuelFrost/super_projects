@@ -14,7 +14,15 @@ import readline  # noqa: F401  GNU readline for input()
 from google.adk.agents.run_config import RunConfig, StreamingMode
 
 from lllm.adk_runtime import AdkSession
-from lllm.agent import app as adk_app
+from lllm.agent import (
+    TURN_OUTCOME_CONTEXT_EXHAUSTED,
+    TURN_OUTCOME_REPETITION,
+    TURN_OUTCOME_STALLED,
+    agents_in_composition_order,
+    app_for_agent,
+    begin_turn_outcome_tracking,
+    root_turn_outcome,
+)
 from lllm.ollama import ensure_model_loaded
 from lllm.output_channels import (
     AgentOutputVisibility,
@@ -24,9 +32,24 @@ from lllm.output_channels import (
 from lllm.output_writer import AdkEventRenderer
 
 ADK_SSE_RUN_CONFIG = RunConfig(streaming_mode=StreamingMode.SSE)
+INCOMPLETE_TURN_EXIT_CODE = 75
+_INCOMPLETE_TURN_MESSAGES = {
+    TURN_OUTCOME_CONTEXT_EXHAUSTED: (
+        "lllm: stopped because the context window was full"
+    ),
+    TURN_OUTCOME_REPETITION: "lllm: stopped because the reply repeated itself",
+    TURN_OUTCOME_STALLED: (
+        "lllm: stopped because the same action repeated without new information"
+    ),
+}
+
+
+def incomplete_turn_message(outcome: str) -> str | None:
+    return _INCOMPLETE_TURN_MESSAGES.get(outcome)
 
 
 def _build_argument_parser() -> argparse.ArgumentParser:
+    composed_agent_names = [agent.name for agent in agents_in_composition_order()]
     parser = argparse.ArgumentParser(
         prog="lllm",
         description=(
@@ -34,6 +57,14 @@ def _build_argument_parser() -> argparse.ArgumentParser:
             "choosing what each author prints. Omitting it shows thinking, "
             "the answer, and tool names, plus each sub-agent request. Tool "
             "results stay off."
+        ),
+    )
+    parser.add_argument(
+        "--agent",
+        choices=composed_agent_names,
+        help=(
+            "Agent from the composed tree to talk to. "
+            f"The default is {composed_agent_names[0]}."
         ),
     )
     parser.add_argument(
@@ -95,17 +126,20 @@ def _clear_task_cancellation() -> None:
 
 async def run_prompt_turn(
     session: AdkSession,
+    selected_app,
     prompt_text: str,
     output_visibility: AgentOutputVisibility,
     *,
     trace_to_stderr: bool,
     stream_output: bool,
     output_as_json: bool,
-) -> None:
+) -> str:
+    begin_turn_outcome_tracking()
+    selected_root = selected_app.root_agent
     renderer = AdkEventRenderer(
         output_visibility,
-        root_agent_name=adk_app.root_agent.name,
-        sub_agent_names=collect_sub_agent_names(adk_app.root_agent),
+        root_agent_name=selected_root.name,
+        sub_agent_names=collect_sub_agent_names(selected_root),
         trace_to_stderr=trace_to_stderr,
         stream_output=stream_output,
         output_as_json=output_as_json,
@@ -114,19 +148,22 @@ async def run_prompt_turn(
     async for adk_event in session.stream_events(prompt_text, ADK_SSE_RUN_CONFIG):
         renderer.consume(adk_event)
     renderer.finish()
+    return root_turn_outcome(selected_root.name)
 
 
 async def main() -> None:
     parsed_args = _build_argument_parser().parse_args()
     ensure_model_loaded()
     output_visibility = AgentOutputVisibility.from_arguments(parsed_args)
+    selected_app = app_for_agent(parsed_args.agent)
     interrupted = False
-    session = await AdkSession.create(adk_app, user_id="user")
+    session = await AdkSession.create(selected_app, user_id="user")
     try:
 
         async def run_one_prompt_turn(prompt_text: str) -> None:
             prompt_turn_coroutine = run_prompt_turn(
                 session,
+                selected_app,
                 prompt_text,
                 output_visibility,
                 trace_to_stderr=parsed_args.stderr,
@@ -134,13 +171,19 @@ async def main() -> None:
                 output_as_json=parsed_args.json,
             )
             try:
-                await asyncio.wait_for(prompt_turn_coroutine, parsed_args.timeout)
+                turn_outcome = await asyncio.wait_for(
+                    prompt_turn_coroutine, parsed_args.timeout
+                )
             except asyncio.TimeoutError:
                 print(
                     f"lllm: timed out after {parsed_args.timeout:g}s",
                     file=sys.stderr,
                 )
                 raise SystemExit(124) from None
+            incomplete_message = incomplete_turn_message(turn_outcome)
+            if incomplete_message:
+                print(incomplete_message, file=sys.stderr)
+                raise SystemExit(INCOMPLETE_TURN_EXIT_CODE)
 
         if parsed_args.query:
             await run_one_prompt_turn(" ".join(parsed_args.query))

@@ -1,0 +1,49 @@
+# Gemma 4 via Ollama, on this checkout's Compose project and network.
+# Model weights live in the project-scoped local-llm volume.
+# Defaults are the smallest CPU setup from local_llm_spec_guideline.md: gemma4:e2b and a 12g RAM cap.
+# compose.lllm.override.yaml replaces these when a bigger model or a GPU needs a different cap.
+
+services:
+  local-llm:
+    image: ollama/ollama:0.40.8
+    restart: unless-stopped
+    mem_limit: 12g
+    volumes:
+      - local-llm:/root/.ollama
+    networks:
+      - super_projects_default
+    environment:
+      # Listen address inside this container. Clients use http://local-llm:11434.
+      OLLAMA_HOST: 0.0.0.0:11434
+      GEMMA_MODEL: gemma4:e2b
+      # How long the model stays loaded after the last request. 5m is the Ollama default.
+      # An override can set a longer duration, such as 20m, or -1 to keep it until the container stops.
+      OLLAMA_KEEP_ALIVE: "5m"
+      OLLAMA_CONTEXT_LENGTH: "8192"
+    # Uncomment to leave Gemma stopped on devcontainer up.
+    # Start it later with: COMPOSE_PROFILES=lllm devcontainer up
+    # profiles: ["lllm"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        ollama_server_pid=$$!
+        startup_wait_seconds=0
+        while [ "$$startup_wait_seconds" -lt 60 ]; do
+          ollama list >/dev/null 2>&1 && break
+          startup_wait_seconds=$$((startup_wait_seconds + 1))
+          sleep 1
+        done
+        if [ -n "$${GEMMA_MODEL:-}" ]; then
+          ollama pull "$$GEMMA_MODEL" || echo "lllm: pull of $$GEMMA_MODEL failed" >&2
+        fi
+        wait "$$ollama_server_pid"
+
+  devcontainer:
+    environment:
+      OLLAMA_HOST: http://local-llm:11434
+      GEMMA_MODEL: gemma4:e2b
+      OLLAMA_CONTEXT_LENGTH: "8192"
+
+volumes:
+  local-llm: {}

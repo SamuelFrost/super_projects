@@ -37,6 +37,7 @@ case "$mode" in
       --experimental-structured-content \
       --experimental-include-all-pages \
       --experimental-screencast \
+      --no-usage-statistics \
       "$@"
     ;;
   browsing)
@@ -44,6 +45,7 @@ case "$mode" in
       --browser-url="http://127.0.0.1:${chrome_port}" \
       --redact-network-headers \
       --no-performance-crux \
+      --no-usage-statistics \
       "$@"
     ;;
   pwa)
@@ -56,6 +58,7 @@ case "$mode" in
       --user-data-dir=/home/developer/chrome-profile/pwa \
       --chrome-arg=--enable-unsafe-swiftshader \
       --chrome-arg=--restore-last-session \
+      --no-usage-statistics \
       "$@"
     ;;
   *)

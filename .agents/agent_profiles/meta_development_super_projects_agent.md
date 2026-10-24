@@ -199,7 +199,7 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 
 - `ruby`: workspace fallback version `4.0` from `.mise.toml`.
 - `node`: workspace fallback version `24` from `.mise.toml`, installed into the persisted `mise-data` volume.
-- `npm:chrome-devtools-mcp`: version `1.10.1` from `.mise.toml` (pinned for agent MCP configs).
+- `npm:chrome-devtools-mcp`: version `1.12.0` from `.mise.toml` (pinned for agent MCP configs).
 - `python`: supported by the image build dependencies and mise, but currently commented out in `.mise.toml`.
 - `go`: supported by mise, but currently commented out in `.mise.toml`.
 - `java`: supported by mise, but currently commented out in `.mise.toml`.

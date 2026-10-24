@@ -221,6 +221,43 @@ Inside the devcontainer you are the `developer` user. That user is created with 
 
 The `developer` user also belongs to a `docker` group created with that socket's group id, which is what allows it to use the socket. The group id is set when the image is built, so a different socket group needs a rebuild.
 
+#### Local LLM (Ollama)
+
+By default, Gemma 4 is used with the Ollama docker service started by devcontainer. The default is `gemma4:e2b` with a `12g` RAM cap. See `local_llm_spec_guideline.md` for configuration and setup guidelines-- it's highly recommended to adjust settings for your machine to get the most out of the LLM.
+
+From the repository root, `devcontainer up` starts Gemma with the devcontainer. Inside the container, `lllm` starts the Agent Development Kit session for that model. It can inspect the browser and list, search, read, or edit workspace files. It does not run shell commands. With no arguments the session stays open until you type `exit` or press ctrl + c.
+
+The first reply can take a while while the model loads. After that, characters stream as they are generated.
+
+```sh
+lllm
+> hi
+```
+
+If you prefer a GUI for the Agent Development Kit, you can run `lllm web` to open the development UI at `http://127.0.0.1:8000` inside the container (set up port forwarding as needed).
+
+With no channel options, a turn shows thinking, the answer, and tool names such as `[new_page]`. Pass any channel option to show only the ones you name.
+
+| Option | Effect |
+|---|---|
+| `--thinking` | Model thinking |
+| `--answer` | The reply. Use this for subagents |
+| `--tools` | Tool names |
+| `--tool-results` | Tool results |
+| `--stderr` | Thinking and tool lines go to stderr |
+| `--no-stream` | Print the turn when it finishes |
+| `--json` | One JSON object on stdout |
+| `--timeout SECONDS` | Stop the turn after this many seconds |
+
+`lllm --help` prints the above options.
+
+The service downloads `GEMMA_MODEL` each time it starts. Models stay in the `local-llm` volume. If you'd like to save disk space, remove a tag after it is no longer the configured model (or leave it around for future use if you expect to use it again).
+
+```sh
+./not_devcontainer exec local-llm ollama list
+./not_devcontainer exec local-llm ollama rm gemma4:e2b
+```
+
 </details>
 
 ### Persisted volumes

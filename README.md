@@ -236,15 +236,18 @@ lllm
 
 If you prefer a GUI for the Agent Development Kit, you can run `lllm web` to open the development UI at `http://127.0.0.1:8000` inside the container (set up port forwarding as needed).
 
-With no channel options, a turn shows thinking, the answer, and tool names such as `[new_page]`. Pass any channel option to show only the ones you name.
+By default every author shows thinking, its reply, and tool names such as `[new_page]`. A sub-agent also shows the request it was given, labeled `[files_agent]`, and its reply, labeled `[files_agent response]`. Tool results stay off. `--outputChannels` takes one JSON object. `defaults` applies to every author, `sub_agent_defaults` then applies to agents under the root, and each `agent_overrides` entry wins for the agents in `target_agents`. Omitted keys keep the layer below. Values are booleans: `thinking`, `answer`, `tool_calls`, `tool_results`, and `prompt`.
+
+You can set each of the keys per agent with defaults and sub_agent_defaults, and then override each key per agent with agent_overrides.
+
+```sh
+lllm --outputChannels='{"defaults":{"thinking":false},"sub_agent_defaults":{"tool_calls":false},"agent_overrides":[{"target_agents":["files_agent"],"tool_results":true}]}' "Read the first line of /workspaces/README.md."
+```
 
 | Option | Effect |
 |---|---|
-| `--thinking` | Model thinking |
-| `--answer` | The reply. Use this for subagents |
-| `--tools` | Tool names |
-| `--tool-results` | Tool results |
-| `--stderr` | Thinking and tool lines go to stderr |
+| `--outputChannels` | JSON object selecting what gets printed to the console. |
+| `--stderr` | Thinking, tool lines, and sub-agent lines go to stderr |
 | `--no-stream` | Print the turn when it finishes |
 | `--json` | One JSON object on stdout |
 | `--timeout SECONDS` | Stop the turn after this many seconds |

@@ -38,6 +38,7 @@ class AdkEventRenderer:
         self._partially_streamed_agent_channels: set[tuple[str, str]] = set()
         self._agent_channels_with_printed_header: set[tuple[str, str]] = set()
         self._agents_with_recorded_answer: set[str] = set()
+        self._held_answer_token_by_agent: dict[tuple[str, str], str] = {}
 
     def write_user_prompt(self, prompt_text: str) -> None:
         if not prompt_text or not self.output_visibility.is_enabled(
@@ -79,6 +80,7 @@ class AdkEventRenderer:
                 )
 
     def finish(self) -> None:
+        self._flush_held_answer_tokens()
         if self.output_as_json:
             _write_to_stdout(
                 json.dumps(
@@ -136,27 +138,79 @@ class AdkEventRenderer:
             and agent_channel_key in self._partially_streamed_agent_channels
         ):
             self._partially_streamed_agent_channels.discard(agent_channel_key)
+            if agent_name == self.root_agent_name:
+                self._write_expanded_answer(agent_name, agent_channel_key, "", flush=True)
             self._agent_channels_with_printed_header.discard(agent_channel_key)
             return
         if not text or not self.output_visibility.is_enabled(agent_name, channel_name):
             return
         if is_partial:
             self._partially_streamed_agent_channels.add(agent_channel_key)
+        if channel_name == "answer" and agent_name == self.root_agent_name:
+            self._write_expanded_answer(
+                agent_name, agent_channel_key, text, flush=not is_partial
+            )
+            return
         self._get_or_create_selected_output_parts(agent_name)[channel_name].append(text)
-        if channel_name == "answer":
-            self._agents_with_recorded_answer.add(agent_name)
         self._buffered_turn_entries.append((agent_name, channel_name, text))
         if not self.stream_output:
             return
-        header_prefix = ""
+        self._write_streaming_chunk(
+            agent_name,
+            channel_name,
+            self._stream_header(agent_name, agent_channel_key, channel_name) + text,
+        )
+
+    def _write_expanded_answer(
+        self,
+        agent_name: str,
+        agent_channel_key: tuple[str, str],
+        text: str,
+        *,
+        flush: bool,
+    ) -> None:
+        from lllm.callback_tokens import expand_visible_callback_tokens
+
+        held_token = self._held_answer_token_by_agent.pop(agent_channel_key, "")
+        expanded_text, held_token = expand_visible_callback_tokens(
+            held_token + text, flush=flush
+        )
+        if held_token:
+            self._held_answer_token_by_agent[agent_channel_key] = held_token
+        if not expanded_text or not self.output_visibility.is_enabled(agent_name, "answer"):
+            return
+        self._record_answer_text(agent_name, agent_channel_key, expanded_text)
+
+    def _flush_held_answer_tokens(self) -> None:
+        for agent_channel_key in list(self._held_answer_token_by_agent):
+            agent_name = agent_channel_key[0]
+            self._write_expanded_answer(agent_name, agent_channel_key, "", flush=True)
+
+    def _record_answer_text(
+        self, agent_name: str, agent_channel_key: tuple[str, str], text: str
+    ) -> None:
+        self._get_or_create_selected_output_parts(agent_name)["answer"].append(text)
+        self._agents_with_recorded_answer.add(agent_name)
+        self._buffered_turn_entries.append((agent_name, "answer", text))
+        if not self.stream_output:
+            return
+        self._write_streaming_chunk(
+            agent_name,
+            "answer",
+            self._stream_header(agent_name, agent_channel_key, "answer") + text,
+        )
+
+    def _stream_header(
+        self, agent_name: str, agent_channel_key: tuple[str, str], channel_name: str
+    ) -> str:
         if (
-            agent_name != self.root_agent_name
-            and agent_channel_key not in self._agent_channels_with_printed_header
+            agent_name == self.root_agent_name
+            or agent_channel_key in self._agent_channels_with_printed_header
         ):
-            header_label = "thinking" if channel_name == "thinking" else "response"
-            header_prefix = f"[{agent_name} {header_label}]\n"
-            self._agent_channels_with_printed_header.add(agent_channel_key)
-        self._write_streaming_chunk(agent_name, channel_name, header_prefix + text)
+            return ""
+        header_label = "thinking" if channel_name == "thinking" else "response"
+        self._agent_channels_with_printed_header.add(agent_channel_key)
+        return f"[{agent_name} {header_label}]\n"
 
     def _record_visible_prompt(self, agent_name: str, prompt_text: str) -> None:
         self._get_or_create_selected_output_parts(agent_name)["prompt"].append(
@@ -203,17 +257,10 @@ class AdkEventRenderer:
                 return
         if not self.output_visibility.is_enabled(agent_name, "tool_results"):
             return
-        from lllm.agent import (
-            _REPAIR_TRUNCATED_UTF8,
-            _repair_truncated_utf8_in_value,
-        )
+        from lllm.agent import _tool_result_display
 
-        repaired_response, repaired_url_count = _repair_truncated_utf8_in_value(
-            tool_response
-        )
-        if repaired_url_count:
-            tool_name = f"{tool_name} {_REPAIR_TRUNCATED_UTF8} {repaired_url_count}"
-            result_text = _extract_tool_response_text(repaired_response)
+        tool_name, rewritten_response = _tool_result_display(tool_name, tool_response)
+        result_text = _extract_tool_response_text(rewritten_response)
         self._get_or_create_selected_output_parts(agent_name)["tool_results"].append(
             {"name": tool_name, "text": result_text}
         )

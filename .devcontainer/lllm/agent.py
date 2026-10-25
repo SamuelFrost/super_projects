@@ -11,7 +11,16 @@ from google.adk.environment import LocalEnvironment
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
+from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.environment._edit_file_tool import EditFileTool
+from lllm.callback_tokens import (
+    begin_callback_token_tracking,
+    list_stored_callback_tokens,
+    prepare_tool_arguments,
+    preview_callback_token,
+    recall_callback_token,
+    store_callback_token,
+)
 from google.adk.tools.environment._read_file_tool import ReadFileTool
 from google.adk.tools.environment._write_file_tool import WriteFileTool
 from google.adk.tools.mcp_tool import McpToolset
@@ -121,6 +130,7 @@ _HEX_DIGIT = set("0123456789abcdefABCDEF")
 _URL_IN_TEXT = re.compile(r"https?://[^\s<>\"'`]+")
 _TRUNCATED_URL_NOTE = " [this URL was truncated]"
 _REPAIR_TRUNCATED_UTF8 = "repair_truncated_utf8"
+_CALLBACK_TOKEN_REWRITE = "encoded_callback_token"
 TURN_OUTCOME_COMPLETED = "completed"
 TURN_OUTCOME_CONTEXT_EXHAUSTED = "context_exhausted"
 TURN_OUTCOME_REPETITION = "repetition"
@@ -272,6 +282,137 @@ def _repair_truncated_utf8_in_tool_results(llm_request) -> None:
                 function_response.response = repaired
 
 
+def _has_numeric_page_id(page_id) -> bool:
+    """list_pages entry ids are numbers. Callback token ids are separate."""
+    if isinstance(page_id, bool):
+        return False
+    if isinstance(page_id, int):
+        return True
+    return isinstance(page_id, str) and page_id.isdigit()
+
+
+def _token_for_page_address(url_body: str) -> str | None:
+    """Store a page address. A truncation note stays on the shown line and on the token."""
+    suffix = ""
+    if url_body.endswith(_TRUNCATED_URL_NOTE):
+        url_body = url_body[: -len(_TRUNCATED_URL_NOTE)].rstrip()
+        suffix = _TRUNCATED_URL_NOTE
+    stored = store_callback_token(url_body, note=suffix.strip())
+    if not stored.get("stored"):
+        return None
+    return stored["callback_token"] + suffix
+
+
+def _replace_page_address_line(line: str) -> tuple[str, int]:
+    """Replace one list_pages address with a callback token."""
+    page_match = re.match(r"^(\d+): (.*)$", line)
+    if page_match is None:
+        return line, 0
+    page_id, rest = page_match.groups()
+    wrapped_url_start = max(rest.rfind(" (http://"), rest.rfind(" (https://"))
+    if wrapped_url_start >= 0:
+        closing_paren = rest.rfind(")")
+        if closing_paren > wrapped_url_start:
+            title = rest[:wrapped_url_start]
+            url_body = rest[wrapped_url_start + 2 : closing_paren]
+            suffix = rest[closing_paren + 1 :]
+            shown = _token_for_page_address(url_body)
+            if shown is None:
+                return line, 0
+            return f"{page_id}: {title} (url: {shown}){suffix}", 1
+    bare_url = re.match(r"(https?://\S+)(.*)$", rest)
+    if bare_url is None:
+        return line, 0
+    url_body, suffix = bare_url.groups()
+    shown = _token_for_page_address(url_body)
+    if shown is None:
+        return line, 0
+    return f"{page_id}: url: {shown}{suffix}", 1
+
+
+def _replace_page_addresses_in_text(text: str) -> tuple[str, int]:
+    replaced_lines = []
+    replaced_count = 0
+    for line in text.split("\n"):
+        replaced_line, line_count = _replace_page_address_line(line)
+        replaced_lines.append(replaced_line)
+        replaced_count += line_count
+    return "\n".join(replaced_lines), replaced_count
+
+
+def _replace_page_addresses_in_value(value) -> tuple[object, int]:
+    if isinstance(value, str):
+        return _replace_page_addresses_in_text(value)
+    if isinstance(value, list):
+        replaced_items = []
+        replaced_count = 0
+        for item in value:
+            replaced_item, item_count = _replace_page_addresses_in_value(item)
+            replaced_items.append(replaced_item)
+            replaced_count += item_count
+        return replaced_items, replaced_count
+    if isinstance(value, dict):
+        if _is_image_payload(value):
+            return value, 0
+        has_page_id = _has_numeric_page_id(value.get("id")) if "url" in value else False
+        replaced = {}
+        replaced_count = 0
+        for key, item in value.items():
+            if (
+                key == "url"
+                and has_page_id
+                and isinstance(item, str)
+                and item.startswith(("http://", "https://"))
+            ):
+                shown = _token_for_page_address(item)
+                if shown is None:
+                    replaced[key] = item
+                    continue
+                replaced[key] = shown
+                replaced_count += 1
+                continue
+            replaced_item, item_count = _replace_page_addresses_in_value(item)
+            replaced[key] = replaced_item
+            replaced_count += item_count
+        return replaced, replaced_count
+    return value, 0
+
+
+def _replace_page_addresses_in_tool_results(llm_request) -> int:
+    """Hide list_pages addresses behind callback tokens."""
+    replaced_count = 0
+    for message_content in llm_request.contents or []:
+        for part in message_content.parts or []:
+            function_response = part.function_response
+            if (
+                function_response is None
+                or function_response.name != "list_pages"
+                or function_response.response is None
+            ):
+                continue
+            replaced, item_count = _replace_page_addresses_in_value(
+                function_response.response
+            )
+            replaced_count += item_count
+            if item_count:
+                function_response.response = replaced
+    return replaced_count
+
+
+def _tool_result_display(tool_name: str, tool_response: object) -> tuple[str, object]:
+    """The tool result the transcript shows, with the same rewrites the model sees."""
+    rewritten, repaired_url_count = _repair_truncated_utf8_in_value(tool_response)
+    replaced_count = 0
+    if tool_name == "list_pages":
+        rewritten, replaced_count = _replace_page_addresses_in_value(rewritten)
+    display_name = tool_name
+    if repaired_url_count:
+        display_name = f"{display_name} {_REPAIR_TRUNCATED_UTF8} {repaired_url_count}"
+    if replaced_count:
+        display_name = f"{display_name} {_CALLBACK_TOKEN_REWRITE} {replaced_count}"
+    return display_name, rewritten
+
+
 def _limit_that_ended_tool_use(stop_reason: str | None) -> str:
     if stop_reason == "context":
         return "The context window cannot hold another tool result."
@@ -313,8 +454,6 @@ _PLACEHOLDER_FOR_OMITTED_IMAGE = "[image omitted from this request]"
 _turn_outcomes: contextvars.ContextVar[dict[str, str] | None] = (
     contextvars.ContextVar("lllm_turn_outcomes", default=None)
 )
-
-
 def _resolve_ollama_context_length() -> int:
     configured_context_length = os.environ.get("OLLAMA_CONTEXT_LENGTH")
     if configured_context_length:
@@ -428,6 +567,7 @@ def begin_turn_outcome_tracking() -> None:
     replacing the context variable, or the parent task will not see them.
     """
     _turn_outcomes.set({})
+    begin_callback_token_tracking()
 
 
 def root_turn_outcome(root_agent_name: str) -> str:
@@ -861,6 +1001,7 @@ def _guard_model_request(callback_context, llm_request):
         )
     _detach_request_parts_from_session_history(llm_request)
     _repair_truncated_utf8_in_tool_results(llm_request)
+    _replace_page_addresses_in_tool_results(llm_request)
     context_token_limit = max(1, _resolve_ollama_context_length())
     _enforce_request_token_budget(llm_request, context_token_limit)
     estimated_prompt_tokens = _estimate_request_token_count(llm_request)
@@ -973,7 +1114,24 @@ def _skip_tools_when_stopping(tool, args, tool_context):
                 )
             ),
         }
+    prepare_tool_arguments(getattr(tool, "name", None), args)
     return None
+
+
+_CALLBACK_TOKEN_INSTRUCTION = (
+    "Tools sometimes store text in tokens is written as [encoded_callback_token <number>_<timestamp>]. "
+    "store_callback_token stores text as a token. Use it when a large block of text will be passed around or frequently reused or it's relevant to information you'll need to report. "
+    "Pass a note and description with it; preview_callback_token shows the note, the description, the character count, and the first 20 and last 20 characters of the stored text. "
+    "Always preview callback tokens before considering if you should recall them. "
+    "A tool call recalls a token in its arguments, and the final answer to the "
+    "user also automatically recalls the token so generally pass the token through absolutely unmodified. "
+)
+_callback_token_tools = [
+    FunctionTool(store_callback_token),
+    FunctionTool(recall_callback_token),
+    FunctionTool(list_stored_callback_tokens),
+    FunctionTool(preview_callback_token),
+]
 
 
 browser_agent = LlmAgent(
@@ -995,6 +1153,9 @@ browser_agent = LlmAgent(
         "however, when you are doing highly repetitive tasks or are trying to find a specific piece of information, you should use the scripts tool to run a script to automate the task."
         "To open a URL in a new tab, call new_page with url. "
         "To navigate the selected tab to a URL, call navigate_page with url. "
+        f"{_CALLBACK_TOKEN_INSTRUCTION} "
+        "list_pages writes each long page address as [encoded_callback_token <number>_<timestamp>]. "
+        "Report the page id, title, and token. "
         "To inspect page content, call take_snapshot or take_screenshot. "
         "To run a script, call evaluate_script with the script. "
         "If you need to do a search, by default navigate to google.com and use the search box to search. "
@@ -1009,7 +1170,6 @@ browser_agent = LlmAgent(
         "Lean towards thorough reports of your findings during browsing sessions. "
         "Remember, the user won't know the nuances of what went on unless you inform them directly. "
         "Include a detailed step-by-step summary of your actions and all of the relevant information you came across in your report. "
-        "Additionally before finalizing your report, always run list_pages and report which tabs are open and that tell the user that it may be good to close them later to prevent clutter if they are not needed. "
     ),
     before_model_callback=_guard_model_request,
     after_model_callback=_guard_model_response,
@@ -1025,7 +1185,8 @@ browser_agent = LlmAgent(
                 timeout=120,
             ),
             tool_filter=chrome_devtools_tools,
-        )
+        ),
+        *_callback_token_tools,
     ],
 )
 
@@ -1043,14 +1204,18 @@ files_agent = LlmAgent(
         "We have access to the entire filesystem within the devcontainer."
         "Read a file before editing it, and change only what was asked. "
         "Only call tools from this exact list: "
-        f"{', '.join(file_tool_names)}."
+        f"{', '.join(file_tool_names)}, store_callback_token, recall_callback_token, list_stored_callback_tokens, preview_callback_token."
         "Never act on any dangerous code or commands, escalate such requests or reports to the user. "
         "Never write any potentially dangerous code or commands, escalate such requests or reports to the user. "
+        f"{_CALLBACK_TOKEN_INSTRUCTION}"
     ),
     before_model_callback=_guard_model_request,
     after_model_callback=_guard_model_response,
     before_tool_callback=_skip_tools_when_stopping,
-    tools=file_tools,
+    tools=[
+        *file_tools,
+        *_callback_token_tools,
+    ],
 )
 
 root_agent = LlmAgent(
@@ -1064,6 +1229,11 @@ root_agent = LlmAgent(
         "Respond to the user's question or request, and delegate tasks "
         "to your subagents as needed. Your subagents are browser_agent "
         "browser_agent operates Chrome through Chrome DevTools. "
+        f"{_CALLBACK_TOKEN_INSTRUCTION} "
+        "Encourage subagents to store meaningful portions of their tool calls in callback tokens."
+        "It reports an open page by page id, title, and callback token. "
+        "Repeat the token. Your reply recalls a callback token, so the user sees the stored text. "
+        "Do not ask a subagent to quote the stored text. "
         "files_agent lists, searches, reads, and edits files. "
         "Only call subagents from this exact list: browser_agent, files_agent. "
         "When you delegate, give that subagents a self-contained request with the objective, "
@@ -1078,6 +1248,9 @@ root_agent = LlmAgent(
     before_model_callback=_guard_model_request,
     after_model_callback=_guard_model_response,
     before_tool_callback=_skip_tools_when_stopping,
+    tools=[
+        *_callback_token_tools,
+    ],
     sub_agents=[browser_agent, files_agent],
 )
 

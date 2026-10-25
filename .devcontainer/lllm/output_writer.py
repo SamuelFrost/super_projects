@@ -66,13 +66,13 @@ class AdkEventRenderer:
                 and not is_partial_event
                 and function_call.name
             ):
-                self._write_tool_call(
+                self.write_tool_call(
                     author_agent_name, function_call.name, function_call.args
                 )
                 continue
             function_response = part.function_response
             if function_response is not None and not is_partial_event:
-                self._write_tool_result(
+                self.write_tool_result(
                     author_agent_name,
                     function_response.name or "tool",
                     function_response.response,
@@ -168,7 +168,7 @@ class AdkEventRenderer:
         rendered_prompt = self._format_prompt_block(agent_name, prompt_text) + "\n"
         self._write_streaming_chunk(agent_name, "prompt", rendered_prompt)
 
-    def _write_tool_call(
+    def write_tool_call(
         self, author: str, tool_name: str, tool_arguments: object = None
     ) -> None:
         agent_name = self._resolve_agent_name(author)
@@ -190,7 +190,7 @@ class AdkEventRenderer:
         if self.stream_output:
             self._write_streaming_chunk(agent_name, "tool_calls", rendered_tool_call)
 
-    def _write_tool_result(
+    def write_tool_result(
         self, author: str, tool_name: str, tool_response: object
     ) -> None:
         agent_name = self._resolve_agent_name(author)
@@ -203,6 +203,17 @@ class AdkEventRenderer:
                 return
         if not self.output_visibility.is_enabled(agent_name, "tool_results"):
             return
+        from lllm.agent import (
+            _REPAIR_TRUNCATED_UTF8,
+            _repair_truncated_utf8_in_value,
+        )
+
+        repaired_response, repaired_url_count = _repair_truncated_utf8_in_value(
+            tool_response
+        )
+        if repaired_url_count:
+            tool_name = f"{tool_name} {_REPAIR_TRUNCATED_UTF8} {repaired_url_count}"
+            result_text = _extract_tool_response_text(repaired_response)
         self._get_or_create_selected_output_parts(agent_name)["tool_results"].append(
             {"name": tool_name, "text": result_text}
         )

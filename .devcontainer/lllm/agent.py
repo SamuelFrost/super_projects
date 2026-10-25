@@ -1,6 +1,7 @@
 import contextvars
 import json
 import os
+import re
 import urllib.request
 from pathlib import Path
 
@@ -116,6 +117,10 @@ REPETITION_DETECTION_MINIMUM_REPEATS = 8
 MIN_ESTIMATED_TOKENS_PER_INLINE_IMAGE = 2000
 ESTIMATED_INLINE_IMAGE_BYTES_PER_TOKEN = 4
 DEFAULT_OLLAMA_CONTEXT_WINDOW_TOKENS = 4096
+_HEX_DIGIT = set("0123456789abcdefABCDEF")
+_URL_IN_TEXT = re.compile(r"https?://[^\s<>\"'`]+")
+_TRUNCATED_URL_NOTE = " [this URL was truncated]"
+_REPAIR_TRUNCATED_UTF8 = "repair_truncated_utf8"
 TURN_OUTCOME_COMPLETED = "completed"
 TURN_OUTCOME_CONTEXT_EXHAUSTED = "context_exhausted"
 TURN_OUTCOME_REPETITION = "repetition"
@@ -131,6 +136,140 @@ _ANSWER_NOW_WITH_WHAT_YOU_HAVE = (
     "Answer now with the findings and unknowns you already have. "
     "A later request can use tools again."
 )
+
+
+def _percent_encoded_byte(text: str, index: int) -> int | None:
+    if index + 2 >= len(text) or text[index] != "%":
+        return None
+    first_hex, second_hex = text[index + 1], text[index + 2]
+    if first_hex not in _HEX_DIGIT or second_hex not in _HEX_DIGIT:
+        return None
+    return int(first_hex + second_hex, 16)
+
+
+def _utf8_sequence_length(lead_byte: int) -> int | None:
+    if lead_byte < 0x80:
+        return 1
+    if 0xC2 <= lead_byte <= 0xDF:
+        return 2
+    if 0xE0 <= lead_byte <= 0xEF:
+        return 3
+    if 0xF0 <= lead_byte <= 0xF4:
+        return 4
+    return None
+
+
+def _incomplete_percent_escape_length(text: str) -> int:
+    if text.endswith("%"):
+        return 1
+    if (
+        len(text) >= 2
+        and text[-2] == "%"
+        and text[-1] in _HEX_DIGIT
+        and (len(text) < 3 or text[-3] != "%")
+    ):
+        return 2
+    return 0
+
+
+def _percent_encoded_run_ending_at(text: str, encoded_end: int) -> tuple[int, bytearray]:
+    run_start = encoded_end
+    while run_start >= 3 and _percent_encoded_byte(text, run_start - 3) is not None:
+        run_start -= 3
+    encoded_bytes = bytearray()
+    cursor = run_start
+    while cursor + 3 <= encoded_end:
+        encoded_byte = _percent_encoded_byte(text, cursor)
+        if encoded_byte is None:
+            break
+        encoded_bytes.append(encoded_byte)
+        cursor += 3
+    return run_start, encoded_bytes
+
+
+def _unfinished_utf8_byte_index(encoded_bytes: bytearray) -> int | None:
+    byte_index = 0
+    while byte_index < len(encoded_bytes):
+        sequence_length = _utf8_sequence_length(encoded_bytes[byte_index])
+        if sequence_length is None or byte_index + sequence_length > len(encoded_bytes):
+            return byte_index
+        try:
+            bytes(encoded_bytes[byte_index : byte_index + sequence_length]).decode("utf-8")
+        except UnicodeDecodeError:
+            return byte_index
+        byte_index += sequence_length
+    return None
+
+
+def _truncated_url_cut_index(url: str) -> int | None:
+    incomplete_escape_length = _incomplete_percent_escape_length(url)
+    encoded_end = len(url) - incomplete_escape_length
+    run_start, encoded_bytes = _percent_encoded_run_ending_at(url, encoded_end)
+    unfinished_byte_index = _unfinished_utf8_byte_index(encoded_bytes)
+    if unfinished_byte_index is not None:
+        return run_start + unfinished_byte_index * 3
+    if incomplete_escape_length == 2:
+        return encoded_end
+    if incomplete_escape_length == 1 and encoded_bytes:
+        return encoded_end
+    return None
+
+
+def _repair_truncated_utf8_url(url: str) -> str:
+    # list_pages writes `title (url)`, and the match includes that closing paren.
+    url_body, closing_paren = (url[:-1], ")") if url.endswith(")") else (url, "")
+    cut_index = _truncated_url_cut_index(url_body)
+    if cut_index is None:
+        return url
+    complete_prefix = url_body[:cut_index].rstrip("%")
+    return complete_prefix + _TRUNCATED_URL_NOTE + closing_paren
+
+
+def _repair_truncated_utf8_in_value(value) -> tuple[object, int]:
+    if isinstance(value, str):
+        repaired_url_count = 0
+
+        def repair_url(url_match):
+            nonlocal repaired_url_count
+            repaired = _repair_truncated_utf8_url(url_match.group(0))
+            if repaired != url_match.group(0):
+                repaired_url_count += 1
+            return repaired
+
+        return _URL_IN_TEXT.sub(repair_url, value), repaired_url_count
+    if isinstance(value, list):
+        repaired_items = []
+        repaired_url_count = 0
+        for item in value:
+            repaired_item, item_count = _repair_truncated_utf8_in_value(item)
+            repaired_items.append(repaired_item)
+            repaired_url_count += item_count
+        return repaired_items, repaired_url_count
+    if isinstance(value, dict):
+        if _is_image_payload(value):
+            return value, 0
+        repaired = {}
+        repaired_url_count = 0
+        for key, item in value.items():
+            repaired_item, item_count = _repair_truncated_utf8_in_value(item)
+            repaired[key] = repaired_item
+            repaired_url_count += item_count
+        return repaired, repaired_url_count
+    return value, 0
+
+
+def _repair_truncated_utf8_in_tool_results(llm_request) -> None:
+    """Cut a tool-result URL that ends mid-character. Leave complete encoding as written."""
+    for message_content in llm_request.contents or []:
+        for part in message_content.parts or []:
+            function_response = part.function_response
+            if function_response is None or function_response.response is None:
+                continue
+            repaired, repaired_url_count = _repair_truncated_utf8_in_value(
+                function_response.response
+            )
+            if repaired_url_count:
+                function_response.response = repaired
 
 
 def _limit_that_ended_tool_use(stop_reason: str | None) -> str:
@@ -623,6 +762,39 @@ def _collected_response_text(llm_response) -> str:
     )
 
 
+def _answer_text(llm_response) -> str:
+    if not llm_response.content:
+        return ""
+    return "".join(
+        part.text or ""
+        for part in llm_response.content.parts or []
+        if part.text and not part.thought
+    )
+
+
+def _response_calls_a_tool(llm_response) -> bool:
+    if not llm_response.content:
+        return False
+    return any(
+        part.function_call is not None for part in llm_response.content.parts or []
+    )
+
+
+def _clip_unfinished_reply(text: str) -> str:
+    clipped = text.strip()
+    if len(clipped) > 800:
+        clipped = clipped[:800].rsplit(" ", 1)[0]
+    cut_index = _truncated_url_cut_index(clipped)
+    if cut_index is not None:
+        clipped = clipped[:cut_index].rstrip("%")
+    return clipped.rstrip()
+
+
+_REPLY_STOPPED_BEFORE_AN_ANSWER = (
+    "The agent stopped working before it could provide an answer due to an error. The following (if available) is the recent activity of the agent (it does not constitute an answer)."
+)
+
+
 def _blank_partial(llm_response):
     llm_response.content = types.Content(
         role="model",
@@ -652,6 +824,7 @@ def _clear_stop_for_new_request(callback_context) -> None:
     callback_context.state[_agent_state_key(agent_name, "stop_reason")] = ""
     callback_context.state[_agent_state_key(agent_name, "suppress_stream")] = False
     callback_context.state[_agent_state_key(agent_name, "streamed_text")] = ""
+    callback_context.state[_agent_state_key(agent_name, "streamed_answer")] = ""
 
 
 def _last_tool_result_was_skipped(llm_request) -> bool:
@@ -687,6 +860,7 @@ def _guard_model_request(callback_context, llm_request):
             )
         )
     _detach_request_parts_from_session_history(llm_request)
+    _repair_truncated_utf8_in_tool_results(llm_request)
     context_token_limit = max(1, _resolve_ollama_context_length())
     _enforce_request_token_budget(llm_request, context_token_limit)
     estimated_prompt_tokens = _estimate_request_token_count(llm_request)
@@ -735,6 +909,7 @@ def _guard_model_response(callback_context, llm_response):
         )
 
     streamed_text_key = _agent_state_key(agent_name, "streamed_text")
+    streamed_answer_key = _agent_state_key(agent_name, "streamed_answer")
     suppress_stream_key = _agent_state_key(agent_name, "suppress_stream")
     if callback_context.state.get(suppress_stream_key) and llm_response.partial:
         return _blank_partial(llm_response)
@@ -743,14 +918,36 @@ def _guard_model_response(callback_context, llm_response):
         return None
 
     response_text = _collected_response_text(llm_response)
+    answer_text = _answer_text(llm_response)
     if llm_response.partial:
         accumulated_text = str(callback_context.state.get(streamed_text_key) or "") + response_text
         callback_context.state[streamed_text_key] = accumulated_text
+        if answer_text:
+            callback_context.state[streamed_answer_key] = (
+                str(callback_context.state.get(streamed_answer_key) or "") + answer_text
+            )
     else:
         accumulated_text = (
             str(callback_context.state.get(streamed_text_key) or "") or response_text
         )
         callback_context.state[streamed_text_key] = ""
+        had_answer = bool(
+            answer_text.strip()
+            or str(callback_context.state.get(streamed_answer_key) or "").strip()
+        )
+        callback_context.state[streamed_answer_key] = ""
+        if not had_answer and not _response_calls_a_tool(llm_response):
+            findings = _clip_unfinished_reply(accumulated_text)
+            notice = (
+                f"{_REPLY_STOPPED_BEFORE_AN_ANSWER}\n{findings}"
+                if findings
+                else _REPLY_STOPPED_BEFORE_AN_ANSWER
+            )
+            llm_response.content = types.Content(
+                role="model",
+                parts=[types.Part(text=notice)],
+            )
+            return llm_response
 
     if not _text_ends_in_a_repeated_loop(accumulated_text):
         return None

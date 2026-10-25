@@ -1,4 +1,19 @@
-"""Store text behind a short callback token and read it back."""
+"""Store large or fragile text behind a short token for the duration of a turn.
+
+Local models lose context quickly and often mangle long URLs or large text
+blocks when copying them across tool calls and sub-agent reports. This module
+replaces those strings with compact `[encoded_callback_token <number>_<timestamp>]`
+placeholders stored in a per-turn map:
+
+- Creation: `list_pages` automatically tokenizes long URLs, and agents can call
+  `store_callback_token` to save reusable text blocks (up to 10 MB per turn).
+- Inspection: Agents can list tokens (`list_stored_callback_tokens`) or inspect
+  their metadata, character count, and 20-character bookends (`preview_callback_token`)
+  without pulling the full text back into context.
+- Automatic recall: `prepare_tool_arguments` expands tokens inside outgoing tool
+  arguments before the tool runs, and `expand_visible_callback_tokens` expands
+  tokens in the root agent's final answer as it streams to the user.
+"""
 
 import contextvars
 import json
@@ -181,7 +196,12 @@ def _expand_callback_tokens(tool_args) -> None:
 
 
 def _unfinished_callback_token_suffix(text: str) -> tuple[str, str]:
-    """Hold a token that a later chunk may still be finishing."""
+    """Split off a trailing `[encoded_callback_token ...` that hasn't closed yet.
+
+    SSE streaming can split a token across two text chunks. Holding the unfinished
+    suffix until the closing `]` arrives prevents partial tokens from leaking to
+    stdout unexpanded.
+    """
     bracket_at = text.rfind("[")
     if bracket_at == -1:
         return text, ""
@@ -206,6 +226,12 @@ def expand_visible_callback_tokens(text: str, *, flush: bool) -> tuple[str, str]
 
 
 def _callback_token_id_from_text(text: str) -> str:
+    """Extract `<number>_<timestamp>` from a raw ID, full token, or JSON string.
+
+    Models frequently pass the entire `[encoded_callback_token 1_1700000000000]`
+    string, attach a trailing label after a colon, or wrap the argument in JSON
+    when calling preview or recall tools.
+    """
     token_match = _CALLBACK_TOKEN_IN_TEXT.search(text)
     if token_match:
         return token_match.group(1)
@@ -244,7 +270,12 @@ def _callback_token_id_from_argument(argument) -> str:
 
 
 def _adopt_callback_token_arguments(tool_args) -> None:
-    """Turn a whole token argument into id."""
+    """Normalize alternative argument names into `id` for callback-token tools.
+
+    Small models sometimes call `preview_callback_token` or `recall_callback_token`
+    with `{"encoded_callback_token": "..."}` or `{"callback_token": "..."}`
+    instead of `{"id": "..."}`.
+    """
     if not isinstance(tool_args, dict) or "id" in tool_args:
         return
     for key in ("encoded_callback_token", "recall_callback_token", "callback_token"):

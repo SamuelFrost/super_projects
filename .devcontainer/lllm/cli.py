@@ -1,8 +1,8 @@
 """Command-line session for the local ADK app.
 
-The agent itself lives in lllm.agent. This module parses arguments, preloads
-Ollama, and prints the selected events. lllm.adk_runtime is what actually
-calls ADK.
+The agents live in lllm.agent. Whether a turn finished lives in lllm.turn_guards.
+This module parses arguments, preloads Ollama, and prints the selected events.
+lllm.adk_runtime is what actually calls ADK.
 """
 
 import argparse
@@ -14,12 +14,11 @@ import readline  # noqa: F401  GNU readline for input()
 from google.adk.agents.run_config import RunConfig, StreamingMode
 
 from lllm.adk_runtime import AdkSession
-from lllm.agent import (
+from lllm.agent import agents_in_composition_order, app_for_agent
+from lllm.turn_guards import (
     TURN_OUTCOME_CONTEXT_EXHAUSTED,
     TURN_OUTCOME_REPETITION,
     TURN_OUTCOME_STALLED,
-    agents_in_composition_order,
-    app_for_agent,
     begin_turn_outcome_tracking,
     root_turn_outcome,
 )

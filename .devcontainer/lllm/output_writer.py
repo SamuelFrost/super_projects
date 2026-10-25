@@ -1,4 +1,9 @@
-"""Turn ADK events into the text or JSON this command prints."""
+"""Turn ADK events into the text or JSON this command prints.
+
+Tool results are rewritten by tool_results before they are printed. A root
+answer expands callback tokens here. This module does not decide when a turn
+stops.
+"""
 
 import json
 import sys
@@ -257,9 +262,9 @@ class AdkEventRenderer:
                 return
         if not self.output_visibility.is_enabled(agent_name, "tool_results"):
             return
-        from lllm.agent import _tool_result_display
+        from lllm.tool_results import tool_result_display
 
-        tool_name, rewritten_response = _tool_result_display(tool_name, tool_response)
+        tool_name, rewritten_response = tool_result_display(tool_name, tool_response)
         result_text = _extract_tool_response_text(rewritten_response)
         self._get_or_create_selected_output_parts(agent_name)["tool_results"].append(
             {"name": tool_name, "text": result_text}

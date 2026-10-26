@@ -7,7 +7,7 @@ from google.genai import types
 
 from lllm.tools.callback_tokens import _callback_tokens_for_turn
 from lllm.runtime_modifiers.tool_results import prepare_model_tool_results
-from lllm.runtime_modifiers.turn_guards import _agent_state_key, _skip_tools_when_stopping, begin_turn_outcome_tracking
+from lllm.runtime_modifiers.turn_guards import _agent_state_key, skip_tools_when_stopping, begin_turn_outcome_tracking
 
 
 class TruncatedUtf8RepairTests(unittest.TestCase):
@@ -246,7 +246,7 @@ class PageAddressTokenTests(unittest.TestCase):
         )
         navigate_args = {"url": page_one, "type": "url"}
         self.assertIsNone(
-            _skip_tools_when_stopping(SimpleNamespace(name="navigate_page"), navigate_args, context)
+            skip_tools_when_stopping(SimpleNamespace(name="navigate_page"), navigate_args, context)
         )
         self.assertEqual(navigate_args["url"], address)
         bare_id = next(
@@ -257,12 +257,12 @@ class PageAddressTokenTests(unittest.TestCase):
         mismatched = f"[encoded_callback_token {bare_id}]"
         fill_args = {"uid": "1_2", "value": mismatched}
         self.assertIsNone(
-            _skip_tools_when_stopping(SimpleNamespace(name="fill"), fill_args, context)
+            skip_tools_when_stopping(SimpleNamespace(name="fill"), fill_args, context)
         )
         self.assertEqual(fill_args["value"], bare_address)
         plain_args = {"value": "url:1"}
         self.assertIsNone(
-            _skip_tools_when_stopping(SimpleNamespace(name="fill"), plain_args, context)
+            skip_tools_when_stopping(SimpleNamespace(name="fill"), plain_args, context)
         )
         self.assertEqual(plain_args["value"], "url:1")
 

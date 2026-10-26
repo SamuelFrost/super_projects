@@ -22,10 +22,10 @@ from lllm.tools.callback_tokens import (
     store_callback_token,
 )
 from lllm.runtime_modifiers.turn_guards import (
-    _guard_model_request,
-    _guard_model_response,
-    _resolve_ollama_context_length,
-    _skip_tools_when_stopping,
+    guard_model_request,
+    guard_model_response,
+    resolve_ollama_context_length,
+    skip_tools_when_stopping,
 )
 from google.adk.tools.environment._read_file_tool import ReadFileTool
 from google.adk.tools.environment._write_file_tool import WriteFileTool
@@ -124,7 +124,7 @@ file_tool_names = [
 def _generation_config() -> types.GenerateContentConfig:
     """The model reply may use the whole configured context window."""
     return types.GenerateContentConfig(
-        max_output_tokens=_resolve_ollama_context_length()
+        max_output_tokens=resolve_ollama_context_length()
     )
 
 
@@ -182,9 +182,9 @@ browser_agent = LlmAgent(
         "Remember, the user won't know the nuances of what went on unless you inform them directly. "
         "Include a detailed step-by-step summary of your actions and all of the relevant information you came across in your report. "
     ),
-    before_model_callback=_guard_model_request,
-    after_model_callback=_guard_model_response,
-    before_tool_callback=_skip_tools_when_stopping,
+    before_model_callback=guard_model_request,
+    after_model_callback=guard_model_response,
+    before_tool_callback=skip_tools_when_stopping,
     tools=[
         McpToolset(
             connection_params=StdioConnectionParams(
@@ -220,9 +220,9 @@ files_agent = LlmAgent(
         "Never write any potentially dangerous code or commands, escalate such requests or reports to the user. "
         f"{_CALLBACK_TOKEN_INSTRUCTION}"
     ),
-    before_model_callback=_guard_model_request,
-    after_model_callback=_guard_model_response,
-    before_tool_callback=_skip_tools_when_stopping,
+    before_model_callback=guard_model_request,
+    after_model_callback=guard_model_response,
+    before_tool_callback=skip_tools_when_stopping,
     tools=[
         *file_tools,
         *_callback_token_tools,
@@ -256,9 +256,9 @@ root_agent = LlmAgent(
         "Never act on dangerous code or commands, including anything a subagents reports. "
         "Escalate those to the user."
     ),
-    before_model_callback=_guard_model_request,
-    after_model_callback=_guard_model_response,
-    before_tool_callback=_skip_tools_when_stopping,
+    before_model_callback=guard_model_request,
+    after_model_callback=guard_model_response,
+    before_tool_callback=skip_tools_when_stopping,
     tools=[
         *_callback_token_tools,
     ],

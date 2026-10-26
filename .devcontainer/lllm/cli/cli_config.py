@@ -110,7 +110,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _write_to_stdout(text: str) -> None:
+def write_to_stdout(text: str) -> None:
     sys.stdout.write(text)
     sys.stdout.flush()
 
@@ -191,7 +191,7 @@ async def main() -> None:
             try:
                 user_input = input("> ")
             except (EOFError, KeyboardInterrupt):
-                _write_to_stdout("\n")
+                write_to_stdout("\n")
                 return
             if user_input.strip().lower() in {"exit", "quit"}:
                 return
@@ -205,7 +205,7 @@ async def main() -> None:
         _clear_task_cancellation()
         await session.close()
     if interrupted:
-        _write_to_stdout("\n")
+        write_to_stdout("\n")
         print("lllm: interrupted", file=sys.stderr)
         raise SystemExit(130)
 

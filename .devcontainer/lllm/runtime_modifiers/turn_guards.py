@@ -2,16 +2,16 @@
 
 Small local models running against browser snapshots can fail in three common ways:
 - Context exhaustion (`TURN_OUTCOME_CONTEXT_EXHAUSTED`): Tool payloads exceed the
-  Ollama context window. `_guard_model_request` detaches session history, drops
+  Ollama context window. `guard_model_request` detaches session history, drops
   turns prior to the latest human prompt, shrinks older tool payloads, and strips
   tool declarations before giving up so the model has room to summarize what it knows.
 - Stalled tool loops (`TURN_OUTCOME_STALLED`): The agent repeats the exact same
   1-to-4 tool call/result sequence three times without learning anything new.
 - Repetition loops (`TURN_OUTCOME_REPETITION`): The model gets stuck repeating a
-  phrase at the tail of its streamed response. `_guard_model_response` clips the
+  phrase at the tail of its streamed response. `guard_model_response` clips the
   loop and forces the turn to wrap up.
 
-When any guard stops tool use for an agent, `_skip_tools_when_stopping` blocks
+When any guard stops tool use for an agent, `skip_tools_when_stopping` blocks
 further tool calls for that agent and instructs the model to answer immediately
 with the findings it already has. If the root agent ends in one of these states,
 the CLI exits with code 75 (`INCOMPLETE_TURN_EXIT_CODE`).
@@ -27,8 +27,8 @@ from google.genai import types
 
 from lllm.tools.callback_tokens import begin_callback_token_tracking, prepare_tool_arguments
 from lllm.runtime_modifiers.tool_results import (
-    _is_image_payload,
-    _truncated_url_cut_index,
+    is_image_payload,
+    truncated_url_cut_index,
     prepare_model_tool_results,
 )
 
@@ -102,7 +102,7 @@ _PLACEHOLDER_FOR_OMITTED_IMAGE = "[image omitted from this request]"
 _turn_outcomes: contextvars.ContextVar[dict[str, str] | None] = (
     contextvars.ContextVar("lllm_turn_outcomes", default=None)
 )
-def _resolve_ollama_context_length() -> int:
+def resolve_ollama_context_length() -> int:
     configured_context_length = os.environ.get("OLLAMA_CONTEXT_LENGTH")
     if configured_context_length:
         try:
@@ -302,7 +302,7 @@ def _shrink_json_value(value, keep_ratio: float):
     if isinstance(value, list):
         return [_shrink_json_value(item, keep_ratio) for item in value]
     if isinstance(value, dict):
-        if _is_image_payload(value):
+        if is_image_payload(value):
             return {"type": "text", "text": _PLACEHOLDER_FOR_OMITTED_IMAGE}
         return {
             key: _shrink_json_value(item, keep_ratio) for key, item in value.items()
@@ -313,7 +313,7 @@ def _shrink_json_value(value, keep_ratio: float):
 def _observation_value(value):
     """Copy used only to compare observations. Image bytes are not part of it."""
     if isinstance(value, dict):
-        if _is_image_payload(value):
+        if is_image_payload(value):
             return {"type": "image"}
         return {key: _observation_value(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -571,7 +571,7 @@ def _clip_unfinished_reply(text: str) -> str:
     clipped = text.strip()
     if len(clipped) > 800:
         clipped = clipped[:800].rsplit(" ", 1)[0]
-    cut_index = _truncated_url_cut_index(clipped)
+    cut_index = truncated_url_cut_index(clipped)
     if cut_index is not None:
         clipped = clipped[:cut_index].rstrip("%")
     return clipped.rstrip()
@@ -625,7 +625,7 @@ def _wrap_up_instruction(stop_reason: str | None) -> str:
     return _instruction_to_finish(stop_reason)
 
 
-def _guard_model_request(callback_context, llm_request):
+def guard_model_request(callback_context, llm_request):
     """ADK `before_model_callback`: sanitize tool results, fit context budget, and stop stalled turns."""
     agent_name = callback_context.agent_name
     if not _request_has_tool_activity(llm_request):
@@ -649,7 +649,7 @@ def _guard_model_request(callback_context, llm_request):
         )
     _detach_request_parts_from_session_history(llm_request)
     prepare_model_tool_results(llm_request)
-    context_token_limit = max(1, _resolve_ollama_context_length())
+    context_token_limit = max(1, resolve_ollama_context_length())
     _enforce_request_token_budget(llm_request, context_token_limit)
     estimated_prompt_tokens = _estimate_request_token_count(llm_request)
     callback_context.state[_agent_state_key(agent_name, "context_ratio")] = round(
@@ -688,7 +688,7 @@ def _guard_model_request(callback_context, llm_request):
     return None
 
 
-def _guard_model_response(callback_context, llm_response):
+def guard_model_response(callback_context, llm_response):
     """ADK `after_model_callback`: salvage thought-only stops and clip token repetition loops.
 
     If a model finishes a turn having emitted only `<thought>` text (no visible
@@ -757,7 +757,7 @@ def _guard_model_response(callback_context, llm_response):
     return llm_response
 
 
-def _skip_tools_when_stopping(tool, args, tool_context):
+def skip_tools_when_stopping(tool, args, tool_context):
     """ADK `before_tool_callback`: block tools after a stop, or expand callback tokens in `args`."""
     if tool_context.state.get(_agent_state_key(tool_context.agent_name, "stop_tools")):
         return {

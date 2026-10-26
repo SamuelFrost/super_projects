@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 from lllm.runtime_modifiers.tool_results import _replace_page_address_line
-from lllm.runtime_modifiers.turn_guards import _skip_tools_when_stopping, begin_turn_outcome_tracking
+from lllm.runtime_modifiers.turn_guards import skip_tools_when_stopping, begin_turn_outcome_tracking
 from lllm.tools.callback_tokens import (
     _CALLBACK_TOKEN_CHARACTER_LIMIT,
     _callback_tokens_for_turn,
@@ -76,21 +76,21 @@ class CallbackTokenTests(unittest.TestCase):
         )
         recall_args = {"id": token}
         self.assertIsNone(
-            _skip_tools_when_stopping(
+            skip_tools_when_stopping(
                 SimpleNamespace(name="preview_callback_token"), recall_args, browser_context
             )
         )
         self.assertEqual(recall_args["id"], token)
         delegated = {"request": token}
         self.assertIsNone(
-            _skip_tools_when_stopping(
+            skip_tools_when_stopping(
                 SimpleNamespace(name="browser_agent"), delegated, root_context
             )
         )
         self.assertEqual(delegated["request"], address)
         file_args = {"path": token}
         self.assertIsNone(
-            _skip_tools_when_stopping(
+            skip_tools_when_stopping(
                 SimpleNamespace(name="read_file"), file_args, root_context
             )
         )

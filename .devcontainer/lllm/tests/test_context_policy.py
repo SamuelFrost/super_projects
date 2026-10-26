@@ -20,10 +20,10 @@ from lllm.runtime_modifiers.turn_guards import (
     TURN_OUTCOME_STALLED,
     _agent_state_key,
     _detach_part_from_session_history,
-    _guard_model_request,
-    _guard_model_response,
+    guard_model_request,
+    guard_model_response,
     _record_turn_outcome,
-    _skip_tools_when_stopping,
+    skip_tools_when_stopping,
     _stop_tools,
     _text_ends_in_a_repeated_loop,
     begin_turn_outcome_tracking,
@@ -43,7 +43,7 @@ class ContextPolicyTests(unittest.TestCase):
             "1. https://www.google.com/search?q=%E4%BB%95%E5%B0%"
         )
         self.assertIsNone(
-            _guard_model_response(
+            guard_model_response(
                 context,
                 LlmResponse(
                     partial=True,
@@ -54,7 +54,7 @@ class ContextPolicyTests(unittest.TestCase):
                 ),
             )
         )
-        updated = _guard_model_response(
+        updated = guard_model_response(
             context,
             LlmResponse(
                 partial=False,
@@ -83,7 +83,7 @@ class ContextPolicyTests(unittest.TestCase):
         context = SimpleNamespace(agent_name="browser_agent", state={})
         prefix = "Open the company site and report what it says. " * 40
         response = _response(prefix + ("ハーベスト株式会社\n" * 40))
-        updated = _guard_model_response(context, response)
+        updated = guard_model_response(context, response)
         self.assertIs(updated, response)
         kept_text = updated.content.parts[0].text
         self.assertIn("Open the company site", kept_text)
@@ -101,7 +101,7 @@ class ContextPolicyTests(unittest.TestCase):
             ]
         )
         request.tools_dict["new_page"] = object()
-        self.assertIsNone(_guard_model_request(context, request))
+        self.assertIsNone(guard_model_request(context, request))
         self.assertIn("new_page", request.tools_dict)
         self.assertFalse(
             context.state.get(_agent_state_key("browser_agent", "stop_tools"))
@@ -115,7 +115,7 @@ class ContextPolicyTests(unittest.TestCase):
             "skipped": True,
             "reason": "This tool call was not run because the turn is wrapping up.",
         }
-        stopped = _guard_model_request(context, request)
+        stopped = guard_model_request(context, request)
         self.assertIsNotNone(stopped)
         self.assertIn("later request can use tools again", stopped.content.parts[0].text)
         self.assertIn("context window", stopped.content.parts[0].text)
@@ -124,14 +124,14 @@ class ContextPolicyTests(unittest.TestCase):
     def test_identical_tool_observations_stall_and_changed_ones_do_not(self):
         stalled_context = SimpleNamespace(agent_name="browser_agent", state={})
         stalled_request = _request_with_observations(["same page", "same page", "same page"])
-        self.assertIsNone(_guard_model_request(stalled_context, stalled_request))
+        self.assertIsNone(guard_model_request(stalled_context, stalled_request))
         self.assertEqual(stalled_request.tools_dict, {})
         self.assertEqual(root_turn_outcome("browser_agent"), TURN_OUTCOME_STALLED)
 
         begin_turn_outcome_tracking()
         moving_context = SimpleNamespace(agent_name="browser_agent", state={})
         moving_request = _request_with_observations(["page one", "page two", "page three"])
-        self.assertIsNone(_guard_model_request(moving_context, moving_request))
+        self.assertIsNone(guard_model_request(moving_context, moving_request))
         self.assertIn("take_snapshot", moving_request.tools_dict)
         self.assertEqual(root_turn_outcome("browser_agent"), TURN_OUTCOME_COMPLETED)
 
@@ -169,7 +169,7 @@ class ContextPolicyTests(unittest.TestCase):
                 )
         request = LlmRequest(contents=contents)
         request.tools_dict["list_pages"] = object()
-        self.assertIsNone(_guard_model_request(context, request))
+        self.assertIsNone(guard_model_request(context, request))
         self.assertEqual(request.tools_dict, {})
         self.assertEqual(root_turn_outcome("browser_agent"), TURN_OUTCOME_STALLED)
 
@@ -187,7 +187,7 @@ class ContextPolicyTests(unittest.TestCase):
             ]
         )
         context = SimpleNamespace(agent_name="browser_agent", state={})
-        _guard_model_request(context, request)
+        guard_model_request(context, request)
         self.assertEqual(function_response.response["text"], original_text)
         self.assertIsNot(request_part.function_response, function_response)
         self.assertLess(
@@ -210,11 +210,11 @@ class ContextPolicyTests(unittest.TestCase):
         browser_context = SimpleNamespace(agent_name="browser_agent", state=shared_state)
         files_context = SimpleNamespace(agent_name="files_agent", state=shared_state)
         _stop_tools(browser_context, "stalled")
-        skipped = _skip_tools_when_stopping(None, {}, browser_context)
+        skipped = skip_tools_when_stopping(None, {}, browser_context)
         self.assertTrue(skipped["skipped"])
         self.assertIn("same action has been repeated", skipped["reason"])
         self.assertIn("unfinished task is not a reason", skipped["reason"])
-        self.assertIsNone(_skip_tools_when_stopping(None, {}, files_context))
+        self.assertIsNone(skip_tools_when_stopping(None, {}, files_context))
 
     def test_context_exhaustion_stops_without_calling_the_model(self):
         os.environ["OLLAMA_CONTEXT_LENGTH"] = "200"
@@ -224,7 +224,7 @@ class ContextPolicyTests(unittest.TestCase):
                 types.Content(role="user", parts=[types.Part(text="hello " * 500)])
             ]
         )
-        stopped = _guard_model_request(context, request)
+        stopped = guard_model_request(context, request)
         self.assertIsNotNone(stopped)
         self.assertIn("context window is full", stopped.content.parts[0].text)
         self.assertEqual(root_turn_outcome("lllm"), TURN_OUTCOME_CONTEXT_EXHAUSTED)

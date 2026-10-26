@@ -27,7 +27,7 @@ _REPAIR_TRUNCATED_UTF8 = "repair_truncated_utf8"
 _CALLBACK_TOKEN_REWRITE = "encoded_callback_token"
 
 
-def _is_image_payload(value: dict) -> bool:
+def is_image_payload(value: dict) -> bool:
     type_name = str(value.get("type") or "")
     mime_type = str(value.get("mimeType") or value.get("mime_type") or "")
     return type_name == "image" or mime_type.startswith("image/")
@@ -97,7 +97,7 @@ def _unfinished_utf8_byte_index(encoded_bytes: bytearray) -> int | None:
     return None
 
 
-def _truncated_url_cut_index(url: str) -> int | None:
+def truncated_url_cut_index(url: str) -> int | None:
     """Return the string index where a trailing percent-encoded UTF-8 sequence was cut off.
 
     Only inspects the contiguous run of `%XX` bytes at the very end of the URL
@@ -120,7 +120,7 @@ def _truncated_url_cut_index(url: str) -> int | None:
 def _repair_truncated_utf8_url(url: str) -> str:
     # list_pages writes `title (url)`, and the match includes that closing paren.
     url_body, closing_paren = (url[:-1], ")") if url.endswith(")") else (url, "")
-    cut_index = _truncated_url_cut_index(url_body)
+    cut_index = truncated_url_cut_index(url_body)
     if cut_index is None:
         return url
     complete_prefix = url_body[:cut_index].rstrip("%")
@@ -148,7 +148,7 @@ def _repair_truncated_utf8_in_value(value) -> tuple[object, int]:
             repaired_url_count += item_count
         return repaired_items, repaired_url_count
     if isinstance(value, dict):
-        if _is_image_payload(value):
+        if is_image_payload(value):
             return value, 0
         repaired = {}
         repaired_url_count = 0
@@ -249,7 +249,7 @@ def _replace_page_addresses_in_value(value) -> tuple[object, int]:
             replaced_count += item_count
         return replaced_items, replaced_count
     if isinstance(value, dict):
-        if _is_image_payload(value):
+        if is_image_payload(value):
             return value, 0
         has_page_id = _has_numeric_page_id(value.get("id")) if "url" in value else False
         replaced = {}

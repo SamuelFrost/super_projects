@@ -17,8 +17,8 @@ services:
       OLLAMA_HOST: 0.0.0.0:11434
       GEMMA_MODEL: gemma4:e2b
       # How long the model stays loaded after the last request. 5m is the Ollama default.
-      # An override can set a longer duration, such as 20m, or -1 to keep it until the container stops.
-      OLLAMA_KEEP_ALIVE: "5m"
+      # An override can set a duration, such as 20m, or -1 to keep it until the container stops.
+      OLLAMA_KEEP_ALIVE: "60m"
       OLLAMA_CONTEXT_LENGTH: "8192"
     # Uncomment to leave Gemma stopped on devcontainer up.
     # Start it later with: COMPOSE_PROFILES=lllm devcontainer up

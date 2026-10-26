@@ -55,7 +55,8 @@ def ensure_model_loaded(
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=600) as response:
+        # Wait until Ollama finishes loading. The user cancels with Ctrl+C.
+        with urllib.request.urlopen(request, timeout=None) as response:
             response.read()
     except (OSError, urllib.error.URLError) as error:
         print(f"lllm: could not load {resolved_model_name}: {error}", file=sys.stderr)

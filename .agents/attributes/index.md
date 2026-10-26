@@ -34,6 +34,7 @@ This index lists the available agent attributes by category. Link text uses each
 ### Browser
 
 - [Tool interaction guideline — avoid installing new browser binaries](tools/browser/avoid_installing_new_browser_binaries.md)
+- [Tool interaction guideline — use lllm for multi-step browser navigation](tools/browser/use_lllm_for_multi_step_browser_navigation.md)
 - [Tool interaction guideline — use the devcontainer Chrome DevTools MCP](tools/browser/use_devcontainer_chrome_devtools_mcp.md)
 
 ### Devcontainer

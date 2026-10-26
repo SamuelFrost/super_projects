@@ -6,10 +6,10 @@ from contextlib import redirect_stderr, redirect_stdout
 from google.adk.events import Event
 from google.genai import types
 
-from lllm.turn_guards import begin_turn_outcome_tracking
-from lllm.callback_tokens import _store_callback_token
+from lllm.runtime_modifiers.turn_guards import begin_turn_outcome_tracking
+from lllm.tools.callback_tokens import _store_callback_token
 from lllm.output_channels import CHANNEL_NAMES, AgentOutputVisibility
-from lllm.output_writer import AdkEventRenderer
+from lllm.cli.output_writer import AdkEventRenderer
 
 
 class OutputWriterTests(unittest.TestCase):

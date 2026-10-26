@@ -1,6 +1,6 @@
 """Command-line session for the local ADK app.
 
-The agents live in lllm.agent. Whether a turn finished lives in lllm.turn_guards.
+The agents live in lllm.agent. Whether a turn finished lives in lllm.runtime_modifiers.turn_guards.
 This module parses arguments, preloads Ollama, and prints the selected events.
 lllm.adk_runtime is what actually calls ADK.
 """
@@ -15,7 +15,7 @@ from google.adk.agents.run_config import RunConfig, StreamingMode
 
 from lllm.adk_runtime import AdkSession
 from lllm.agent import agents_in_composition_order, app_for_agent
-from lllm.turn_guards import (
+from lllm.runtime_modifiers.turn_guards import (
     TURN_OUTCOME_CONTEXT_EXHAUSTED,
     TURN_OUTCOME_REPETITION,
     TURN_OUTCOME_STALLED,
@@ -28,7 +28,7 @@ from lllm.output_channels import (
     collect_sub_agent_names,
     parse_output_channels_argument,
 )
-from lllm.output_writer import AdkEventRenderer
+from lllm.cli.output_writer import AdkEventRenderer
 
 ADK_SSE_RUN_CONFIG = RunConfig(streaming_mode=StreamingMode.SSE)
 INCOMPLETE_TURN_EXIT_CODE = 75
@@ -209,11 +209,3 @@ async def main() -> None:
         print("lllm: interrupted", file=sys.stderr)
         raise SystemExit(130)
 
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        _write_to_stdout("\n")
-        print("lllm: interrupted", file=sys.stderr)
-        raise SystemExit(130) from None

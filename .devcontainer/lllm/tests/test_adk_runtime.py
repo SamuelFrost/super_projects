@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from google.genai import types
 
 from lllm.adk_runtime import AdkSession
-from lllm.cli import ADK_SSE_RUN_CONFIG
+from lllm.cli.cli_config import ADK_SSE_RUN_CONFIG
 
 
 class AdkRuntimeTests(unittest.IsolatedAsyncioTestCase):

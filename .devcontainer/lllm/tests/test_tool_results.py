@@ -5,9 +5,9 @@ from types import SimpleNamespace
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
 
-from lllm.callback_tokens import _callback_tokens_for_turn
-from lllm.tool_results import prepare_model_tool_results
-from lllm.turn_guards import _agent_state_key, _skip_tools_when_stopping, begin_turn_outcome_tracking
+from lllm.tools.callback_tokens import _callback_tokens_for_turn
+from lllm.runtime_modifiers.tool_results import prepare_model_tool_results
+from lllm.runtime_modifiers.turn_guards import _agent_state_key, _skip_tools_when_stopping, begin_turn_outcome_tracking
 
 
 class TruncatedUtf8RepairTests(unittest.TestCase):

@@ -4,7 +4,7 @@ import unittest
 from contextlib import redirect_stderr
 
 from lllm.agent import app, app_for_agent, browser_agent
-from lllm.cli import _build_argument_parser, incomplete_turn_message
+from lllm.cli.cli_config import _build_argument_parser, incomplete_turn_message
 
 
 class CliTests(unittest.TestCase):

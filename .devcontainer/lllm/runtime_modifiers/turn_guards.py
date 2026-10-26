@@ -25,8 +25,8 @@ import urllib.request
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
-from lllm.callback_tokens import begin_callback_token_tracking, prepare_tool_arguments
-from lllm.tool_results import (
+from lllm.tools.callback_tokens import begin_callback_token_tracking, prepare_tool_arguments
+from lllm.runtime_modifiers.tool_results import (
     _is_image_payload,
     _truncated_url_cut_index,
     prepare_model_tool_results,

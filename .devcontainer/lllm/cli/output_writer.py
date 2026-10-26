@@ -174,7 +174,7 @@ class AdkEventRenderer:
         *,
         flush: bool,
     ) -> None:
-        from lllm.callback_tokens import expand_visible_callback_tokens
+        from lllm.tools.callback_tokens import expand_visible_callback_tokens
 
         held_token = self._held_answer_token_by_agent.pop(agent_channel_key, "")
         expanded_text, held_token = expand_visible_callback_tokens(
@@ -262,7 +262,7 @@ class AdkEventRenderer:
                 return
         if not self.output_visibility.is_enabled(agent_name, "tool_results"):
             return
-        from lllm.tool_results import tool_result_display
+        from lllm.runtime_modifiers.tool_results import tool_result_display
 
         tool_name, rewritten_response = tool_result_display(tool_name, tool_response)
         result_text = _extract_tool_response_text(rewritten_response)

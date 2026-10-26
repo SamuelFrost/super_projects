@@ -18,7 +18,7 @@ reports rewrite counts in the header (e.g. `[list_pages repair_truncated_utf8 1 
 
 import re
 
-from lllm.callback_tokens import store_callback_token
+from lllm.tools.callback_tokens import store_callback_token
 
 _HEX_DIGIT = set("0123456789abcdefABCDEF")
 _URL_IN_TEXT = re.compile(r"https?://[^\s<>\"'`]+")

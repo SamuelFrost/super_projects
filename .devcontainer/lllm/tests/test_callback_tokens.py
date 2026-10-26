@@ -1,9 +1,9 @@
 import unittest
 from types import SimpleNamespace
 
-from lllm.tool_results import _replace_page_address_line
-from lllm.turn_guards import _skip_tools_when_stopping, begin_turn_outcome_tracking
-from lllm.callback_tokens import (
+from lllm.runtime_modifiers.tool_results import _replace_page_address_line
+from lllm.runtime_modifiers.turn_guards import _skip_tools_when_stopping, begin_turn_outcome_tracking
+from lllm.tools.callback_tokens import (
     _CALLBACK_TOKEN_CHARACTER_LIMIT,
     _callback_tokens_for_turn,
     _store_callback_token,
@@ -98,7 +98,7 @@ class CallbackTokenTests(unittest.TestCase):
 
     def test_storage_stops_at_the_character_limit(self):
         begin_turn_outcome_tracking()
-        import lllm.callback_tokens as callback_tokens
+        import lllm.tools.callback_tokens as callback_tokens
 
         callback_tokens._CALLBACK_TOKEN_CHARACTER_LIMIT = 25
         try:

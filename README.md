@@ -221,6 +221,46 @@ Inside the devcontainer you are the `developer` user. That user is created with 
 
 The `developer` user also belongs to a `docker` group created with that socket's group id, which is what allows it to use the socket. The group id is set when the image is built, so a different socket group needs a rebuild.
 
+#### Local LLM (Ollama)
+
+By default, Gemma 4 is used with the Ollama docker service started by devcontainer. The default is `gemma4:e2b` with a `12g` RAM cap. See `local_llm_spec_guideline.md` for configuration and setup guidelines-- it's highly recommended to adjust settings for your machine to get the most out of the LLM.
+
+From the repository root, `devcontainer up` starts Gemma with the devcontainer. Inside the container, `lllm` starts the Agent Development Kit session for that model. It can inspect the browser and list, search, read, or edit workspace files. It does not run shell commands. With no arguments the session stays open until you type `exit` or press ctrl + c.
+
+The first reply can take a while while the model loads. After that, characters stream as they are generated.
+
+```sh
+lllm
+> hi
+```
+
+If you prefer a GUI for the Agent Development Kit, you can run `lllm web` to open the development UI at `http://127.0.0.1:8000` inside the container (set up port forwarding as needed).
+
+By default every author shows thinking, its reply, and tool names such as `[new_page]`. A sub-agent also shows the request it was given, labeled `[files_agent]`, and its reply, labeled `[files_agent response]`. Tool results stay off. `--outputChannels` takes one JSON object. `defaults` applies to every author, `sub_agent_defaults` then applies to agents under the root, and each `agent_overrides` entry wins for the agents in `target_agents`. Omitted keys keep the layer below. Values are booleans: `thinking`, `answer`, `tool_calls`, `tool_results`, and `prompt`.
+
+You can set each of the keys per agent with defaults and sub_agent_defaults, and then override each key per agent with agent_overrides.
+
+```sh
+lllm --outputChannels='{"defaults":{"thinking":false},"sub_agent_defaults":{"tool_calls":false},"agent_overrides":[{"target_agents":["files_agent"],"tool_results":true}]}' "Read the first line of /workspaces/README.md."
+```
+
+| Option | Effect |
+|---|---|
+| `--outputChannels` | JSON object selecting what gets printed to the console. |
+| `--stderr` | Thinking, tool lines, and sub-agent lines go to stderr |
+| `--no-stream` | Print the turn when it finishes |
+| `--json` | One JSON object on stdout |
+| `--timeout SECONDS` | Stop the turn after this many seconds |
+
+`lllm --help` prints the above options.
+
+The service downloads `GEMMA_MODEL` each time it starts. Models stay in the `local-llm` volume. If you'd like to save disk space, remove a tag after it is no longer the configured model (or leave it around for future use if you expect to use it again).
+
+```sh
+./not_devcontainer exec local-llm ollama list
+./not_devcontainer exec local-llm ollama rm gemma4:e2b
+```
+
 </details>
 
 ### Persisted volumes

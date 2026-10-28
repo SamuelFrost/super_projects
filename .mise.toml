@@ -25,7 +25,7 @@ ruby.compile = false
 ruby    = "4.0"
 node    = "24"
 # chrome-devtools MCP server (pinned version for agent configs: .cursor/, .vscode/, .mcp.json, .codex/, .gemini/).
-"npm:chrome-devtools-mcp" = "1.10.1"
+"npm:chrome-devtools-mcp" = "1.12.0"
 # Playwright (CDP attach to devcontainer Chrome; no extra browser binary)
 "npm:playwright" = "1.64.0"
 # Tesseract OCR for virtual-desktop labels. conda-forge package name is tesseract.

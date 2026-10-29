@@ -25,7 +25,7 @@ cp agents.md .agents/agent_profiles/.local_only/descriptive_name_of_the_profile.
 - language preference note: after copying the profile, ask your AI agent to translate the profile to your preferred language for best results.
 
 ### Enable profile for your preferred AI tool
-- **Cursor:** reference `@agents.md` in `.cursor/rules/agents.mdc` (with `alwaysApply: true`)
+- **Cursor:** `AGENTS.md` in the project root is a symlink to `agents.md`. Cursor applies that file on its own. An `@agents.md` line inside `.cursor/rules/*.mdc` is not expanded, so do not keep a second copy of the profile there.
 - **Claude Code:** `.claude/rules/agents.md` symlinks to root `agents.md` (already set up)
 - **Gemini CLI:** auto-loads `agents.md` from the project root; optional override in `.gemini/settings.json`
 - **VS Code:** set `"chat.useAgentsMdFile": true` in `.vscode/settings.json`

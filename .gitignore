@@ -18,6 +18,7 @@
 !.vscode/**
 !.mcp.json
 !README.md
+!AGENTS.md
 !LICENSE
 !.mise.toml
 !not_devcontainer

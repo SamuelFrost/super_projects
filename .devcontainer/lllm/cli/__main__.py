@@ -1,6 +1,14 @@
 import asyncio
 import sys
 
+from lllm.experimental_warnings import (
+    HIDE_EXPERIMENTAL_WARNINGS_FLAG,
+    hide_experimental_warnings,
+)
+
+if HIDE_EXPERIMENTAL_WARNINGS_FLAG in sys.argv:
+    hide_experimental_warnings()
+
 from lllm.cli.cli_config import write_to_stdout, main
 
 if __name__ == "__main__":

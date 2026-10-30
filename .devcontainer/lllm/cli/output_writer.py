@@ -26,12 +26,14 @@ class AdkEventRenderer:
         trace_to_stderr: bool,
         stream_output: bool,
         output_as_json: bool,
+        log_stream: TextIO | None = None,
     ) -> None:
         self.output_visibility = output_visibility
         self.root_agent_name = root_agent_name
         self.sub_agent_names = sub_agent_names
         self.stream_output = stream_output and not output_as_json
         self.output_as_json = output_as_json
+        self._log_stream = log_stream
         self._answer_stream: TextIO = sys.stdout
         self._trace_stream: TextIO = (
             sys.stderr if trace_to_stderr and not output_as_json else sys.stdout
@@ -87,12 +89,14 @@ class AdkEventRenderer:
     def finish(self) -> None:
         self._flush_held_answer_tokens()
         if self.output_as_json:
-            _write_to_stdout(
+            rendered_json = (
                 json.dumps(
                     self._build_selected_output_json_payload(), ensure_ascii=False
                 )
                 + "\n"
             )
+            _write_to_stdout(rendered_json)
+            self._mirror_log(rendered_json)
             return
         if self.stream_output:
             for output_stream, has_pending_newline in (
@@ -101,6 +105,7 @@ class AdkEventRenderer:
                 if has_pending_newline:
                     output_stream.write("\n")
                     output_stream.flush()
+                    self._mirror_log("\n")
             return
         self._write_buffered_output()
 
@@ -334,13 +339,19 @@ class AdkEventRenderer:
         if self._trace_stream is self._answer_stream:
             output_blocks = [block for block in (trace_text, answer_text) if block]
             if output_blocks:
-                _write_to_stdout("\n".join(output_blocks) + "\n")
+                rendered_output = "\n".join(output_blocks) + "\n"
+                _write_to_stdout(rendered_output)
+                self._mirror_log(rendered_output)
             return
         if trace_text:
-            self._trace_stream.write(trace_text + "\n")
+            rendered_trace = trace_text + "\n"
+            self._trace_stream.write(rendered_trace)
             self._trace_stream.flush()
+            self._mirror_log(rendered_trace)
         if answer_text:
-            _write_to_stdout(answer_text + "\n")
+            rendered_answer = answer_text + "\n"
+            _write_to_stdout(rendered_answer)
+            self._mirror_log(rendered_answer)
 
     def _write_streaming_chunk(
         self, agent_name: str, channel_name: str, text_chunk: str
@@ -357,13 +368,21 @@ class AdkEventRenderer:
             stream_channel_key,
         ) and self._has_pending_newline_by_stream.get(output_stream):
             output_stream.write("\n")
+            self._mirror_log("\n")
             self._has_pending_newline_by_stream[output_stream] = False
         self._last_channel_by_stream[output_stream] = stream_channel_key
         output_stream.write(text_chunk)
         output_stream.flush()
+        self._mirror_log(text_chunk)
         self._has_pending_newline_by_stream[output_stream] = not text_chunk.endswith(
             "\n"
         )
+
+    def _mirror_log(self, text: str) -> None:
+        if self._log_stream is None or not text:
+            return
+        self._log_stream.write(text)
+        self._log_stream.flush()
 
 
 def _write_to_stdout(text: str) -> None:

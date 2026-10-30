@@ -22,7 +22,7 @@ class CallbackTokenTests(unittest.TestCase):
         token = _store_callback_token(address)
         token_id = next(iter(_callback_tokens_for_turn.get()))
         browser_context = SimpleNamespace(agent_name="browser_agent", state={})
-        root_context = SimpleNamespace(agent_name="lllm", state={})
+        root_context = SimpleNamespace(agent_name="lllm_default_agent", state={})
         self.assertRegex(token_id, r"\d+_\d+")
         self.assertEqual(token, f"[encoded_callback_token {token_id}]")
         preview = {

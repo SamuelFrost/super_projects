@@ -19,10 +19,10 @@ class OutputWriterTests(unittest.TestCase):
         with redirect_stdout(stdout), redirect_stderr(stderr):
             renderer = _renderer(trace_to_stderr=True, stream_output=True)
             renderer.consume(
-                _text_event("lllm", "The title is Example.", partial=True)
+                _text_event("lllm_default_agent", "The title is Example.", partial=True)
             )
             renderer.consume(
-                _text_event("lllm", "The title is Example.", partial=False)
+                _text_event("lllm_default_agent", "The title is Example.", partial=False)
             )
             renderer.consume(_text_event("files_agent", "First line.", partial=False))
             renderer.finish()
@@ -37,7 +37,7 @@ class OutputWriterTests(unittest.TestCase):
             renderer = _renderer(trace_to_stderr=True, stream_output=False)
             renderer.consume(
                 Event(
-                    author="lllm",
+                    author="lllm_default_agent",
                     content=types.Content(
                         role="model",
                         parts=[
@@ -63,11 +63,11 @@ class OutputWriterTests(unittest.TestCase):
             renderer = _renderer(
                 trace_to_stderr=False, stream_output=False, output_as_json=True
             )
-            renderer.consume(_text_event("lllm", "done", partial=False))
+            renderer.consume(_text_event("lllm_default_agent", "done", partial=False))
             renderer.consume(_text_event("browser_agent", "opened", partial=False))
             renderer.finish()
         payload = json.loads(stdout.getvalue())
-        self.assertEqual(payload["lllm"]["answer"], "done")
+        self.assertEqual(payload["lllm_default_agent"]["answer"], "done")
         self.assertEqual(payload["browser_agent"]["answer"], "opened")
 
     def test_a_rewritten_tool_result_keeps_the_tool_in_its_key(self):
@@ -180,7 +180,7 @@ class OutputWriterTests(unittest.TestCase):
                 _text_event("browser_agent", "Open tab: " + token + ".", partial=False)
             )
             renderer.consume(
-                _text_event("lllm", "Tab 1 is " + token + ".", partial=False)
+                _text_event("lllm_default_agent", "Tab 1 is " + token + ".", partial=False)
             )
             renderer.finish()
         printed = stdout.getvalue()
@@ -234,7 +234,7 @@ class OutputWriterTests(unittest.TestCase):
             )
             renderer.consume(
                 _text_event(
-                    "lllm",
+                    "lllm_default_agent",
                     f"Tab 1 is [encoded_callback_token {token_id}].",
                     partial=False,
                 )
@@ -244,19 +244,36 @@ class OutputWriterTests(unittest.TestCase):
         self.assertIn(f"Tab 1 is {address}.", printed)
         self.assertNotIn(f"Tab 1 is [encoded_callback_token {token_id}]", printed)
 
+    def test_a_log_stream_receives_the_same_text_as_stdout(self):
+        stdout = io.StringIO()
+        log_stream = io.StringIO()
+        with redirect_stdout(stdout):
+            renderer = _renderer(
+                trace_to_stderr=False,
+                stream_output=True,
+                output_as_json=False,
+                log_stream=log_stream,
+            )
+            renderer.consume(_text_event("lllm_default_agent", "The title is Example.", partial=True))
+            renderer.consume(_text_event("lllm_default_agent", "The title is Example.", partial=False))
+            renderer.finish()
+        self.assertEqual(log_stream.getvalue(), stdout.getvalue())
+        self.assertIn("The title is Example.", log_stream.getvalue())
+
 
 def _renderer(
     *,
     trace_to_stderr: bool,
     stream_output: bool,
     output_as_json: bool = False,
-    root_agent_name: str = "lllm",
+    root_agent_name: str = "lllm_default_agent",
+    log_stream=None,
 ):
     enabled = {channel_name: True for channel_name in CHANNEL_NAMES}
     return AdkEventRenderer(
         AgentOutputVisibility(
             visibility_by_agent_name={
-                "lllm": dict(enabled),
+                "lllm_default_agent": dict(enabled),
                 "files_agent": dict(enabled),
                 "browser_agent": dict(enabled),
             }
@@ -266,6 +283,7 @@ def _renderer(
         trace_to_stderr=trace_to_stderr,
         stream_output=stream_output,
         output_as_json=output_as_json,
+        log_stream=log_stream,
     )
 
 

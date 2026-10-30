@@ -1,10 +1,20 @@
 import io
 import json
+import os
+import tempfile
 import unittest
+import warnings
 from contextlib import redirect_stderr
+from pathlib import Path
+from unittest.mock import patch
 
 from lllm.agent import app, app_for_agent, browser_agent
-from lllm.cli.cli_config import _build_argument_parser, incomplete_turn_message
+from lllm.cli.cli_config import (
+    _build_argument_parser,
+    incomplete_turn_message,
+    open_session_log,
+)
+from lllm.experimental_warnings import hide_experimental_warnings
 
 
 class CliTests(unittest.TestCase):
@@ -24,7 +34,7 @@ class CliTests(unittest.TestCase):
             ]
         )
         self.assertTrue(parsed.stderr)
-        self.assertTrue(parsed.outputChannels["lllm"]["tool_results"])
+        self.assertTrue(parsed.outputChannels["lllm_default_agent"]["tool_results"])
         self.assertTrue(parsed.outputChannels["browser_agent"]["tool_results"])
 
     def test_agent_flag_starts_a_composed_agent_without_detaching_it(self):
@@ -38,6 +48,50 @@ class CliTests(unittest.TestCase):
         self.assertIs(app_for_agent(None), app)
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             parser.parse_args(["--agent", "missing_agent"])
+
+    def test_log_dir_defaults_to_the_environment_variable(self):
+        with patch.dict(os.environ, {"LLLM_LOG_DIR": "/tmp/lllm-logs"}):
+            parsed = _build_argument_parser().parse_args(["hello"])
+        self.assertEqual(parsed.log_dir, "/tmp/lllm-logs")
+
+    def test_log_dir_flag_overrides_the_environment_variable(self):
+        with patch.dict(os.environ, {"LLLM_LOG_DIR": "/tmp/lllm-logs"}):
+            parsed = _build_argument_parser().parse_args(
+                ["--log-dir", "/tmp/other", "hello"]
+            )
+        self.assertEqual(parsed.log_dir, "/tmp/other")
+
+    def test_experimental_warnings_stay_visible_unless_the_flag_is_passed(self):
+        parser = _build_argument_parser()
+        self.assertFalse(parser.parse_args(["hello"]).hide_experimental_warnings)
+        self.assertTrue(
+            parser.parse_args(["--hide-experimental-warnings", "hello"]).hide_experimental_warnings
+        )
+
+    def test_the_hide_flag_filters_experimental_user_warnings(self):
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter("always")
+            hide_experimental_warnings()
+            warnings.warn("[EXPERIMENTAL] feature demo", UserWarning)
+            warnings.warn("ordinary warning", UserWarning)
+        messages = [str(item.message) for item in recorded]
+        self.assertNotIn("[EXPERIMENTAL] feature demo", messages)
+        self.assertIn("ordinary warning", messages)
+
+    def test_an_empty_log_dir_variable_leaves_logging_off(self):
+        with patch.dict(os.environ, {"LLLM_LOG_DIR": ""}):
+            parsed = _build_argument_parser().parse_args(["hello"])
+        self.assertIsNone(parsed.log_dir)
+
+    def test_session_log_name_uses_the_agent_and_a_utc_timestamp(self):
+        with tempfile.TemporaryDirectory() as log_dir:
+            log_stream = open_session_log(log_dir, "browser_agent")
+            try:
+                log_stream.write("turn\n")
+            finally:
+                log_name = Path(log_stream.name).name
+                log_stream.close()
+        self.assertRegex(log_name, r"log_\d{4}-\d{2}-\d{2}T\d{6}Z_browser_agent\.txt")
 
     def test_incomplete_outcomes_have_stderr_messages_and_success_does_not(self):
         self.assertIsNone(incomplete_turn_message("completed"))

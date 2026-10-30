@@ -89,7 +89,7 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertIn("Open the company site", kept_text)
         self.assertIn("repeated itself", kept_text)
         self.assertLess(kept_text.count("ハーベスト株式会社"), 8)
-        self.assertEqual(root_turn_outcome("lllm"), TURN_OUTCOME_COMPLETED)
+        self.assertEqual(root_turn_outcome("lllm_default_agent"), TURN_OUTCOME_COMPLETED)
         self.assertEqual(root_turn_outcome("browser_agent"), TURN_OUTCOME_REPETITION)
 
     def test_a_new_request_can_use_tools_after_an_earlier_stop(self):
@@ -218,7 +218,7 @@ class ContextPolicyTests(unittest.TestCase):
 
     def test_context_exhaustion_stops_without_calling_the_model(self):
         os.environ["OLLAMA_CONTEXT_LENGTH"] = "200"
-        context = SimpleNamespace(agent_name="lllm", state={})
+        context = SimpleNamespace(agent_name="lllm_default_agent", state={})
         request = LlmRequest(
             contents=[
                 types.Content(role="user", parts=[types.Part(text="hello " * 500)])
@@ -227,17 +227,17 @@ class ContextPolicyTests(unittest.TestCase):
         stopped = guard_model_request(context, request)
         self.assertIsNotNone(stopped)
         self.assertIn("context window is full", stopped.content.parts[0].text)
-        self.assertEqual(root_turn_outcome("lllm"), TURN_OUTCOME_CONTEXT_EXHAUSTED)
+        self.assertEqual(root_turn_outcome("lllm_default_agent"), TURN_OUTCOME_CONTEXT_EXHAUSTED)
 
     def test_child_task_records_an_outcome_the_parent_can_read(self):
         async def run():
             async def child():
-                _record_turn_outcome("lllm", TURN_OUTCOME_STALLED)
+                _record_turn_outcome("lllm_default_agent", TURN_OUTCOME_STALLED)
 
             await asyncio.create_task(child())
 
         asyncio.run(run())
-        self.assertEqual(root_turn_outcome("lllm"), TURN_OUTCOME_STALLED)
+        self.assertEqual(root_turn_outcome("lllm_default_agent"), TURN_OUTCOME_STALLED)
 
     def test_every_agent_is_told_how_callback_tokens_work(self):
         for agent in (browser_agent, files_agent, root_agent):
@@ -261,6 +261,18 @@ class ContextPolicyTests(unittest.TestCase):
             browser_agent.instruction,
         )
         self.assertNotIn("very long and thorough", browser_agent.instruction)
+
+    def test_browser_reports_page_identity_and_what_the_action_changed(self):
+        self.assertIn("Document Title", browser_agent.instruction)
+        self.assertIn("Actions & State-Change Log", browser_agent.instruction)
+        self.assertIn("left the page unchanged", browser_agent.instruction)
+        self.assertIn("Categorized Verbatim Evidence", browser_agent.instruction)
+        self.assertIn("did not go as expected", browser_agent.instruction)
+
+    def test_the_coordinator_rejects_a_conclusion_that_the_report_does_not_support(self):
+        self.assertIn("unverified attempt, not a factual finding", root_agent.instruction)
+        self.assertIn("explicit scope boundaries", root_agent.instruction)
+        self.assertIn("Leave the choice of tool to the subagent", root_agent.instruction)
 
 
 def _response(text: str):

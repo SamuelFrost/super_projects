@@ -10,10 +10,10 @@ class OutputChannelTests(unittest.TestCase):
         resolved = parse_output_channels_argument(
             '{"sub_agent_defaults":{"tool_results":true}}'
         )
-        self.assertFalse(resolved["lllm"]["tool_results"])
+        self.assertFalse(resolved["lllm_default_agent"]["tool_results"])
         self.assertTrue(resolved["browser_agent"]["tool_results"])
         self.assertTrue(resolved["files_agent"]["prompt"])
-        self.assertFalse(resolved["lllm"]["prompt"])
+        self.assertFalse(resolved["lllm_default_agent"]["prompt"])
 
     def test_defaults_enable_every_channel_for_every_agent(self):
         resolved = parse_output_channels_argument(
@@ -29,7 +29,7 @@ class OutputChannelTests(unittest.TestCase):
                 }
             )
         )
-        for agent_name in ("lllm", "browser_agent", "files_agent"):
+        for agent_name in ("lllm_default_agent", "browser_agent", "files_agent"):
             self.assertEqual(
                 set(resolved[agent_name]),
                 {"thinking", "answer", "tool_calls", "tool_results", "prompt"},
@@ -47,7 +47,7 @@ class OutputChannelTests(unittest.TestCase):
                 }
             )
         )
-        self.assertTrue(resolved["lllm"]["tool_results"])
+        self.assertTrue(resolved["lllm_default_agent"]["tool_results"])
         self.assertTrue(resolved["browser_agent"]["tool_results"])
         self.assertFalse(resolved["files_agent"]["tool_results"])
 

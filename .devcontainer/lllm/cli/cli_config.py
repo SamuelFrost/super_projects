@@ -7,7 +7,11 @@ lllm.adk_runtime is what actually calls ADK.
 
 import argparse
 import asyncio
+import os
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TextIO
 
 import readline  # noqa: F401  GNU readline for input()
 
@@ -29,6 +33,7 @@ from lllm.output_channels import (
     parse_output_channels_argument,
 )
 from lllm.cli.output_writer import AdkEventRenderer
+from lllm.experimental_warnings import HIDE_EXPERIMENTAL_WARNINGS_FLAG
 
 ADK_SSE_RUN_CONFIG = RunConfig(streaming_mode=StreamingMode.SSE)
 INCOMPLETE_TURN_EXIT_CODE = 75
@@ -62,8 +67,10 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         "--agent",
         choices=composed_agent_names,
         help=(
-            "Agent from the composed tree to talk to. "
-            f"The default is {composed_agent_names[0]}."
+            "Choose which agent to talk to: browser_agent for direct orders to "
+            "the browser specialist, files_agent for direct orders to the file "
+            "specialist, or lllm_default_agent (the default) for general tasks, thinking, and "
+            "coordinating the finer details of sub-agent interactions."
         ),
     )
     parser.add_argument(
@@ -105,9 +112,41 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help="Stop the turn after this many seconds.",
     )
     parser.add_argument(
+        HIDE_EXPERIMENTAL_WARNINGS_FLAG,
+        action="store_true",
+        help=(
+            "Hide ADK UserWarnings whose text starts with [EXPERIMENTAL]. "
+            "Off by default; those warnings are printed unless this flag is passed."
+        ),
+    )
+    parser.add_argument(
+        "--log-dir",
+        default=os.environ.get("LLLM_LOG_DIR") or None,
+        metavar="DIR",
+        help=(
+            "Write this turn to log_<YYYY-MM-DDTHHMMSSZ>_<agent>.txt in DIR. "
+            "Defaults to LLLM_LOG_DIR when that variable is set."
+        ),
+    )
+    parser.add_argument(
         "query", nargs="*", help="One turn. With no query, the session stays open."
     )
     return parser
+
+
+def open_session_log(log_dir: str, agent_name: str) -> TextIO:
+    """Create log_<UTC timestamp>_<agent>.txt and return it open for writing."""
+    directory = Path(log_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+    path = directory / f"log_{timestamp}_{agent_name}.txt"
+    counter = 2
+    while True:
+        try:
+            return path.open("x", encoding="utf-8")
+        except FileExistsError:
+            path = directory / f"log_{timestamp}_{agent_name}_{counter}.txt"
+            counter += 1
 
 
 def write_to_stdout(text: str) -> None:
@@ -132,22 +171,29 @@ async def run_prompt_turn(
     trace_to_stderr: bool,
     stream_output: bool,
     output_as_json: bool,
+    log_dir: str | None = None,
 ) -> str:
     begin_turn_outcome_tracking()
     selected_root = selected_app.root_agent
-    renderer = AdkEventRenderer(
-        output_visibility,
-        root_agent_name=selected_root.name,
-        sub_agent_names=collect_sub_agent_names(selected_root),
-        trace_to_stderr=trace_to_stderr,
-        stream_output=stream_output,
-        output_as_json=output_as_json,
-    )
-    renderer.write_user_prompt(prompt_text)
-    async for adk_event in session.stream_events(prompt_text, ADK_SSE_RUN_CONFIG):
-        renderer.consume(adk_event)
-    renderer.finish()
-    return root_turn_outcome(selected_root.name)
+    log_stream = open_session_log(log_dir, selected_root.name) if log_dir else None
+    try:
+        renderer = AdkEventRenderer(
+            output_visibility,
+            root_agent_name=selected_root.name,
+            sub_agent_names=collect_sub_agent_names(selected_root),
+            trace_to_stderr=trace_to_stderr,
+            stream_output=stream_output,
+            output_as_json=output_as_json,
+            log_stream=log_stream,
+        )
+        renderer.write_user_prompt(prompt_text)
+        async for adk_event in session.stream_events(prompt_text, ADK_SSE_RUN_CONFIG):
+            renderer.consume(adk_event)
+        renderer.finish()
+        return root_turn_outcome(selected_root.name)
+    finally:
+        if log_stream is not None:
+            log_stream.close()
 
 
 async def main() -> None:
@@ -168,6 +214,7 @@ async def main() -> None:
                 trace_to_stderr=parsed_args.stderr,
                 stream_output=not parsed_args.no_stream,
                 output_as_json=parsed_args.json,
+                log_dir=parsed_args.log_dir or None,
             )
             try:
                 turn_outcome = await asyncio.wait_for(

@@ -207,9 +207,9 @@ browser_agent = LlmAgent(
         "(b.3.b) For each topic in b.3, quote the exact text or elements verbatim. "
         "(b.4) Note all of the interactive controls from above (buttons, links, and form inputs, etc. with their labels). "
         "(c) List any other visible and invisible elements or text not mentioned previously, including descriptions of images or other content on the page. "
-        "4(if any procedures did not do what was expected). A report on attempts to interact with the page that did not go as expected. "
-        "5(if any procedural issues from 4 were resolved). report on how follow up attempts worked to correct failed interaction attempts. "
-        "6 Provide a direct response to the user's question or request."
+        "5. Provide a direct response to the user's question or request."
+        "6. If any procedures did not do what was expected: report on attempts to interact with the page that did not go as expected. Explicitly state these as potential failures in completing the task so we don't accidentally deceive the user. "
+        "7. If any procedural issues from 6 were resolved, report on how follow up attempts seemed to work to correct failed interaction attempts, list these as caveats or potential issues in completing the task instead of claiming success. "
         "Never invent or infer text that is not explicitly present."
     ),
     before_model_callback=guard_model_request,

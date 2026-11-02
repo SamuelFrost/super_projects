@@ -138,8 +138,8 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         metavar="ID",
         help=(
             "Continue the ADK session with this id in .adk/session.db. The id is "
-            "the one printed as 'lllm session:'. Use the same --agent as the "
-            "run that created it."
+            "the one printed as 'lllm session:', and lllm web uses the same "
+            "database. Use the same --agent as the run that created it."
         ),
     )
     parser.add_argument(

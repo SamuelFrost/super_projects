@@ -1,6 +1,6 @@
 """Run the local ADK app and yield its events.
 
-This module starts or resumes a session in the same SQLite database `adk web`
+This module starts or resumes a session in the same SQLite database `lllm web`
 uses, then sends one prompt. It does not decide which events are printed.
 """
 

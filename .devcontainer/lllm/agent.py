@@ -16,6 +16,7 @@ Rewriting tool results and deciding when a turn stops happen in
 """
 
 import os
+import re
 from pathlib import Path
 
 from google.adk.agents import LlmAgent
@@ -304,7 +305,35 @@ root_agent = LlmAgent(
     sub_agents=[browser_agent, files_agent],
 )
 
-app = App(name="lllm", root_agent=root_agent)
+_CLI_AGENT_FLAG_PATTERN = re.compile(
+    r'^lllm --agent=(?:"([^"]+)"|\'([^\']+)\'|(\S+))$'
+)
+_LLLM_APP_PREFIX = "lllm_"
+
+
+def prefixed_app_name(agent_name: str) -> str:
+    """ADK app name with an `lllm_` prefix so these apps stay distinct from others."""
+    resolved_agent_name = agent_name_from_app_name(agent_name)
+    if resolved_agent_name.startswith(_LLLM_APP_PREFIX):
+        return resolved_agent_name
+    return f"{_LLLM_APP_PREFIX}{resolved_agent_name}"
+
+
+def agent_name_from_app_name(app_name: str) -> str:
+    """The composed `--agent` value for an app name, including older unprefixed names."""
+    if app_name == "lllm":
+        return root_agent.name
+    match = _CLI_AGENT_FLAG_PATTERN.fullmatch(app_name.strip())
+    if match:
+        return next(group for group in match.groups() if group)
+    if app_name == root_agent.name:
+        return root_agent.name
+    if app_name.startswith(_LLLM_APP_PREFIX):
+        return app_name.removeprefix(_LLLM_APP_PREFIX)
+    return app_name
+
+
+app = App(name=prefixed_app_name(root_agent.name), root_agent=root_agent)
 
 
 def agents_in_composition_order(agent=None) -> list:
@@ -316,24 +345,40 @@ def agents_in_composition_order(agent=None) -> list:
     return composed_agents
 
 
+def named_apps() -> dict[str, App]:
+    """The ADK apps the CLI and web UI both use, keyed by prefixed app name."""
+    return {
+        prefixed_app_name(agent.name): app_for_agent(agent.name)
+        for agent in agents_in_composition_order()
+    }
+
+
 def app_for_agent(agent_name: str | None = None) -> App:
-    """Return the root coordinator app (`lllm_default_agent`), or promote a specialist (`browser_agent` / `files_agent`) as root for direct orders."""
-    if agent_name is None or agent_name == root_agent.name:
+    """Return the root coordinator app, or promote a specialist as root for direct orders."""
+    if agent_name is None:
+        return app
+    resolved_agent_name = agent_name_from_app_name(agent_name)
+    if resolved_agent_name == root_agent.name:
         return app
     selected_agent = next(
         (
             agent
             for agent in agents_in_composition_order()
-            if agent.name == agent_name
+            if agent.name == resolved_agent_name
         ),
         None,
     )
     if selected_agent is None:
-        known_names = ", ".join(agent.name for agent in agents_in_composition_order())
+        known_names = ", ".join(
+            prefixed_app_name(agent.name) for agent in agents_in_composition_order()
+        )
         raise ValueError(f"unknown agent {agent_name!r}; choose from {known_names}")
     # single_turn is only valid while this agent is delegated. A direct
     # `lllm --agent` call is one caller turn, so that copy runs as chat.
     selected_agent_clone = selected_agent.clone()
     if selected_agent_clone.mode == "single_turn":
         selected_agent_clone.mode = "chat"
-    return App(name=agent_name, root_agent=selected_agent_clone)
+    return App(
+        name=prefixed_app_name(resolved_agent_name),
+        root_agent=selected_agent_clone,
+    )

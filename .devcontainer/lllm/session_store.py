@@ -1,7 +1,8 @@
 """Locate the shared ADK session database.
 
-`lllm` stores sessions in `.devcontainer/lllm/.adk/session.db`. Rows are
-keyed by the app name and the user id `user`. ADK's session service owns the
+`lllm` and `lllm web` both use `.devcontainer/lllm/.adk/session.db`. Rows are
+keyed by the prefixed app name (`lllm_default_agent`, `lllm_browser_agent`,
+`lllm_files_agent`) and the user id `user`. ADK's session service owns the
 events.
 """
 
@@ -20,7 +21,7 @@ class UnknownSessionError(LookupError):
 
 
 def default_session_database() -> Path:
-    """The SQLite file the CLI stores sessions in."""
+    """The SQLite file the CLI and `lllm web` share."""
     return _PACKAGE_DIRECTORY / ".adk" / "session.db"
 
 

@@ -66,4 +66,3 @@ services:
       OLLAMA_CONTEXT_LENGTH: "8192"
       # Directory for session_transcripts
       # LLLM_LOG_DIR: /workspaces/.devcontainer/lllm/.local_only/local_llm_journal # note: Session database information stays in .devcontainer/lllm/.adk/session.db regardless of this setting.
-     

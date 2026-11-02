@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,7 +7,58 @@ from fastapi.testclient import TestClient
 
 from lllm.agent import app, app_for_agent, named_apps, prefixed_app_name
 from lllm.session_store import session_database_uri
-from lllm.web import ComposedAppLoader, build_web_app
+from lllm.web import ComposedAppLoader, _ExpandCallbackTokensOnOutput, build_web_app
+
+
+class WebRequestReplayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_run_sse_replay_returns_the_body_then_the_disconnect(self):
+        seen = {}
+
+        async def app(scope, receive, send):
+            del scope
+            message = await receive()
+            seen["body"] = message["body"]
+            while True:
+                follow_up = await receive()
+                if follow_up["type"] == "http.disconnect":
+                    break
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": b'data: {"text":"ok"}\n\n',
+                    "more_body": False,
+                }
+            )
+
+        queued = [
+            {
+                "type": "http.request",
+                "body": b'{"session_id":"session-1"}',
+                "more_body": False,
+            },
+            {"type": "http.disconnect"},
+        ]
+
+        async def receive():
+            return queued.pop(0)
+
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        await asyncio.wait_for(
+            _ExpandCallbackTokensOnOutput(app)(
+                {"type": "http", "path": "/run_sse"},
+                receive,
+                send,
+            ),
+            timeout=2,
+        )
+        self.assertEqual(seen["body"], b'{"session_id":"session-1"}')
+        self.assertEqual(sent[0]["status"], 200)
+        self.assertIn(b"ok", sent[1]["body"])
 
 
 class WebAppLoaderTests(unittest.TestCase):

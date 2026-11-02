@@ -1,16 +1,20 @@
 """Run the local ADK app and yield its events.
 
-This module starts a session and sends one prompt. It does not decide which
-events are printed.
+This module starts or resumes a session in the same SQLite database `adk web`
+uses, then sends one prompt. It does not decide which events are printed.
 """
 
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from google.adk.agents.run_config import RunConfig
 from google.adk.apps import App
 from google.adk.events import Event
-from google.adk.runners import InMemoryRunner
+from google.adk.runners import Runner
+from google.adk.sessions.sqlite_session_service import SqliteSessionService
 from google.genai import types
+
+from lllm.session_store import UnknownSessionError
 
 
 class AdkSession:
@@ -18,7 +22,7 @@ class AdkSession:
 
     def __init__(
         self,
-        runner: InMemoryRunner,
+        runner,
         session,
         user_id: str,
     ) -> None:
@@ -27,12 +31,32 @@ class AdkSession:
         self.user_id = user_id
 
     @classmethod
-    async def create(cls, app: App, user_id: str) -> "AdkSession":
-        runner = InMemoryRunner(app=app)
-        session = await runner.session_service.create_session(
-            app_name=app.name,
-            user_id=user_id,
-        )
+    async def open(
+        cls,
+        app: App,
+        user_id: str,
+        *,
+        session_db: Path,
+        session_id: str | None = None,
+    ) -> "AdkSession":
+        """Create a session, or resume one already stored in `session_db`."""
+        session_db.parent.mkdir(parents=True, exist_ok=True)
+        session_service = SqliteSessionService(str(session_db))
+        runner = Runner(app=app, session_service=session_service)
+        if session_id:
+            session = await session_service.get_session(
+                app_name=app.name,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            if session is None:
+                await session_service.close()
+                raise UnknownSessionError(session_id)
+        else:
+            session = await session_service.create_session(
+                app_name=app.name,
+                user_id=user_id,
+            )
         return cls(runner, session, user_id)
 
     def stream_events(
@@ -50,6 +74,10 @@ class AdkSession:
 
     async def close(self) -> None:
         await self.runner.close()
+        session_service = getattr(self.runner, "session_service", None)
+        close_session_service = getattr(session_service, "close", None)
+        if close_session_service is not None:
+            await close_session_service()
 
     async def __aenter__(self) -> "AdkSession":
         return self

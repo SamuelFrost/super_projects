@@ -32,6 +32,11 @@ from lllm.output_channels import (
     collect_sub_agent_names,
     parse_output_channels_argument,
 )
+from lllm.session_store import (
+    SESSION_USER_ID,
+    UnknownSessionError,
+    default_session_database,
+)
 from lllm.cli.output_writer import AdkEventRenderer
 from lllm.experimental_warnings import HIDE_EXPERIMENTAL_WARNINGS_FLAG
 
@@ -129,6 +134,15 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--session",
+        metavar="ID",
+        help=(
+            "Continue the ADK session with this id in .adk/session.db. The id is "
+            "the one printed as 'lllm session:'. Use the same --agent as the "
+            "run that created it."
+        ),
+    )
+    parser.add_argument(
         "query", nargs="*", help="One turn. With no query, the session stays open."
     )
     return parser
@@ -147,6 +161,10 @@ def open_session_log(log_dir: str, agent_name: str) -> TextIO:
         except FileExistsError:
             path = directory / f"log_{timestamp}_{agent_name}_{counter}.txt"
             counter += 1
+
+
+def announce_session_id(session_id: str) -> None:
+    print(f"lllm session: {session_id}", file=sys.stderr)
 
 
 def write_to_stdout(text: str) -> None:
@@ -196,13 +214,27 @@ async def run_prompt_turn(
             log_stream.close()
 
 
+def _exit_for_session_open_error(error: Exception) -> None:
+    if isinstance(error, UnknownSessionError):
+        print(f"lllm: unknown session {error.session_id}", file=sys.stderr)
+    raise SystemExit(2) from None
+
+
 async def main() -> None:
     parsed_args = _build_argument_parser().parse_args()
-    ensure_model_loaded()
     output_visibility = AgentOutputVisibility.from_arguments(parsed_args)
     selected_app = app_for_agent(parsed_args.agent)
     interrupted = False
-    session = await AdkSession.create(selected_app, user_id="user")
+    try:
+        session = await AdkSession.open(
+            selected_app,
+            user_id=SESSION_USER_ID,
+            session_db=default_session_database(),
+            session_id=parsed_args.session,
+        )
+    except UnknownSessionError as error:
+        _exit_for_session_open_error(error)
+    ensure_model_loaded()
     try:
 
         async def run_one_prompt_turn(prompt_text: str) -> None:
@@ -221,11 +253,13 @@ async def main() -> None:
                     prompt_turn_coroutine, parsed_args.timeout
                 )
             except asyncio.TimeoutError:
+                announce_session_id(session.session.id)
                 print(
                     f"lllm: timed out after {parsed_args.timeout:g}s",
                     file=sys.stderr,
                 )
                 raise SystemExit(124) from None
+            announce_session_id(session.session.id)
             incomplete_message = incomplete_turn_message(turn_outcome)
             if incomplete_message:
                 print(incomplete_message, file=sys.stderr)

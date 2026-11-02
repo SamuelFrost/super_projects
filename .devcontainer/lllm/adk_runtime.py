@@ -15,10 +15,14 @@ from google.adk.sessions.sqlite_session_service import SqliteSessionService
 from google.genai import types
 
 from lllm.session_store import UnknownSessionError
+from lllm.session_transcript import install_session_transcript_writer
 from lllm.tools.callback_tokens import (
     bind_callback_tokens_to_session,
     use_callback_token_database,
 )
+
+install_session_transcript_writer()
+_TRANSCRIPT_DIRECTORY_ATTRIBUTE = "_lllm_transcript_dir"
 
 
 class AdkSession:
@@ -42,11 +46,14 @@ class AdkSession:
         *,
         session_db: Path,
         session_id: str | None = None,
+        transcript_dir: Path | None = None,
     ) -> "AdkSession":
         """Create a session, or resume one already stored in `session_db`."""
         session_db.parent.mkdir(parents=True, exist_ok=True)
         use_callback_token_database(session_db)
         session_service = SqliteSessionService(str(session_db))
+        if transcript_dir is not None:
+            setattr(session_service, _TRANSCRIPT_DIRECTORY_ATTRIBUTE, transcript_dir)
         runner = Runner(app=app, session_service=session_service)
         if session_id:
             session = await session_service.get_session(

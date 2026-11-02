@@ -4,12 +4,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from google.adk.events.event import Event
+from google.adk.sessions.sqlite_session_service import SqliteSessionService
 from google.genai import types
 
 from lllm.adk_runtime import AdkSession
 from lllm.agent import app, app_for_agent
 from lllm.cli.cli_config import ADK_SSE_RUN_CONFIG
 from lllm.session_store import UnknownSessionError
+from lllm.session_transcript import session_transcript_path
 
 
 class AdkRuntimeTests(unittest.IsolatedAsyncioTestCase):
@@ -88,6 +90,44 @@ class AdkRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     session_id=session_id,
                 )
         self.assertEqual(raised.exception.session_id, session_id)
+
+    async def test_cli_and_web_events_share_one_session_transcript(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session_db = Path(directory) / "session.db"
+            log_dir = Path(directory) / "journal"
+            first = await AdkSession.open(
+                app,
+                "user",
+                session_db=session_db,
+                transcript_dir=log_dir,
+            )
+            await first.runner.session_service.append_event(
+                first.session,
+                _user_event("hi"),
+            )
+            web_service = SqliteSessionService(str(session_db))
+            web_service._lllm_transcript_dir = log_dir
+            stored = await web_service.get_session(
+                app_name=app.name,
+                user_id="user",
+                session_id=first.session.id,
+            )
+            await web_service.append_event(stored, _user_event("from the web"))
+            transcript = session_transcript_path(
+                log_dir, app.name, first.session.id
+            ).read_text(encoding="utf-8")
+            self.assertIn("[user]\nhi", transcript)
+            self.assertIn("[user]\nfrom the web", transcript)
+            self.assertEqual(transcript.count("[user]"), 2)
+            await web_service.close()
+            await first.close()
+
+
+def _user_event(text: str) -> Event:
+    return Event(
+        author="user",
+        content=types.Content(role="user", parts=[types.Part(text=text)]),
+    )
 
 
 class _FakeRunner:

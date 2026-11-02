@@ -9,9 +9,6 @@ import argparse
 import asyncio
 import os
 import sys
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import TextIO
 
 import readline  # noqa: F401  GNU readline for input()
 
@@ -36,6 +33,7 @@ from lllm.session_store import (
     SESSION_USER_ID,
     UnknownSessionError,
     default_session_database,
+    resolve_log_directory,
 )
 from lllm.cli.output_writer import AdkEventRenderer
 from lllm.experimental_warnings import HIDE_EXPERIMENTAL_WARNINGS_FLAG
@@ -129,8 +127,10 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         default=os.environ.get("LLLM_LOG_DIR") or None,
         metavar="DIR",
         help=(
-            "Write this turn to log_<YYYY-MM-DDTHHMMSSZ>_<agent>.txt in DIR. "
-            "Defaults to LLLM_LOG_DIR when that variable is set."
+            "Directory for session_transcripts/<app>/<session>/transcript.txt. "
+            "Defaults to LLLM_LOG_DIR when that variable is set, otherwise "
+            ".local_only/local_llm_journal. The file includes CLI and lllm web turns. "
+            "Sessions are stored in .adk/session.db."
         ),
     )
     parser.add_argument(
@@ -146,21 +146,6 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         "query", nargs="*", help="One turn. With no query, the session stays open."
     )
     return parser
-
-
-def open_session_log(log_dir: str, agent_name: str) -> TextIO:
-    """Create log_<UTC timestamp>_<agent>.txt and return it open for writing."""
-    directory = Path(log_dir)
-    directory.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-    path = directory / f"log_{timestamp}_{agent_name}.txt"
-    counter = 2
-    while True:
-        try:
-            return path.open("x", encoding="utf-8")
-        except FileExistsError:
-            path = directory / f"log_{timestamp}_{agent_name}_{counter}.txt"
-            counter += 1
 
 
 def announce_session_id(session_id: str) -> None:
@@ -189,29 +174,22 @@ async def run_prompt_turn(
     trace_to_stderr: bool,
     stream_output: bool,
     output_as_json: bool,
-    log_dir: str | None = None,
 ) -> str:
     begin_turn_outcome_tracking()
     selected_root = selected_app.root_agent
-    log_stream = open_session_log(log_dir, selected_root.name) if log_dir else None
-    try:
-        renderer = AdkEventRenderer(
-            output_visibility,
-            root_agent_name=selected_root.name,
-            sub_agent_names=collect_sub_agent_names(selected_root),
-            trace_to_stderr=trace_to_stderr,
-            stream_output=stream_output,
-            output_as_json=output_as_json,
-            log_stream=log_stream,
-        )
-        renderer.write_user_prompt(prompt_text)
-        async for adk_event in session.stream_events(prompt_text, ADK_SSE_RUN_CONFIG):
-            renderer.consume(adk_event)
-        renderer.finish()
-        return root_turn_outcome(selected_root.name)
-    finally:
-        if log_stream is not None:
-            log_stream.close()
+    renderer = AdkEventRenderer(
+        output_visibility,
+        root_agent_name=selected_root.name,
+        sub_agent_names=collect_sub_agent_names(selected_root),
+        trace_to_stderr=trace_to_stderr,
+        stream_output=stream_output,
+        output_as_json=output_as_json,
+    )
+    renderer.write_user_prompt(prompt_text)
+    async for adk_event in session.stream_events(prompt_text, ADK_SSE_RUN_CONFIG):
+        renderer.consume(adk_event)
+    renderer.finish()
+    return root_turn_outcome(selected_root.name)
 
 
 def _exit_for_session_open_error(error: Exception) -> None:
@@ -224,6 +202,7 @@ async def main() -> None:
     parsed_args = _build_argument_parser().parse_args()
     output_visibility = AgentOutputVisibility.from_arguments(parsed_args)
     selected_app = app_for_agent(parsed_args.agent)
+    log_dir = resolve_log_directory(parsed_args.log_dir)
     interrupted = False
     try:
         session = await AdkSession.open(
@@ -231,6 +210,7 @@ async def main() -> None:
             user_id=SESSION_USER_ID,
             session_db=default_session_database(),
             session_id=parsed_args.session,
+            transcript_dir=log_dir,
         )
     except UnknownSessionError as error:
         _exit_for_session_open_error(error)
@@ -246,7 +226,6 @@ async def main() -> None:
                 trace_to_stderr=parsed_args.stderr,
                 stream_output=not parsed_args.no_stream,
                 output_as_json=parsed_args.json,
-                log_dir=parsed_args.log_dir or None,
             )
             try:
                 turn_outcome = await asyncio.wait_for(

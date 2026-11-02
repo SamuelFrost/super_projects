@@ -64,6 +64,6 @@ services:
       GEMMA_MODEL: gemma4:e4b
       # OLLAMA_CONTEXT_LENGTH inside the devcontainer is used to inform the ADK and agent management tools know how much context is available to the model.
       OLLAMA_CONTEXT_LENGTH: "8192"
-      # Each lllm turn is written to log_<YYYY-MM-DDTHHMMSSZ>_<agent>.txt in this directory.
-      # Omit the variable to leave session logs off.
-      # LLLM_LOG_DIR: /workspaces/local_llm_journal/session_logs
+      # Directory for session_transcripts
+      # LLLM_LOG_DIR: /workspaces/.devcontainer/lllm/.local_only/local_llm_journal # note: Session database information stays in .devcontainer/lllm/.adk/session.db regardless of this setting.
+     

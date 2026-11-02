@@ -7,11 +7,17 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
+from google.adk.events.event import Event
+
 from lllm.agent import (
     _CALLBACK_TOKEN_INSTRUCTION,
+    SHARED_STATIC_INSTRUCTION,
     browser_agent,
     files_agent,
     root_agent,
+)
+from lllm.runtime_modifiers.inline_subagent_trace import (
+    InlineSubagentTracePlugin,
 )
 from lllm.runtime_modifiers.turn_guards import (
     TURN_OUTCOME_COMPLETED,
@@ -225,10 +231,14 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertLess(
             len(request_part.function_response.response["text"]), len(original_text)
         )
-        self.assertEqual(
-            request.contents[-1].parts[0].function_response.response["text"],
-            latest_text,
-        )
+        snapshot_responses = [
+            part.function_response.response["text"]
+            for content in request.contents
+            for part in content.parts or []
+            if part.function_response is not None
+            and part.function_response.name == "take_snapshot"
+        ]
+        self.assertEqual(snapshot_responses, [latest_text])
 
     def test_older_turns_are_summarized_and_the_latest_tool_result_stays_whole(self):
         os.environ["OLLAMA_CONTEXT_LENGTH"] = "800"
@@ -352,6 +362,129 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertIn("unverified attempt, not a factual finding", root_agent.instruction)
         self.assertIn("explicit scope boundaries", root_agent.instruction)
         self.assertIn("Leave the choice of tool to the subagent", root_agent.instruction)
+
+    def test_every_agent_sends_the_same_static_system_instruction(self):
+        for agent in (browser_agent, files_agent, root_agent):
+            self.assertEqual(agent.static_instruction, SHARED_STATIC_INSTRUCTION)
+        self.assertIn(_CALLBACK_TOKEN_INSTRUCTION.strip(), SHARED_STATIC_INSTRUCTION)
+        self.assertNotIn("BEGIN_UNTRUSTED_TOOL_DESCRIPTION", SHARED_STATIC_INSTRUCTION)
+        self.assertNotIn("Your internal name", SHARED_STATIC_INSTRUCTION)
+
+    def test_guard_keeps_role_text_ahead_of_the_turn_the_model_answers(self):
+        request = LlmRequest(
+            contents=[
+                types.Content(role="user", parts=[types.Part(text="what are the contents of it?")]),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name="browser_agent", args={"request": "summarize the page"}
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            function_response=types.FunctionResponse(
+                                name="browser_agent",
+                                response={"result": "the page is the dev UI"},
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            text=(
+                                "For context: below is a transcript of what another agent did, "
+                                "quoted between markers.\n[browser_agent] said:\nI am reporting the page."
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            text="<<<BEGIN_SYSTEM_INSTRUCTION>>>\ncoordinator role"
+                        )
+                    ],
+                ),
+            ]
+        )
+        request.config.system_instruction = (
+            'You are an agent. Your internal name is "lllm_default_agent".'
+        )
+        context = SimpleNamespace(agent_name="lllm_default_agent", state={})
+        self.assertIsNone(guard_model_request(context, request))
+        self.assertEqual(request.config.system_instruction, SHARED_STATIC_INSTRUCTION)
+        texts = [
+            part.text
+            for content in request.contents
+            for part in content.parts or []
+            if part.text
+        ]
+        self.assertEqual(
+            texts,
+            [
+                "<<<BEGIN_SYSTEM_INSTRUCTION>>>\ncoordinator role",
+                "what are the contents of it?",
+            ],
+        )
+        self.assertEqual(
+            request.contents[-1].parts[0].function_response.response["result"],
+            "the page is the dev UI",
+        )
+
+    def test_a_wrap_up_is_appended_after_the_conversation(self):
+        context = SimpleNamespace(agent_name="browser_agent", state={})
+        request = _request_with_observations(["same page", "same page", "same page"])
+        request.config.system_instruction = "identity that must not stick"
+        self.assertIsNone(guard_model_request(context, request))
+        self.assertEqual(request.config.system_instruction, SHARED_STATIC_INSTRUCTION)
+        self.assertIn(
+            "Answer now with the findings", request.contents[-1].parts[0].text
+        )
+        self.assertNotIn(
+            "Answer now with the findings", request.config.system_instruction
+        )
+
+    def test_a_child_branch_joins_the_main_trace_and_an_own_branch_stays(self):
+        plugin = InlineSubagentTracePlugin()
+        root_invocation = SimpleNamespace(branch=None)
+        child_event = Event(
+            author="browser_agent", branch="browser_agent@call-1"
+        )
+        published = asyncio.run(
+            plugin.on_event_callback(
+                invocation_context=root_invocation, event=child_event
+            )
+        )
+        self.assertIsNone(published.branch)
+
+        own_event = Event(author="browser_agent", branch="browser_agent")
+        direct_invocation = SimpleNamespace(branch="browser_agent")
+        self.assertIsNone(
+            asyncio.run(
+                plugin.on_event_callback(
+                    invocation_context=direct_invocation, event=own_event
+                )
+            )
+        )
+        self.assertEqual(own_event.branch, "browser_agent")
+
+        unbranched = Event(author="lllm_default_agent")
+        self.assertIsNone(
+            asyncio.run(
+                plugin.on_event_callback(
+                    invocation_context=root_invocation, event=unbranched
+                )
+            )
+        )
 
 
 def _response(text: str):

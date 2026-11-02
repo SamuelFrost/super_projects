@@ -726,6 +726,57 @@ def _wrap_up_instruction(stop_reason: str | None) -> str:
     return _instruction_to_finish(stop_reason)
 
 
+_ROLE_INSTRUCTION_MARKER = "<<<BEGIN_SYSTEM_INSTRUCTION>>>"
+# ADK turns another agent's events into a user message that starts with this.
+_OTHER_AGENT_TRANSCRIPT_MARKER = (
+    "For context: below is a transcript of what another agent did"
+)
+
+
+def _content_text(message_content) -> str:
+    return "\n".join(part.text or "" for part in message_content.parts or [])
+
+
+def align_system_instruction(llm_request) -> None:
+    """Every model call in a session sends the same system instruction.
+
+    ADK adds an identity line for chat agents and a tool-description warning
+    for MCP tools. Replacing the system instruction drops both. Role text stays
+    in the conversation, ahead of the real turns, because a static instruction
+    cannot carry it. A delegated sub-agent's own events are dropped here: the
+    parent already receives that work as the tool result, and leaving the
+    events in the request makes the parent answer the sub-agent as if it were
+    the user. The role text is moved to the front for the same reason: ADK
+    places it after a tool result, which makes it the newest user turn.
+    """
+    from lllm.agent import SHARED_STATIC_INSTRUCTION
+
+    if llm_request.config is None:
+        return
+    llm_request.config.system_instruction = SHARED_STATIC_INSTRUCTION
+    role_instructions = []
+    conversation = []
+    for message_content in list(llm_request.contents or []):
+        text = _content_text(message_content)
+        if _OTHER_AGENT_TRANSCRIPT_MARKER in text:
+            continue
+        if _ROLE_INSTRUCTION_MARKER in text:
+            role_instructions.append(message_content)
+        else:
+            conversation.append(message_content)
+    llm_request.contents = role_instructions + conversation
+
+
+def _append_wrap_up(llm_request, stop_reason: str | None) -> None:
+    """The wrap-up is a trailing turn, not a change to the system instruction."""
+    llm_request.contents.append(
+        types.Content(
+            role="user",
+            parts=[types.Part(text=_wrap_up_instruction(stop_reason))],
+        )
+    )
+
+
 def guard_model_request(callback_context, llm_request):
     """ADK `before_model_callback`: sanitize tool results, fit context budget, and stop stalled turns."""
     agent_name = callback_context.agent_name
@@ -751,6 +802,7 @@ def guard_model_request(callback_context, llm_request):
     _bind_callback_tokens(callback_context)
     _detach_request_parts_from_session_history(llm_request)
     prepare_model_tool_results(llm_request)
+    align_system_instruction(llm_request)
     context_token_limit = max(1, resolve_ollama_context_length())
     _enforce_request_token_budget(llm_request, context_token_limit)
     estimated_prompt_tokens = _estimate_request_token_count(llm_request)
@@ -786,7 +838,7 @@ def guard_model_request(callback_context, llm_request):
 
     if callback_context.state.get(_agent_state_key(agent_name, "stop_tools")):
         _remove_all_tools(llm_request)
-        llm_request.append_instructions([_wrap_up_instruction(stop_reason)])
+        _append_wrap_up(llm_request, stop_reason)
     return None
 
 

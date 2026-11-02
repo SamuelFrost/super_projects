@@ -32,6 +32,7 @@ from lllm.tools.callback_tokens import (
     recall_callback_token,
     store_callback_token,
 )
+from lllm.runtime_modifiers.inline_subagent_trace import InlineSubagentTracePlugin
 from lllm.runtime_modifiers.turn_guards import (
     guard_model_request,
     guard_model_response,
@@ -148,6 +149,12 @@ _CALLBACK_TOKEN_INSTRUCTION = (
     "A tool call recalls a token in its arguments, and the final answer to the "
     "user also automatically recalls the token so generally pass the token through absolutely unmodified. "
 )
+# One system instruction for every agent in a session. Role text stays in
+# `instruction` and is sent in the conversation, ahead of the real turns.
+SHARED_STATIC_INSTRUCTION = (
+    "You are a local AI agent in the super_projects devcontainer. "
+    f"{_CALLBACK_TOKEN_INSTRUCTION}"
+)
 _callback_token_tools = [
     FunctionTool(store_callback_token),
     FunctionTool(recall_callback_token),
@@ -166,6 +173,7 @@ browser_agent = LlmAgent(
     model=model,
     generate_content_config=_generation_config(),
     description="Executes direct browser actions and inspections in the devcontainer Chrome instance.",
+    static_instruction=SHARED_STATIC_INSTRUCTION,
     instruction=(
         "You are the local AI model in the super_projects devcontainer in charge of operating the browser. "
         "Your primary purpose is to simply operate the browser and report back once you've completed the task. "
@@ -241,6 +249,7 @@ files_agent = LlmAgent(
     model=model,
     generate_content_config=_generation_config(),
     description="Executes direct file listing, search, read, and edit operations in the devcontainer.",
+    static_instruction=SHARED_STATIC_INSTRUCTION,
     instruction=(
         "You are the local AI model in the super_projects devcontainer in control of the project's filesystem. "
         f"The project's primary workspace is {workspace}. "
@@ -272,6 +281,7 @@ root_agent = LlmAgent(
         "Local coordinator for general tasks and thinking that orchestrates "
         "and verifies finer-grained interactions with browser_agent and files_agent."
     ),
+    static_instruction=SHARED_STATIC_INSTRUCTION,
     instruction=(
         "You are the local AI model in the super_projects devcontainer. "
         "Attempt to complete the work delegated to you. "
@@ -340,7 +350,16 @@ def agent_name_from_app_name(app_name: str) -> str:
     return app_name
 
 
-app = App(name=prefixed_app_name(root_agent.name), root_agent=root_agent)
+def _app_for_root(root) -> App:
+    """An app whose delegated sub-agent events stay on the main transcript."""
+    return App(
+        name=prefixed_app_name(root.name),
+        root_agent=root,
+        plugins=[InlineSubagentTracePlugin()],
+    )
+
+
+app = _app_for_root(root_agent)
 
 
 def agents_in_composition_order(agent=None) -> list:
@@ -385,7 +404,4 @@ def app_for_agent(agent_name: str | None = None) -> App:
     selected_agent_clone = selected_agent.clone()
     if selected_agent_clone.mode == "single_turn":
         selected_agent_clone.mode = "chat"
-    return App(
-        name=prefixed_app_name(resolved_agent_name),
-        root_agent=selected_agent_clone,
-    )
+    return _app_for_root(selected_agent_clone)

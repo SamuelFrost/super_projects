@@ -2,9 +2,10 @@
 
 Small local models running against browser snapshots can fail in three common ways:
 - Context exhaustion (`TURN_OUTCOME_CONTEXT_EXHAUSTED`): Tool payloads exceed the
-  Ollama context window. `guard_model_request` detaches session history, drops
-  turns prior to the latest human prompt, shrinks older tool payloads, and strips
-  tool declarations before giving up so the model has room to summarize what it knows.
+  Ollama context window. `guard_model_request` detaches session history, replaces
+  turns before the latest activity with a short extractive summary, keeps that
+  latest activity, shrinks earlier tool payloads inside it, and strips tool
+  declarations before giving up so the model has room to answer.
 - Stalled tool loops (`TURN_OUTCOME_STALLED`): The agent repeats the exact same
   1-to-4 tool call/result sequence three times without learning anything new.
 - Repetition loops (`TURN_OUTCOME_REPETITION`): The model gets stuck repeating a
@@ -33,6 +34,9 @@ from lllm.runtime_modifiers.tool_results import (
 )
 
 CONTEXT_USAGE_RATIO_THAT_STOPS_TOOL_USE = 0.80
+_SUMMARY_NOTICE = "[Earlier turns summarized to fit the context window]"
+_SUMMARY_SNIPPET_CHARACTERS = 160
+_SUMMARY_CHARACTER_LIMIT = 1500
 MIN_REMAINING_CONTEXT_TOKENS_FOR_MODEL_RESPONSE = 256
 MINIMUM_TOKENS_TO_KEEP_WHEN_SHRINKING_ONE_PAYLOAD = 32
 REPEATED_OBSERVATION_RUNS_BEFORE_STALL = 3
@@ -370,12 +374,79 @@ def _latest_human_user_index(contents) -> int | None:
     return latest_index
 
 
-def _drop_history_before_latest_user_request(llm_request) -> None:
+def _short_summary_snippet(text: str) -> str:
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= _SUMMARY_SNIPPET_CHARACTERS:
+        return collapsed
+    return collapsed[:_SUMMARY_SNIPPET_CHARACTERS] + "..."
+
+
+def _summary_lines(contents) -> list[str]:
+    lines: list[str] = []
+    for content in contents:
+        role = "Assistant" if getattr(content, "role", None) == "model" else "User"
+        for part in content.parts or []:
+            function_call = part.function_call
+            if function_call is not None and function_call.name:
+                lines.append(f"Tool call: {function_call.name}")
+                continue
+            function_response = part.function_response
+            if function_response is not None and function_response.name:
+                lines.append(f"Tool result: {function_response.name}")
+                continue
+            if part.text and not part.thought:
+                lines.append(f"{role}: {_short_summary_snippet(part.text)}")
+    return lines
+
+
+def _extractive_summary(contents) -> str:
+    """A short stand-in for turns that no longer fit before the latest activity."""
+    body = "\n".join(_summary_lines(contents))
+    if len(body) > _SUMMARY_CHARACTER_LIMIT:
+        body = body[-_SUMMARY_CHARACTER_LIMIT:]
+        if "\n" in body:
+            body = body.split("\n", 1)[1]
+    return f"{_SUMMARY_NOTICE}\n{body}"
+
+
+def _summarize_history_before_latest_activity(llm_request) -> None:
+    """Replace turns before the latest human message with one summary message.
+
+    The latest activity is that human message plus every model and tool message
+    after it. Those messages stay verbatim. The persisted session is unchanged
+    because this edits the detached request copy.
+    """
     contents = list(llm_request.contents or [])
     latest_user_index = _latest_human_user_index(contents)
     if latest_user_index is None or latest_user_index <= 0:
         return
-    llm_request.contents = contents[latest_user_index:]
+    summary = types.Content(
+        role="user",
+        parts=[types.Part(text=_extractive_summary(contents[:latest_user_index]))],
+    )
+    llm_request.contents = [summary, *contents[latest_user_index:]]
+
+
+def _latest_tool_exchange_part_ids(contents) -> set[int]:
+    """The last tool call and the function response that belongs with it."""
+    last_response_part = None
+    last_response_name = None
+    for content in contents or []:
+        for part in content.parts or []:
+            function_response = part.function_response
+            if function_response is not None and function_response.name:
+                last_response_part = part
+                last_response_name = function_response.name
+    if last_response_part is None:
+        return set()
+    protected_part_ids = {id(last_response_part)}
+    for content in reversed(list(contents or [])):
+        for part in reversed(content.parts or []):
+            function_call = part.function_call
+            if function_call is not None and function_call.name == last_response_name:
+                protected_part_ids.add(id(part))
+                return protected_part_ids
+    return protected_part_ids
 
 
 def _part_payload_tokens(part) -> int:
@@ -393,10 +464,18 @@ def _part_payload_tokens(part) -> int:
     return _estimate_text_tokens("\n".join(fragments))
 
 
-def _shrinkable_parts(llm_request, *, include_latest_user_text: bool):
+def _shrinkable_parts(
+    llm_request,
+    *,
+    include_latest_user_text: bool,
+    protected_part_ids: set[int] | None = None,
+):
+    protected_part_ids = protected_part_ids or set()
     latest_user_index = _latest_human_user_index(llm_request.contents)
     for index, content in enumerate(llm_request.contents or []):
         for part in content.parts or []:
+            if id(part) in protected_part_ids:
+                continue
             preserves_latest_user_text = (
                 not include_latest_user_text
                 and index == latest_user_index
@@ -432,14 +511,25 @@ def _prompt_token_target(context_token_limit: int) -> int:
 
 
 def _shrink_parts_to_target(
-    llm_request, token_target: int, *, include_latest_user_text: bool
+    llm_request,
+    token_target: int,
+    *,
+    include_latest_user_text: bool,
+    protect_latest_tool_exchange: bool = False,
 ) -> None:
     estimated_tokens = _estimate_request_token_count(llm_request)
     if estimated_tokens <= token_target:
         return
+    protected_part_ids = (
+        _latest_tool_exchange_part_ids(llm_request.contents)
+        if protect_latest_tool_exchange
+        else set()
+    )
     parts = list(
         _shrinkable_parts(
-            llm_request, include_latest_user_text=include_latest_user_text
+            llm_request,
+            include_latest_user_text=include_latest_user_text,
+            protected_part_ids=protected_part_ids,
         )
     )
     shrinkable_tokens = sum(_part_payload_tokens(part) for part in parts)
@@ -454,24 +544,31 @@ def _shrink_parts_to_target(
 def _enforce_request_token_budget(llm_request, context_token_limit: int) -> None:
     """Trim the request in stages until it fits `token_target`.
 
-    1. Drop conversation history before the latest human message.
-    2. Shrink tool calls, tool results, and assistant text while keeping the
-       latest human prompt intact.
+    1. Replace turns before the latest activity with a short summary, and leave
+       that activity verbatim.
+    2. Shrink earlier tool calls and results inside the latest activity. The
+       latest tool call/result pair and the latest human prompt stay whole.
     3. Shrink the latest human prompt only if the request still overflows.
     """
     token_target = _prompt_token_target(context_token_limit)
     if _estimate_request_token_count(llm_request) <= token_target:
         return
-    _drop_history_before_latest_user_request(llm_request)
+    _summarize_history_before_latest_activity(llm_request)
     if _estimate_request_token_count(llm_request) <= token_target:
         return
     _shrink_parts_to_target(
-        llm_request, token_target, include_latest_user_text=False
+        llm_request,
+        token_target,
+        include_latest_user_text=False,
+        protect_latest_tool_exchange=True,
     )
     if _estimate_request_token_count(llm_request) <= token_target:
         return
     _shrink_parts_to_target(
-        llm_request, token_target, include_latest_user_text=True
+        llm_request,
+        token_target,
+        include_latest_user_text=True,
+        protect_latest_tool_exchange=True,
     )
 
 

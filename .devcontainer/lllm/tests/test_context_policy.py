@@ -18,8 +18,10 @@ from lllm.runtime_modifiers.turn_guards import (
     TURN_OUTCOME_CONTEXT_EXHAUSTED,
     TURN_OUTCOME_REPETITION,
     TURN_OUTCOME_STALLED,
+    _SUMMARY_NOTICE,
     _agent_state_key,
     _detach_part_from_session_history,
+    _enforce_request_token_budget,
     guard_model_request,
     guard_model_response,
     _record_turn_outcome,
@@ -176,14 +178,44 @@ class ContextPolicyTests(unittest.TestCase):
     def test_oversized_tool_result_is_shrunk_on_the_request_copy_only(self):
         original_text = "x" * 40000
         function_response = types.FunctionResponse(
-            name="take_snapshot", response={"text": original_text}
+            name="list_pages", response={"text": original_text}
         )
         session_part = types.Part(function_response=function_response)
         request_part = session_part.model_copy()
+        latest_text = "latest snapshot stays whole"
         request = LlmRequest(
             contents=[
                 types.Content(role="user", parts=[types.Part(text="inspect this page")]),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(name="list_pages", args={})
+                        )
+                    ],
+                ),
                 types.Content(role="user", parts=[request_part]),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name="take_snapshot", args={}
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            function_response=types.FunctionResponse(
+                                name="take_snapshot",
+                                response={"text": latest_text},
+                            )
+                        )
+                    ],
+                ),
             ]
         )
         context = SimpleNamespace(agent_name="browser_agent", state={})
@@ -192,6 +224,53 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertIsNot(request_part.function_response, function_response)
         self.assertLess(
             len(request_part.function_response.response["text"]), len(original_text)
+        )
+        self.assertEqual(
+            request.contents[-1].parts[0].function_response.response["text"],
+            latest_text,
+        )
+
+    def test_older_turns_are_summarized_and_the_latest_tool_result_stays_whole(self):
+        os.environ["OLLAMA_CONTEXT_LENGTH"] = "800"
+        older_answer = "prior observation " * 400
+        latest_result = "LATEST_RESULT_MARKER " + ("detail " * 20)
+        request = LlmRequest(
+            contents=[
+                types.Content(role="user", parts=[types.Part(text="first question")]),
+                types.Content(role="model", parts=[types.Part(text=older_answer)]),
+                types.Content(role="user", parts=[types.Part(text="second question")]),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name="take_snapshot", args={}
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            function_response=types.FunctionResponse(
+                                name="take_snapshot",
+                                response={"text": latest_result},
+                            )
+                        )
+                    ],
+                ),
+            ]
+        )
+        _enforce_request_token_budget(request, 800)
+        summary = request.contents[0].parts[0].text
+        self.assertTrue(summary.startswith(_SUMMARY_NOTICE))
+        self.assertIn("first question", summary)
+        self.assertNotIn(older_answer, summary)
+        self.assertEqual(request.contents[1].parts[0].text, "second question")
+        self.assertEqual(
+            request.contents[-1].parts[0].function_response.response["text"],
+            latest_result,
         )
 
     def test_inline_image_is_omitted_from_the_request_copy_only(self):

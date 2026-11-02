@@ -26,7 +26,11 @@ import urllib.request
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
-from lllm.tools.callback_tokens import begin_callback_token_tracking, prepare_tool_arguments
+from lllm.tools.callback_tokens import (
+    begin_callback_token_tracking,
+    bind_callback_tokens_to_session,
+    prepare_tool_arguments,
+)
 from lllm.runtime_modifiers.tool_results import (
     is_image_payload,
     truncated_url_cut_index,
@@ -744,6 +748,7 @@ def guard_model_request(callback_context, llm_request):
                 ],
             )
         )
+    _bind_callback_tokens(callback_context)
     _detach_request_parts_from_session_history(llm_request)
     prepare_model_tool_results(llm_request)
     context_token_limit = max(1, resolve_ollama_context_length())
@@ -854,8 +859,16 @@ def guard_model_response(callback_context, llm_response):
     return llm_response
 
 
+def _bind_callback_tokens(tool_or_callback_context) -> None:
+    session = getattr(tool_or_callback_context, "session", None)
+    session_id = getattr(session, "id", None)
+    if isinstance(session_id, str) and session_id:
+        bind_callback_tokens_to_session(session_id)
+
+
 def skip_tools_when_stopping(tool, args, tool_context):
     """ADK `before_tool_callback`: block tools after a stop, or expand callback tokens in `args`."""
+    _bind_callback_tokens(tool_context)
     if tool_context.state.get(_agent_state_key(tool_context.agent_name, "stop_tools")):
         return {
             "skipped": True,

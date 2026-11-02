@@ -15,6 +15,10 @@ from google.adk.sessions.sqlite_session_service import SqliteSessionService
 from google.genai import types
 
 from lllm.session_store import UnknownSessionError
+from lllm.tools.callback_tokens import (
+    bind_callback_tokens_to_session,
+    use_callback_token_database,
+)
 
 
 class AdkSession:
@@ -41,6 +45,7 @@ class AdkSession:
     ) -> "AdkSession":
         """Create a session, or resume one already stored in `session_db`."""
         session_db.parent.mkdir(parents=True, exist_ok=True)
+        use_callback_token_database(session_db)
         session_service = SqliteSessionService(str(session_db))
         runner = Runner(app=app, session_service=session_service)
         if session_id:
@@ -65,6 +70,7 @@ class AdkSession:
         run_config: RunConfig,
     ) -> AsyncIterator[Event]:
         """Send one prompt. Iterating this is what makes ADK run."""
+        bind_callback_tokens_to_session(self.session.id)
         return self.runner.run_async(
             user_id=self.user_id,
             session_id=self.session.id,

@@ -329,6 +329,14 @@ RUN npm config set prefix /home/developer/.npm-global && \
     npm install -g @google/gemini-cli
 
 # ------------------------------------------------------------------------------
+# AI coding CLI: OpenAI Codex.  Run `codex` in the terminal.
+#   - Sign in with a ChatGPT account, or export OPENAI_API_KEY.
+#   - Config/sessions live in ~/.codex.
+#   Docs: https://github.com/openai/codex
+# ------------------------------------------------------------------------------
+RUN npm install -g @openai/codex
+
+# ------------------------------------------------------------------------------
 # Cursor agent CLI — register this devcontainer as a My Machines Cloud Agent worker.
 #   Docs: https://cursor.com/docs/cloud-agent/my-machines
 # ------------------------------------------------------------------------------

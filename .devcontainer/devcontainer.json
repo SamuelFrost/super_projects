@@ -46,6 +46,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "openai.chatgpt",
         "Shopify.ruby-lsp",
         "streetsidesoftware.code-spell-checker",
         "eamodio.gitlens",

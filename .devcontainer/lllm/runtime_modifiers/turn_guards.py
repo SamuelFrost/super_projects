@@ -4,8 +4,9 @@ Small local models running against browser snapshots can fail in three common wa
 - Context exhaustion (`TURN_OUTCOME_CONTEXT_EXHAUSTED`): Tool payloads exceed the
   Ollama context window. `guard_model_request` detaches session history, replaces
   turns before the latest activity with a short extractive summary, keeps that
-  latest activity, shrinks earlier tool payloads inside it, and strips tool
-  declarations before giving up so the model has room to answer.
+  latest activity, and shrinks tool payloads inside it. The latest result is
+  preserved unless it cannot fit. Estimates learn from provider token usage;
+  tool declarations are stripped before giving up so the model can answer.
 - Stalled tool loops (`TURN_OUTCOME_STALLED`): The agent repeats the exact same
   1-to-4 tool call/result sequence three times without learning anything new.
 - Repetition loops (`TURN_OUTCOME_REPETITION`): The model gets stuck repeating a
@@ -21,7 +22,9 @@ the CLI exits with code 75 (`INCOMPLETE_TURN_EXIT_CODE`).
 import contextvars
 import json
 import os
+import re
 import urllib.request
+from math import ceil
 
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
@@ -52,6 +55,7 @@ REPETITION_DETECTION_MINIMUM_REPEATS = 8
 MIN_ESTIMATED_TOKENS_PER_INLINE_IMAGE = 2000
 ESTIMATED_INLINE_IMAGE_BYTES_PER_TOKEN = 4
 DEFAULT_OLLAMA_CONTEXT_WINDOW_TOKENS = 4096
+PROMPT_TOKEN_CALIBRATION_MARGIN = 1.1
 
 TURN_OUTCOME_COMPLETED = "completed"
 TURN_OUTCOME_CONTEXT_EXHAUSTED = "context_exhausted"
@@ -135,14 +139,24 @@ def resolve_ollama_context_length() -> int:
 
 
 def _estimate_text_tokens(text: str) -> int:
-    """Tokens are about 4 characters in English and 1 in Japanese or other
-    non-ASCII scripts. Counting every character as a quarter token made this
-    guard fire a factor of four late on Japanese pages."""
-    if text.isascii():
-        return len(text) // 4
-    ascii_characters = sum(1 for character in text if character.isascii())
+    """Estimate prose cheaply, reserving more for URLs and dense identifiers.
+
+    Long unbroken ASCII runs can approach one token per character rather than
+    the four characters typical of English. Budget them conservatively even
+    before provider usage is available to calibrate subsequent requests.
+    """
+    ascii_characters = (
+        len(text) if text.isascii()
+        else sum(1 for character in text if character.isascii())
+    )
     non_ascii_characters = len(text) - ascii_characters
-    return ascii_characters // 4 + non_ascii_characters
+    dense_ascii_characters = sum(
+        len(match.group()) for match in re.finditer(r"[!-~]{32,}", text)
+    )
+    return (
+        (ascii_characters - dense_ascii_characters) // 4
+        + dense_ascii_characters + non_ascii_characters
+    )
 
 
 def _estimate_request_token_count(llm_request) -> int:
@@ -507,9 +521,10 @@ def _shrink_part_payloads(part, keep_ratio: float) -> None:
 
 
 def _prompt_token_target(context_token_limit: int) -> int:
+    # Stay below the 80% tool-stop threshold even after truncation markers are added.
     response_reserve = max(
         MIN_REMAINING_CONTEXT_TOKENS_FOR_MODEL_RESPONSE,
-        context_token_limit // 5,
+        context_token_limit // 4,
     )
     return max(1, context_token_limit - response_reserve)
 
@@ -553,6 +568,7 @@ def _enforce_request_token_budget(llm_request, context_token_limit: int) -> None
     2. Shrink earlier tool calls and results inside the latest activity. The
        latest tool call/result pair and the latest human prompt stay whole.
     3. Shrink the latest human prompt only if the request still overflows.
+    4. Shrink the latest tool exchange too if it cannot fit in the window.
     """
     token_target = _prompt_token_target(context_token_limit)
     if _estimate_request_token_count(llm_request) <= token_target:
@@ -574,6 +590,11 @@ def _enforce_request_token_budget(llm_request, context_token_limit: int) -> None
         include_latest_user_text=True,
         protect_latest_tool_exchange=True,
     )
+    if _estimate_request_token_count(llm_request) > token_target:
+        # A single snapshot can exceed the budget even after older data is gone.
+        _shrink_parts_to_target(
+            llm_request, token_target, include_latest_user_text=False
+        )
 
 
 def _tool_observations(contents) -> list[tuple[str, str, str]]:
@@ -804,8 +825,15 @@ def guard_model_request(callback_context, llm_request):
     prepare_model_tool_results(llm_request)
     align_system_instruction(llm_request)
     context_token_limit = max(1, resolve_ollama_context_length())
-    _enforce_request_token_budget(llm_request, context_token_limit)
-    estimated_prompt_tokens = _estimate_request_token_count(llm_request)
+    token_multiplier = max(1.0, callback_context.state.get(
+        _agent_state_key(agent_name, "prompt_token_multiplier"), 1.0
+    ))
+    _enforce_request_token_budget(
+        llm_request, max(1, int(context_token_limit / token_multiplier))
+    )
+    estimated_prompt_tokens = ceil(
+        _estimate_request_token_count(llm_request) * token_multiplier
+    )
     callback_context.state[_agent_state_key(agent_name, "context_ratio")] = round(
         estimated_prompt_tokens / context_token_limit, 3
     )
@@ -815,14 +843,15 @@ def guard_model_request(callback_context, llm_request):
         and (llm_request.tools_dict or (llm_request.config and llm_request.config.tools))
     ):
         _remove_all_tools(llm_request)
-        estimated_prompt_tokens = _estimate_request_token_count(llm_request)
+        estimated_prompt_tokens = ceil(
+            _estimate_request_token_count(llm_request) * token_multiplier
+        )
         remaining_tokens = context_token_limit - estimated_prompt_tokens
     if remaining_tokens < MIN_REMAINING_CONTEXT_TOKENS_FOR_MODEL_RESPONSE:
         _record_turn_outcome(agent_name, TURN_OUTCOME_CONTEXT_EXHAUSTED)
         _stop_tools(callback_context, "context")
         return _context_stop_response()
 
-    _cap_output_tokens(llm_request, context_token_limit, estimated_prompt_tokens)
     tool_observations = _tool_observations(llm_request.contents)
     stop_reason = callback_context.state.get(_agent_state_key(agent_name, "stop_reason"))
     if _tool_observations_are_repeating(tool_observations):
@@ -839,6 +868,12 @@ def guard_model_request(callback_context, llm_request):
     if callback_context.state.get(_agent_state_key(agent_name, "stop_tools")):
         _remove_all_tools(llm_request)
         _append_wrap_up(llm_request, stop_reason)
+    # Measure the final request, after any tools or wrap-up instructions changed it.
+    prompt_estimate = _estimate_request_token_count(llm_request)
+    callback_context.state[_agent_state_key(agent_name, "prompt_estimate")] = prompt_estimate
+    _cap_output_tokens(
+        llm_request, context_token_limit, ceil(prompt_estimate * token_multiplier)
+    )
     return None
 
 
@@ -855,6 +890,16 @@ def guard_model_response(callback_context, llm_response):
         callback_context.state[_agent_state_key(agent_name, "prompt_tokens")] = (
             usage_metadata.prompt_token_count
         )
+        prompt_estimate = callback_context.state.get(
+            _agent_state_key(agent_name, "prompt_estimate")
+        )
+        if prompt_estimate and not llm_response.partial:
+            multiplier_key = _agent_state_key(agent_name, "prompt_token_multiplier")
+            callback_context.state[multiplier_key] = max(
+                callback_context.state.get(multiplier_key, 1.0),
+                usage_metadata.prompt_token_count / prompt_estimate
+                * PROMPT_TOKEN_CALIBRATION_MARGIN,
+            )
 
     streamed_text_key = _agent_state_key(agent_name, "streamed_text")
     streamed_answer_key = _agent_state_key(agent_name, "streamed_answer")

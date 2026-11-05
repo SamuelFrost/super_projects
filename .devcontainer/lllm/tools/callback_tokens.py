@@ -30,6 +30,7 @@ from google.adk.tools.tool_context import ToolContext
 from lllm.session_store import default_session_database
 
 _CALLBACK_TOKEN_OPEN = "[encoded_callback_token "
+_MAXIMUM_CALLBACK_TOKEN_PREFIX_CHARACTERS = 128
 # Text shorter than 20 characters stays as written.
 _CALLBACK_TOKEN_PREVIEW_LENGTH = 20
 _CALLBACK_TOKEN_MINIMUM_TEXT_LENGTH = _CALLBACK_TOKEN_PREVIEW_LENGTH
@@ -75,14 +76,17 @@ def begin_callback_token_tracking() -> None:
     _stored_callback_character_count.set(0)
 
 
-def bind_callback_tokens_to_session(session_id: str, database: Path | None = None) -> None:
-    """Look up tokens for this lllm session. The same bucket is shared with child tasks."""
+def bind_callback_tokens_to_session(
+    session_id: str, database: Path | None = None, *, refresh: bool = False
+) -> None:
+    """Bind this task's token bucket; refresh reloads values saved elsewhere."""
     if not session_id or session_id.startswith(_EPHEMERAL_SESSION_PREFIX):
         return
     if database is not None:
         _callback_token_database.set(database)
     if (
-        _active_callback_session_id.get() == session_id
+        not refresh
+        and _active_callback_session_id.get() == session_id
         and isinstance(_callback_tokens_for_turn.get(), dict)
     ):
         return
@@ -342,8 +346,14 @@ def _text_with_callback_tokens_expanded(text: str, session_id: str | None = None
 
 def expand_callback_tokens_for_session(text: str, session_id: str) -> str:
     """Replace tokens in displayed text using this lllm session's stored values."""
-    if not text or not session_id:
+    matches = list(_CALLBACK_TOKEN_IN_TEXT.finditer(text))
+    if not matches or not session_id:
         return text
+    bind_callback_tokens_to_session(session_id)
+    if any(match.group(1) not in _turn_tokens() for match in matches):
+        # The runner can store a token in another task/process after this output
+        # task first read the session. Token values are immutable; refresh misses.
+        bind_callback_tokens_to_session(session_id, refresh=True)
     return _text_with_callback_tokens_expanded(text, session_id)
 
 
@@ -433,23 +443,32 @@ def _unfinished_callback_token_suffix(text: str) -> tuple[str, str]:
     if bracket_at == -1:
         return text, ""
     tail = text[bracket_at:]
-    token_is_unfinished = "]" not in tail and (
-        _CALLBACK_TOKEN_OPEN.startswith(tail) or tail.startswith(_CALLBACK_TOKEN_OPEN)
+    token_is_unfinished = len(tail) <= _MAXIMUM_CALLBACK_TOKEN_PREFIX_CHARACTERS and (
+        _CALLBACK_TOKEN_OPEN.startswith(tail)
+        or re.fullmatch(r"\[encoded_callback_token \d*(?:_\d*)?", tail) is not None
     )
     if token_is_unfinished:
         return text[:bracket_at], tail
     return text, ""
 
 
-def expand_visible_callback_tokens(text: str, *, flush: bool) -> tuple[str, str]:
-    """Replace callback tokens in an answer with the stored text for this session."""
-    session_id = _active_callback_session_id.get()
+def expand_callback_token_text_chunk(
+    text: str, session_id: str | None, *, flush: bool
+) -> tuple[str, str]:
+    """Expand safe text now and hold only a possible unfinished placeholder."""
     if not session_id:
         return text, ""
     held_token = ""
     if not flush:
         text, held_token = _unfinished_callback_token_suffix(text)
-    return _text_with_callback_tokens_expanded(text, session_id), held_token
+    return expand_callback_tokens_for_session(text, session_id), held_token
+
+
+def expand_visible_callback_tokens(text: str, *, flush: bool) -> tuple[str, str]:
+    """Replace callback tokens in an answer with the stored text for this session."""
+    return expand_callback_token_text_chunk(
+        text, _active_callback_session_id.get(), flush=flush
+    )
 
 
 def _callback_token_id_from_text(text: str) -> str:

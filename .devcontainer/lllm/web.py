@@ -14,6 +14,7 @@ from lllm.agent import named_apps, prefixed_app_name
 from lllm.session_store import session_database_uri
 from lllm.session_transcript import install_session_transcript_writer
 from lllm.tools.callback_tokens import expand_callback_token_output_body
+from lllm.web_output import CallbackTokenSseExpander
 
 _SESSION_ID_IN_PATH = re.compile(r"/sessions/([^/]+)")
 
@@ -73,10 +74,15 @@ class _ExpandCallbackTokensOnOutput:
         path_match = _SESSION_ID_IN_PATH.search(path)
         if path_match:
             session_id = path_match.group(1)
-        if path.rstrip("/").endswith("/run_sse"):
+        if path.rstrip("/").endswith(("/run_sse", "/run")):
             body = await _read_http_body(receive)
             try:
-                session_id = json.loads(body.decode("utf-8")).get("session_id") or session_id
+                request = json.loads(body.decode("utf-8"))
+                requested_session = request.get("sessionId") or request.get(
+                    "session_id"
+                )
+                if isinstance(requested_session, str):
+                    session_id = requested_session or session_id
             except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
                 pass
             # StreamingResponse waits on receive() for http.disconnect. A replay
@@ -89,26 +95,50 @@ class _ExpandCallbackTokensOnOutput:
             return
 
         content_type = ""
+        sse_expander = None
+        json_body = bytearray()
+        expand_json = False
 
         async def send_expanded(message):
-            nonlocal content_type
+            nonlocal content_type, sse_expander, expand_json
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers") or [])
                 for name, value in headers:
                     if name.lower() == b"content-type":
                         content_type = value.decode("latin1")
-                if any(name.lower() == b"content-length" for name, _value in headers):
+                media_type = content_type.split(";", 1)[0].strip().lower()
+                encoded = any(
+                    name.lower() == b"content-encoding" and value.lower() != b"identity"
+                    for name, value in headers
+                )
+                expand_json = not encoded and (
+                    media_type == "application/json" or media_type.endswith("+json")
+                )
+                if not encoded and media_type == "text/event-stream":
+                    sse_expander = CallbackTokenSseExpander(session_id)
+                if sse_expander is not None or expand_json:
                     headers = [
                         (name, value)
                         for name, value in headers
                         if name.lower() != b"content-length"
                     ]
                     message = {**message, "headers": headers}
-            elif message["type"] == "http.response.body" and message.get("body"):
+            elif message["type"] == "http.response.body" and sse_expander is not None:
+                message = {
+                    **message,
+                    "body": sse_expander.feed(
+                        message.get("body") or b"",
+                        final=not message.get("more_body", False),
+                    ),
+                }
+            elif message["type"] == "http.response.body" and expand_json:
+                json_body.extend(message.get("body") or b"")
+                if message.get("more_body", False):
+                    return
                 message = {
                     **message,
                     "body": expand_callback_token_output_body(
-                        message["body"], session_id, content_type
+                        bytes(json_body), session_id, content_type
                     ),
                 }
             await send(message)

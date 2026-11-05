@@ -18,3 +18,9 @@ parallel tool-call/result pairing. A real ADK runner with a deterministic model
 verifies that full role instructions and the current request survive compaction
 while follow-up tools still run and stored observations remain unchanged.
 Oversized protected content must stop explicitly rather than be truncated.
+
+`test_web_streaming.py` exercises callback display across byte-split UTF-8,
+SSE records, and individual model text deltas. It covers request-field aliases,
+final/partial event handling, separate stream identities/channels, late token
+creation in another task, unknown/incomplete references, preserved SSE metadata,
+session isolation, and JSON versus binary/encoded response handling.

@@ -2,11 +2,11 @@
 
 Small local models running against browser snapshots can fail in three common ways:
 - Context exhaustion (`TURN_OUTCOME_CONTEXT_EXHAUSTED`): Tool payloads exceed the
-  Ollama context window. `guard_model_request` detaches session history, replaces
-  turns before the latest activity with a short extractive summary, keeps that
-  latest activity, and shrinks tool payloads inside it. The latest result is
-  preserved unless it cannot fit. Estimates learn from provider token usage;
-  tool declarations are stripped before giving up so the model can answer.
+  Ollama context window. `guard_model_request` preserves system/role instructions
+  and the current user request, summarizes earlier requests and progress, and
+  retains a bounded recent tail. Estimates learn from provider token usage.
+  Tool declarations may be removed to make room, but protected instructions
+  and the request are never truncated; an impossible request stops explicitly.
 - Stalled tool loops (`TURN_OUTCOME_STALLED`): The agent repeats the exact same
   1-to-4 tool call/result sequence three times without learning anything new.
 - Repetition loops (`TURN_OUTCOME_REPETITION`): The model gets stuck repeating a
@@ -26,6 +26,7 @@ import re
 import urllib.request
 from math import ceil
 
+from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
@@ -43,7 +44,9 @@ from lllm.runtime_modifiers.tool_results import (
 CONTEXT_USAGE_RATIO_THAT_STOPS_TOOL_USE = 0.80
 _SUMMARY_NOTICE = "[Earlier turns summarized to fit the context window]"
 _SUMMARY_SNIPPET_CHARACTERS = 160
-_SUMMARY_CHARACTER_LIMIT = 1500
+CONTEXT_SUMMARY_WINDOW_FRACTION = 1 / 8
+CONTEXT_TAIL_WINDOW_FRACTION = 1 / 4
+MAXIMUM_CONTEXT_TAIL_USER_REQUESTS = 3
 MIN_REMAINING_CONTEXT_TOKENS_FOR_MODEL_RESPONSE = 256
 MINIMUM_TOKENS_TO_KEEP_WHEN_SHRINKING_ONE_PAYLOAD = 32
 REPEATED_OBSERVATION_RUNS_BEFORE_STALL = 3
@@ -104,7 +107,8 @@ def _reason_a_tool_call_was_skipped(stop_reason: str | None) -> str:
 _NOTICE_WHEN_REPETITIVE_RESPONSE_IS_CUT_OFF = _notice_to_finish("repetition")
 _NOTICE_WHEN_CONTEXT_IS_FULL = (
     "[This turn stopped because the context window is full. "
-    "Another tool result will not fit. "
+    "The protected instructions and current request cannot fit with enough "
+    "room for a response. "
     f"{_ANSWER_NOW_WITH_WHAT_YOU_HAVE}]"
 )
 _PLACEHOLDER_FOR_OMITTED_IMAGE = "[image omitted from this request]"
@@ -285,14 +289,21 @@ def _text_with_repeated_loop_removed(text: str) -> str:
 
 
 def _fit_text_to_token_budget(text: str, token_budget: int) -> str:
-    token_budget = max(1, token_budget)
+    token_budget = max(0, token_budget)
     if _estimate_text_tokens(text) <= token_budget:
         return text
-    estimated_tokens = max(1, _estimate_text_tokens(text))
-    keep_characters = max(1, int(len(text) * token_budget / estimated_tokens))
-    if keep_characters >= len(text):
-        return text
-    return text[:keep_characters] + "\n[truncated to fit the model context window]"
+    marker = "\n[truncated to fit the model context window]"
+    if _estimate_text_tokens(marker) > token_budget:
+        return ""
+    # Include the marker in the budget, including for dense/non-ASCII payloads.
+    lower, upper = 0, len(text)
+    while lower < upper:
+        middle = (lower + upper + 1) // 2
+        if _estimate_text_tokens(text[:middle] + marker) <= token_budget:
+            lower = middle
+        else:
+            upper = middle - 1
+    return text[:lower] + marker
 
 
 def _shrink_text(text: str, keep_ratio: float) -> str:
@@ -364,7 +375,11 @@ def _detach_part_from_session_history(part) -> None:
 
 
 def _detach_request_parts_from_session_history(llm_request) -> None:
-    for message_content in llm_request.contents or []:
+    latest_user_index = _latest_human_user_index(llm_request.contents)
+    for index, message_content in enumerate(llm_request.contents or []):
+        if index == latest_user_index or _is_role_instruction(message_content):
+            # The current request is immutable, including any attached image.
+            continue
         for part in message_content.parts or []:
             _detach_part_from_session_history(part)
 
@@ -373,6 +388,8 @@ def _latest_human_user_index(contents) -> int | None:
     latest_index = None
     for index, content in enumerate(contents or []):
         if getattr(content, "role", None) != "user":
+            continue
+        if _is_role_instruction(content) or _is_other_agent_transcript(content):
             continue
         parts = content.parts or []
         if any(part.function_response is not None for part in parts):
@@ -385,75 +402,125 @@ def _short_summary_snippet(text: str) -> str:
     collapsed = " ".join(text.split())
     if len(collapsed) <= _SUMMARY_SNIPPET_CHARACTERS:
         return collapsed
-    return collapsed[:_SUMMARY_SNIPPET_CHARACTERS] + "..."
+    half = (_SUMMARY_SNIPPET_CHARACTERS - 5) // 2
+    return collapsed[:half] + " ... " + collapsed[-half:]
 
 
 def _summary_lines(contents) -> list[str]:
+    """Observed updates, not inferred claims that a task was completed."""
     lines: list[str] = []
     for content in contents:
         role = "Assistant" if getattr(content, "role", None) == "model" else "User"
         for part in content.parts or []:
             function_call = part.function_call
             if function_call is not None and function_call.name:
-                lines.append(f"Tool call: {function_call.name}")
+                arguments = _short_summary_snippet(str(function_call.args or {}))
+                lines.append(f"Requested action: {function_call.name} {arguments}")
                 continue
             function_response = part.function_response
             if function_response is not None and function_response.name:
-                lines.append(f"Tool result: {function_response.name}")
+                result = _short_summary_snippet(str(function_response.response or {}))
+                lines.append(f"Observed result ({function_response.name}): {result}")
                 continue
             if part.text and not part.thought:
                 lines.append(f"{role}: {_short_summary_snippet(part.text)}")
     return lines
 
 
-def _extractive_summary(contents) -> str:
-    """A short stand-in for turns that no longer fit before the latest activity."""
-    body = "\n".join(_summary_lines(contents))
-    if len(body) > _SUMMARY_CHARACTER_LIMIT:
-        body = body[-_SUMMARY_CHARACTER_LIMIT:]
-        if "\n" in body:
-            body = body.split("\n", 1)[1]
-    return f"{_SUMMARY_NOTICE}\n{body}"
+def _summary_section(title: str, lines: list[str], token_budget: int) -> str:
+    body = "\n".join([title, *lines])
+    return _fit_text_to_token_budget(body, token_budget)
 
 
-def _summarize_history_before_latest_activity(llm_request) -> None:
-    """Replace turns before the latest human message with one summary message.
+def _extractive_summary(
+    contents, latest_user_index: int | None, token_budget: int
+) -> str:
+    """Summarize requests in context, observed progress, and current purpose.
 
-    The latest activity is that human message plus every model and tool message
-    after it. Those messages stay verbatim. The persisted session is unchanged
-    because this edits the detached request copy.
+    Quotes are bounded extracts of user requests and visible model/tool updates.
+    A result is evidence of an observation, not proof the overall task is done.
+    No extra model call or invented rationale is needed to compact a request.
     """
-    contents = list(llm_request.contents or [])
-    latest_user_index = _latest_human_user_index(contents)
-    if latest_user_index is None or latest_user_index <= 0:
-        return
-    summary = types.Content(
-        role="user",
-        parts=[types.Part(text=_extractive_summary(contents[:latest_user_index]))],
+    history = (
+        contents[:latest_user_index] if latest_user_index is not None else contents
     )
-    llm_request.contents = [summary, *contents[latest_user_index:]]
+    requests = []
+    for index, content in enumerate(history):
+        if _latest_human_user_index([content]) is None:
+            continue
+        request = f"Request: {_short_summary_snippet(_content_text(content))}"
+        if index:
+            context = _summary_lines(history[index - 1 : index])
+            if context:
+                request += f" | Prior context: {context[-1]}"
+        requests.append(request)
+    # Keep the initial objective and prioritize the most recent follow-ups.
+    if requests:
+        requests = [requests[0], *reversed(requests[1:])]
+    progress = _summary_lines(
+        content for content in contents if _latest_human_user_index([content]) is None
+    )
+    current = []
+    if latest_user_index is not None:
+        current.append(
+            "Current request / purpose: "
+            + _short_summary_snippet(_content_text(contents[latest_user_index]))
+        )
+        activity = _summary_lines(contents[latest_user_index + 1 :])
+        current.extend(reversed(activity[-2:]))
+    if not current:
+        current.append("No current user request or explicit purpose was recorded.")
+    notice_tokens = _estimate_text_tokens(_SUMMARY_NOTICE) + 4
+    section_budget = max(0, (token_budget - notice_tokens) // 3)
+    sections = [
+        _summary_section("Past user requests and context:", requests, section_budget),
+        _summary_section(
+            "Work done / observed progress (latest first):",
+            list(reversed(progress)),
+            section_budget,
+        ),
+        _summary_section("Current work and why:", current, section_budget),
+    ]
+    return _fit_text_to_token_budget(
+        "\n".join([_SUMMARY_NOTICE, *filter(None, sections)]), token_budget
+    )
 
 
-def _latest_tool_exchange_part_ids(contents) -> set[int]:
-    """The last tool call and the function response that belongs with it."""
-    last_response_part = None
-    last_response_name = None
-    for content in contents or []:
-        for part in content.parts or []:
-            function_response = part.function_response
-            if function_response is not None and function_response.name:
-                last_response_part = part
-                last_response_name = function_response.name
-    if last_response_part is None:
-        return set()
-    protected_part_ids = {id(last_response_part)}
-    for content in reversed(list(contents or [])):
-        for part in reversed(content.parts or []):
-            function_call = part.function_call
-            if function_call is not None and function_call.name == last_response_name:
-                protected_part_ids.add(id(part))
-                return protected_part_ids
-    return protected_part_ids
+def _recent_context_groups(contents, latest_user_index: int | None):
+    """Group a recent suffix without splitting a tool call from its results."""
+    user_indices = [
+        index
+        for index, content in enumerate(contents)
+        if _latest_human_user_index([content]) is not None
+    ]
+    start = (
+        user_indices[-MAXIMUM_CONTEXT_TAIL_USER_REQUESTS]
+        if (len(user_indices) >= MAXIMUM_CONTEXT_TAIL_USER_REQUESTS)
+        else 0
+    )
+    groups = []
+    group = []
+    pending_calls = 0
+    for index in range(start, len(contents)):
+        if index == latest_user_index:
+            if group:
+                groups.append(group)
+                group = []
+            continue
+        content = contents[index]
+        calls = sum(part.function_call is not None for part in content.parts or [])
+        responses = sum(
+            part.function_response is not None for part in content.parts or []
+        )
+        is_user = _latest_human_user_index([content]) is not None
+        if group and not pending_calls and (calls or is_user):
+            groups.append(group)
+            group = []
+        group.append((index, content))
+        pending_calls = max(0, pending_calls + calls - responses)
+    if group:
+        groups.append(group)
+    return groups
 
 
 def _part_payload_tokens(part) -> int:
@@ -469,31 +536,6 @@ def _part_payload_tokens(part) -> int:
     if not fragments:
         return 0
     return _estimate_text_tokens("\n".join(fragments))
-
-
-def _shrinkable_parts(
-    llm_request,
-    *,
-    include_latest_user_text: bool,
-    protected_part_ids: set[int] | None = None,
-):
-    protected_part_ids = protected_part_ids or set()
-    latest_user_index = _latest_human_user_index(llm_request.contents)
-    for index, content in enumerate(llm_request.contents or []):
-        for part in content.parts or []:
-            if id(part) in protected_part_ids:
-                continue
-            preserves_latest_user_text = (
-                not include_latest_user_text
-                and index == latest_user_index
-                and part.text
-                and part.function_call is None
-                and part.function_response is None
-            )
-            if preserves_latest_user_text:
-                continue
-            if _part_payload_tokens(part) > 0:
-                yield part
 
 
 def _shrink_part_payloads(part, keep_ratio: float) -> None:
@@ -518,72 +560,84 @@ def _prompt_token_target(context_token_limit: int) -> int:
     return max(1, context_token_limit - response_reserve)
 
 
-def _shrink_parts_to_target(
-    llm_request,
-    token_target: int,
-    *,
-    include_latest_user_text: bool,
-    protect_latest_tool_exchange: bool = False,
-) -> None:
-    estimated_tokens = _estimate_request_token_count(llm_request)
-    if estimated_tokens <= token_target:
-        return
-    protected_part_ids = (
-        _latest_tool_exchange_part_ids(llm_request.contents)
-        if protect_latest_tool_exchange
-        else set()
-    )
-    parts = list(
-        _shrinkable_parts(
-            llm_request,
-            include_latest_user_text=include_latest_user_text,
-            protected_part_ids=protected_part_ids,
-        )
-    )
-    shrinkable_tokens = sum(_part_payload_tokens(part) for part in parts)
-    if shrinkable_tokens <= 0:
-        return
-    overflow_tokens = estimated_tokens - token_target
-    keep_ratio = max(0.0, (shrinkable_tokens - overflow_tokens) / shrinkable_tokens)
-    for part in parts:
-        _shrink_part_payloads(part, keep_ratio)
+def _context_tail(groups, token_budget: int):
+    """Retain newest exchanges first, shortening only the oldest retained group."""
+    selected = []
+    for group in reversed(groups):
+        candidate = [*group, *selected]
+        request = LlmRequest(contents=[content for _, content in candidate])
+        if _estimate_request_token_count(request) <= token_budget:
+            selected = candidate
+            continue
+        # These parts have already been detached from persisted session events.
+        parts = [part for _, content in group for part in content.parts or []]
+        for _ in range(4):
+            estimate = _estimate_request_token_count(request)
+            if estimate <= token_budget:
+                selected = candidate
+                break
+            payload_tokens = sum(_part_payload_tokens(part) for part in parts)
+            if not payload_tokens:
+                break
+            ratio = max(0, 1 - (estimate - token_budget) / payload_tokens)
+            for part in parts:
+                _shrink_part_payloads(part, ratio)
+        break
+    return selected
 
 
-def _enforce_request_token_budget(llm_request, context_token_limit: int) -> None:
-    """Trim the request in stages until it fits `token_target`.
+def _enforce_request_token_budget(llm_request, context_token_limit: int) -> bool:
+    """Preserve instructions/current request; bound summary and recent context.
 
-    1. Replace turns before the latest activity with a short summary, and leave
-       that activity verbatim.
-    2. Shrink earlier tool calls and results inside the latest activity. The
-       latest tool call/result pair and the latest human prompt stay whole.
-    3. Shrink the latest human prompt only if the request still overflows.
-    4. Shrink the latest tool exchange too if it cannot fit in the window.
+    The protected messages are never shortened, even if that means refusing a
+    model call. Summary uses at most 1/8 of the window; the tail uses at most
+    1/4 and spans at most three human requests, including the protected one.
+    Both budgets shrink further when instructions/tools leave less room.
     """
     token_target = _prompt_token_target(context_token_limit)
     if _estimate_request_token_count(llm_request) <= token_target:
-        return
-    _summarize_history_before_latest_activity(llm_request)
-    if _estimate_request_token_count(llm_request) <= token_target:
-        return
-    _shrink_parts_to_target(
-        llm_request,
-        token_target,
-        include_latest_user_text=False,
-        protect_latest_tool_exchange=True,
+        return True
+    instructions = [c for c in llm_request.contents or [] if _is_role_instruction(c)]
+    conversation = [
+        c for c in llm_request.contents or [] if not _is_role_instruction(c)
+    ]
+    latest_user_index = _latest_human_user_index(conversation)
+    protected = instructions + (
+        [conversation[latest_user_index]] if latest_user_index is not None else []
     )
-    if _estimate_request_token_count(llm_request) <= token_target:
-        return
-    _shrink_parts_to_target(
-        llm_request,
-        token_target,
-        include_latest_user_text=True,
-        protect_latest_tool_exchange=True,
+    protected_estimate = _estimate_request_token_count(
+        LlmRequest(contents=protected, config=llm_request.config)
     )
-    if _estimate_request_token_count(llm_request) > token_target:
-        # A single snapshot can exceed the budget even after older data is gone.
-        _shrink_parts_to_target(
-            llm_request, token_target, include_latest_user_text=False
-        )
+    if protected_estimate > token_target:
+        return False
+    available_tokens = max(0, token_target - protected_estimate - 8)
+    summary_budget = min(
+        int(context_token_limit * CONTEXT_SUMMARY_WINDOW_FRACTION),
+        available_tokens // 3,
+    )
+    summary = _extractive_summary(conversation, latest_user_index, summary_budget)
+    tail_budget = min(
+        int(context_token_limit * CONTEXT_TAIL_WINDOW_FRACTION),
+        available_tokens - _estimate_text_tokens(summary),
+    )
+    groups = _recent_context_groups(conversation, latest_user_index)
+    # Account for concatenation overhead using the complete final request too.
+    while True:
+        tail = _context_tail(groups, tail_budget) if tail_budget > 0 else []
+        if latest_user_index is not None:
+            tail.append((latest_user_index, conversation[latest_user_index]))
+        llm_request.contents = [
+            *instructions,
+            *([types.UserContent(summary)] if summary else []),
+            *(content for _, content in sorted(tail, key=lambda item: item[0])),
+        ]
+        overflow = _estimate_request_token_count(llm_request) - token_target
+        if overflow <= 0:
+            return True
+        if tail_budget <= 0:
+            llm_request.contents = protected
+            return True
+        tail_budget = max(0, tail_budget - overflow - 8)
 
 
 def _tool_observations(contents) -> list[tuple[str, str, str]]:
@@ -743,6 +797,24 @@ def _content_text(message_content) -> str:
     return "\n".join(part.text or "" for part in message_content.parts or [])
 
 
+def _is_role_instruction(message_content) -> bool:
+    # With static_instruction, ADK puts the role behind a preamble in a user
+    # message. Merely searching for the marker would also match quoted reports.
+    return getattr(message_content, "role", None) == "user" and _content_text(
+        message_content
+    ).startswith(
+        (
+            _ROLE_INSTRUCTION_MARKER,
+            f"The text between {_ROLE_INSTRUCTION_MARKER} and "
+            "<<<END_SYSTEM_INSTRUCTION>>> below is",
+        )
+    )
+
+
+def _is_other_agent_transcript(message_content) -> bool:
+    return _content_text(message_content).startswith(_OTHER_AGENT_TRANSCRIPT_MARKER)
+
+
 def align_system_instruction(llm_request) -> None:
     """Every model call in a session sends the same system instruction.
 
@@ -763,10 +835,9 @@ def align_system_instruction(llm_request) -> None:
     role_instructions = []
     conversation = []
     for message_content in list(llm_request.contents or []):
-        text = _content_text(message_content)
-        if _OTHER_AGENT_TRANSCRIPT_MARKER in text:
+        if _is_other_agent_transcript(message_content):
             continue
-        if _ROLE_INSTRUCTION_MARKER in text:
+        if _is_role_instruction(message_content):
             role_instructions.append(message_content)
         else:
             conversation.append(message_content)
@@ -816,9 +887,19 @@ def guard_model_request(callback_context, llm_request):
             _agent_state_key(agent_name, "prompt_token_multiplier"), 1.0
         ),
     )
-    _enforce_request_token_budget(
-        llm_request, max(1, int(context_token_limit / token_multiplier))
-    )
+    tool_observations = _tool_observations(llm_request.contents)
+    effective_context_limit = max(1, int(context_token_limit / token_multiplier))
+    fits_budget = _enforce_request_token_budget(llm_request, effective_context_limit)
+    if not fits_budget:
+        # Tool schemas are optional; instructions and the actual request are not.
+        _remove_all_tools(llm_request)
+        fits_budget = _enforce_request_token_budget(
+            llm_request, effective_context_limit
+        )
+    if not fits_budget:
+        _record_turn_outcome(agent_name, TURN_OUTCOME_CONTEXT_EXHAUSTED)
+        _stop_tools(callback_context, "context")
+        return _context_stop_response()
     estimated_prompt_tokens = ceil(
         _estimate_request_token_count(llm_request) * token_multiplier
     )
@@ -839,7 +920,6 @@ def guard_model_request(callback_context, llm_request):
         _stop_tools(callback_context, "context")
         return _context_stop_response()
 
-    tool_observations = _tool_observations(llm_request.contents)
     stop_reason = callback_context.state.get(
         _agent_state_key(agent_name, "stop_reason")
     )
@@ -859,6 +939,12 @@ def guard_model_request(callback_context, llm_request):
         _append_wrap_up(llm_request, stop_reason)
     # Measure the final request, after any tools or wrap-up instructions changed it.
     prompt_estimate = _estimate_request_token_count(llm_request)
+    if context_token_limit - ceil(prompt_estimate * token_multiplier) < (
+        MIN_REMAINING_CONTEXT_TOKENS_FOR_MODEL_RESPONSE
+    ):
+        _record_turn_outcome(agent_name, TURN_OUTCOME_CONTEXT_EXHAUSTED)
+        _stop_tools(callback_context, "context")
+        return _context_stop_response()
     callback_context.state[_agent_state_key(agent_name, "prompt_estimate")] = (
         prompt_estimate
     )

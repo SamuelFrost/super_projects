@@ -136,9 +136,9 @@ class ContextBudgetTests(unittest.TestCase):
 
         self.assertIsNone(guard_model_request(self.context, request))
         self.assertTrue(request.tools_dict)
-        self.assertEqual(
-            request.contents[0].parts[0].text,
-            session_request.contents[0].parts[0].text,
+        self.assertIn(
+            session_request.contents[0].model_dump(),
+            [content.model_dump() for content in request.contents],
         )
         self.assertLess(
             len(request.contents[-1].parts[0].function_response.response["text"]),

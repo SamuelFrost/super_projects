@@ -277,7 +277,10 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertTrue(summary.startswith(_SUMMARY_NOTICE))
         self.assertIn("first question", summary)
         self.assertNotIn(older_answer, summary)
-        self.assertEqual(request.contents[1].parts[0].text, "second question")
+        self.assertIn(
+            types.UserContent("second question").model_dump(),
+            [content.model_dump() for content in request.contents],
+        )
         self.assertEqual(
             request.contents[-1].parts[0].function_response.response["text"],
             latest_result,

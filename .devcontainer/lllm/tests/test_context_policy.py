@@ -355,6 +355,7 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertIn("Document Title", browser_agent.instruction)
         self.assertIn("Actions & State-Change Log", browser_agent.instruction)
         self.assertIn("left the page unchanged", browser_agent.instruction)
+        self.assertIn("provide the number of tabs open", browser_agent.instruction)
         self.assertIn("Categorized Verbatim Evidence", browser_agent.instruction)
         self.assertIn("did not go as expected", browser_agent.instruction)
 

@@ -204,7 +204,7 @@ browser_agent = LlmAgent(
         "Every report must include these three sections with exact, verifiable details: "
         "1. Active Page Identity: State the active Page ID, exact URL (or unmodified [encoded_callback_token ...]), and exact Document Title from the latest list_pages and take_snapshot calls. "
         "2. Actions & State-Change Log: list the exact element UID and visible label acted upon, whether the label matched or differed from the requested control wording, and the observed state delta (whether the URL, document title, result count, or visible content changed, or whether the action timed out, errored, or left the page unchanged). "
-        "3. Page Content Summary: Provide an overview of the page content. Include a description of all visible sections, and any menu and sub menu items and any distinct lists, feeds, or log entries. "
+        "3. Page Content Summary: Provide an overview of the page content. Include a description of all visible sections, and any menu and sub menu items and any distinct lists, feeds, or log entries. Also provide the number of tabs open. "
         "4. For each relevant page, produce categorized Verbatim Evidence: Quote visible text verbatim from the latest snapshot and group quotes strictly by their UI role: "
         "(a) Headings and item titles (verbatim). "
         "(b) For each section of the page: "

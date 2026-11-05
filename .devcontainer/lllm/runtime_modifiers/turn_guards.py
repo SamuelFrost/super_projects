@@ -73,6 +73,7 @@ _ANSWER_NOW_WITH_WHAT_YOU_HAVE = (
     "A later request can use tools again."
 )
 
+
 def _limit_that_ended_tool_use(stop_reason: str | None) -> str:
     if stop_reason == "context":
         return "The context window cannot hold another tool result."
@@ -97,10 +98,7 @@ def _instruction_to_finish(stop_reason: str | None) -> str:
 
 
 def _reason_a_tool_call_was_skipped(stop_reason: str | None) -> str:
-    return (
-        "This tool call was not run. "
-        f"{_instruction_to_finish(stop_reason)}"
-    )
+    return f"This tool call was not run. {_instruction_to_finish(stop_reason)}"
 
 
 _NOTICE_WHEN_REPETITIVE_RESPONSE_IS_CUT_OFF = _notice_to_finish("repetition")
@@ -111,9 +109,11 @@ _NOTICE_WHEN_CONTEXT_IS_FULL = (
 )
 _PLACEHOLDER_FOR_OMITTED_IMAGE = "[image omitted from this request]"
 # Mutate the dict created before the turn. Child tasks share that object.
-_turn_outcomes: contextvars.ContextVar[dict[str, str] | None] = (
-    contextvars.ContextVar("lllm_turn_outcomes", default=None)
+_turn_outcomes: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
+    "lllm_turn_outcomes", default=None
 )
+
+
 def resolve_ollama_context_length() -> int:
     configured_context_length = os.environ.get("OLLAMA_CONTEXT_LENGTH")
     if configured_context_length:
@@ -121,13 +121,11 @@ def resolve_ollama_context_length() -> int:
             return int(configured_context_length)
         except ValueError:
             pass
-    ollama_base_url = os.environ.get(
-        "OLLAMA_HOST", "http://127.0.0.1:11434"
-    ).rstrip("/")
+    ollama_base_url = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip(
+        "/"
+    )
     try:
-        with urllib.request.urlopen(
-            f"{ollama_base_url}/api/ps", timeout=1
-        ) as response:
+        with urllib.request.urlopen(f"{ollama_base_url}/api/ps", timeout=1) as response:
             running_models_payload = json.load(response)
         for running_model in running_models_payload.get("models") or []:
             model_context_length = running_model.get("context_length")
@@ -146,7 +144,8 @@ def _estimate_text_tokens(text: str) -> int:
     before provider usage is available to calibrate subsequent requests.
     """
     ascii_characters = (
-        len(text) if text.isascii()
+        len(text)
+        if text.isascii()
         else sum(1 for character in text if character.isascii())
     )
     non_ascii_characters = len(text) - ascii_characters
@@ -155,15 +154,14 @@ def _estimate_text_tokens(text: str) -> int:
     )
     return (
         (ascii_characters - dense_ascii_characters) // 4
-        + dense_ascii_characters + non_ascii_characters
+        + dense_ascii_characters
+        + non_ascii_characters
     )
 
 
 def _estimate_request_token_count(llm_request) -> int:
     text_fragments: list[str] = []
-    system_instruction = getattr(
-        llm_request.config, "system_instruction", None
-    )
+    system_instruction = getattr(llm_request.config, "system_instruction", None)
     if system_instruction:
         text_fragments.append(str(system_instruction))
 
@@ -177,9 +175,7 @@ def _estimate_request_token_count(llm_request) -> int:
                 text_fragments.append(str(part.function_call.args or ""))
             elif part.function_response:
                 text_fragments.append(part.function_response.name or "")
-                text_fragments.append(
-                    str(part.function_response.response or "")
-                )
+                text_fragments.append(str(part.function_response.response or ""))
             elif part.inline_data and part.inline_data.data:
                 inline_image_tokens += max(
                     MIN_ESTIMATED_TOKENS_PER_INLINE_IMAGE,
@@ -189,23 +185,16 @@ def _estimate_request_token_count(llm_request) -> int:
 
     if llm_request.config and llm_request.config.tools:
         for tool in llm_request.config.tools:
-            for declaration in (
-                getattr(tool, "function_declarations", None) or []
-            ):
-                serialize_declaration = getattr(
-                    declaration, "model_dump_json", None
-                )
+            for declaration in getattr(tool, "function_declarations", None) or []:
+                serialize_declaration = getattr(declaration, "model_dump_json", None)
                 text_fragments.append(
                     serialize_declaration(exclude_none=True)
                     if serialize_declaration
                     else str(declaration)
                 )
 
-    estimated_text_tokens = max(
-        1, _estimate_text_tokens("\n".join(text_fragments))
-    )
+    estimated_text_tokens = max(1, _estimate_text_tokens("\n".join(text_fragments)))
     return estimated_text_tokens + inline_image_tokens
-
 
 
 def _remove_all_tools(llm_request) -> None:
@@ -217,8 +206,6 @@ def _remove_all_tools(llm_request) -> None:
     for tool in llm_request.config.tools:
         if tool.function_declarations:
             tool.function_declarations = []
-
-
 
 
 def begin_turn_outcome_tracking() -> None:
@@ -348,7 +335,9 @@ def _observation_value(value):
 def _observation_fingerprint(value) -> str:
     normalized = _observation_value(value)
     try:
-        rendered = json.dumps(normalized, sort_keys=True, ensure_ascii=False, default=str)
+        rendered = json.dumps(
+            normalized, sort_keys=True, ensure_ascii=False, default=str
+        )
     except TypeError:
         rendered = str(normalized)
     return rendered[:4000]
@@ -666,9 +655,7 @@ def _cap_output_tokens(
 def _collected_response_text(llm_response) -> str:
     if not llm_response.content:
         return ""
-    return "".join(
-        part.text or "" for part in llm_response.content.parts or []
-    )
+    return "".join(part.text or "" for part in llm_response.content.parts or [])
 
 
 def _answer_text(llm_response) -> str:
@@ -699,9 +686,7 @@ def _clip_unfinished_reply(text: str) -> str:
     return clipped.rstrip()
 
 
-_REPLY_STOPPED_BEFORE_AN_ANSWER = (
-    "The agent stopped working before it could provide an answer due to an error. The following (if available) is the recent activity of the agent (it does not constitute an answer)."
-)
+_REPLY_STOPPED_BEFORE_AN_ANSWER = "The agent stopped working before it could provide an answer due to an error. The following (if available) is the recent activity of the agent (it does not constitute an answer)."
 
 
 def _blank_partial(llm_response):
@@ -825,9 +810,12 @@ def guard_model_request(callback_context, llm_request):
     prepare_model_tool_results(llm_request)
     align_system_instruction(llm_request)
     context_token_limit = max(1, resolve_ollama_context_length())
-    token_multiplier = max(1.0, callback_context.state.get(
-        _agent_state_key(agent_name, "prompt_token_multiplier"), 1.0
-    ))
+    token_multiplier = max(
+        1.0,
+        callback_context.state.get(
+            _agent_state_key(agent_name, "prompt_token_multiplier"), 1.0
+        ),
+    )
     _enforce_request_token_budget(
         llm_request, max(1, int(context_token_limit / token_multiplier))
     )
@@ -838,9 +826,8 @@ def guard_model_request(callback_context, llm_request):
         estimated_prompt_tokens / context_token_limit, 3
     )
     remaining_tokens = context_token_limit - estimated_prompt_tokens
-    if (
-        remaining_tokens < MIN_REMAINING_CONTEXT_TOKENS_FOR_MODEL_RESPONSE
-        and (llm_request.tools_dict or (llm_request.config and llm_request.config.tools))
+    if remaining_tokens < MIN_REMAINING_CONTEXT_TOKENS_FOR_MODEL_RESPONSE and (
+        llm_request.tools_dict or (llm_request.config and llm_request.config.tools)
     ):
         _remove_all_tools(llm_request)
         estimated_prompt_tokens = ceil(
@@ -853,7 +840,9 @@ def guard_model_request(callback_context, llm_request):
         return _context_stop_response()
 
     tool_observations = _tool_observations(llm_request.contents)
-    stop_reason = callback_context.state.get(_agent_state_key(agent_name, "stop_reason"))
+    stop_reason = callback_context.state.get(
+        _agent_state_key(agent_name, "stop_reason")
+    )
     if _tool_observations_are_repeating(tool_observations):
         stop_reason = "stalled"
         _record_turn_outcome(agent_name, TURN_OUTCOME_STALLED)
@@ -870,7 +859,9 @@ def guard_model_request(callback_context, llm_request):
         _append_wrap_up(llm_request, stop_reason)
     # Measure the final request, after any tools or wrap-up instructions changed it.
     prompt_estimate = _estimate_request_token_count(llm_request)
-    callback_context.state[_agent_state_key(agent_name, "prompt_estimate")] = prompt_estimate
+    callback_context.state[_agent_state_key(agent_name, "prompt_estimate")] = (
+        prompt_estimate
+    )
     _cap_output_tokens(
         llm_request, context_token_limit, ceil(prompt_estimate * token_multiplier)
     )
@@ -897,7 +888,8 @@ def guard_model_response(callback_context, llm_response):
             multiplier_key = _agent_state_key(agent_name, "prompt_token_multiplier")
             callback_context.state[multiplier_key] = max(
                 callback_context.state.get(multiplier_key, 1.0),
-                usage_metadata.prompt_token_count / prompt_estimate
+                usage_metadata.prompt_token_count
+                / prompt_estimate
                 * PROMPT_TOKEN_CALIBRATION_MARGIN,
             )
 
@@ -913,7 +905,9 @@ def guard_model_response(callback_context, llm_response):
     response_text = _collected_response_text(llm_response)
     answer_text = _answer_text(llm_response)
     if llm_response.partial:
-        accumulated_text = str(callback_context.state.get(streamed_text_key) or "") + response_text
+        accumulated_text = (
+            str(callback_context.state.get(streamed_text_key) or "") + response_text
+        )
         callback_context.state[streamed_text_key] = accumulated_text
         if answer_text:
             callback_context.state[streamed_answer_key] = (

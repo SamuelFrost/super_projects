@@ -61,6 +61,12 @@ This index lists the available agent attributes by category. Link text uses each
 - [Git workflow guideline — split commits into meaningful chunks](tools/git/split_commits_into_meaningful_chunks.md)
 - [Git workflow guideline — use clear feature branch names](tools/git/use_clear_feature_branch_names.md)
 
+### Local LLM (lllm)
+
+- [Tool interaction guideline — delegate to local LLM subagents](tools/lllm/delegate_to_local_llm_subagents.md)
+- [Tool interaction guideline — record local LLM session logs and feedback in local_llm_journal](tools/lllm/record_session_logs_and_feedback_in_local_llm_journal.md)
+- [Tool interaction guideline — treat the local LLM as a cheap laborer](tools/lllm/treat_local_llm_as_cheap_laborer.md)
+
 ### Mise
 
 - [Tool installation guideline — install via mise or document the requirement](tools/mise/install_tools_via_mise_or_document.md)

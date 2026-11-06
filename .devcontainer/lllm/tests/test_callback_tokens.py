@@ -1,17 +1,32 @@
+import json
+import os
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
+from google.adk.models.llm_request import LlmRequest
+from google.genai import types
+
 from lllm.runtime_modifiers.tool_results import _replace_page_address_line
-from lllm.runtime_modifiers.turn_guards import skip_tools_when_stopping, begin_turn_outcome_tracking
+from lllm.runtime_modifiers.turn_guards import (
+    begin_turn_outcome_tracking,
+    guard_model_request,
+    skip_tools_when_stopping,
+)
+from lllm.session_transcript import render_session_transcript
 from lllm.tools.callback_tokens import (
     _CALLBACK_TOKEN_CHARACTER_LIMIT,
+    _active_callback_session_id,
     _callback_tokens_for_turn,
     _store_callback_token,
     _text_with_callback_tokens_expanded,
+    expand_callback_token_output_body,
     list_stored_callback_tokens,
     preview_callback_token,
     recall_callback_token,
     store_callback_token,
+    use_callback_token_database,
 )
 
 
@@ -22,7 +37,7 @@ class CallbackTokenTests(unittest.TestCase):
         token = _store_callback_token(address)
         token_id = next(iter(_callback_tokens_for_turn.get()))
         browser_context = SimpleNamespace(agent_name="browser_agent", state={})
-        root_context = SimpleNamespace(agent_name="lllm", state={})
+        root_context = SimpleNamespace(agent_name="lllm_default_agent", state={})
         self.assertRegex(token_id, r"\d+_\d+")
         self.assertEqual(token, f"[encoded_callback_token {token_id}]")
         preview = {
@@ -95,6 +110,115 @@ class CallbackTokenTests(unittest.TestCase):
             )
         )
         self.assertEqual(file_args["path"], address)
+
+    def test_lookup_uses_the_session_id_and_the_token(self):
+        begin_turn_outcome_tracking()
+        address = "https://example.com/from-session-a"
+        with tempfile.TemporaryDirectory() as directory:
+            use_callback_token_database(Path(directory) / "session.db")
+            session_a = SimpleNamespace(id="session-a")
+            session_b = SimpleNamespace(id="session-b")
+            context_a = SimpleNamespace(agent_name="browser_agent", state={}, session=session_a)
+            context_b = SimpleNamespace(agent_name="browser_agent", state={}, session=session_b)
+            stored = store_callback_token(address, tool_context=context_a)
+            token = stored["callback_token"]
+            self.assertRegex(token, r"^\[encoded_callback_token \d+_\d+\]$")
+            _callback_tokens_for_turn.set(None)
+            _active_callback_session_id.set(None)
+            self.assertEqual(
+                recall_callback_token(token, tool_context=context_a)["text"],
+                address,
+            )
+            self.assertTrue(recall_callback_token(token, tool_context=context_b).get("missing"))
+            part = SimpleNamespace(
+                text=f"Page 1 is {token}.",
+                thought=False,
+                function_call=None,
+                function_response=None,
+            )
+            transcript = render_session_transcript(
+                SimpleNamespace(
+                    id="session-a",
+                    app_name="lllm_default_agent",
+                    events=[
+                        SimpleNamespace(
+                            author="lllm_default_agent",
+                            content=SimpleNamespace(parts=[part]),
+                        )
+                    ],
+                )
+            )
+            self.assertIn(address, transcript)
+            self.assertNotIn("encoded_callback_token", transcript)
+            body = expand_callback_token_output_body(
+                json.dumps({"text": token}).encode("utf-8"),
+                "session-a",
+                "application/json",
+            )
+            self.assertIn(address.encode("utf-8"), body)
+            self.assertNotIn(b"encoded_callback_token", body)
+
+    def test_guards_bind_callback_tokens_to_the_current_session(self):
+        begin_turn_outcome_tracking()
+        address = "https://example.com/jobs/from-the-guard"
+        previous_context_length = os.environ.get("OLLAMA_CONTEXT_LENGTH")
+        os.environ["OLLAMA_CONTEXT_LENGTH"] = "8192"
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                use_callback_token_database(Path(directory) / "session.db")
+                session = SimpleNamespace(id="session-guard")
+                context = SimpleNamespace(
+                    agent_name="browser_agent", state={}, session=session
+                )
+                stored = store_callback_token(address, tool_context=context)
+                token = stored["callback_token"]
+                _callback_tokens_for_turn.set(None)
+                _active_callback_session_id.set(None)
+
+                tool_args = {"path": token}
+                self.assertIsNone(
+                    skip_tools_when_stopping(
+                        SimpleNamespace(name="read_file"), tool_args, context
+                    )
+                )
+                self.assertEqual(tool_args["path"], address)
+                self.assertEqual(_active_callback_session_id.get(), "session-guard")
+
+                _callback_tokens_for_turn.set(None)
+                _active_callback_session_id.set(None)
+                request = LlmRequest(
+                    contents=[
+                        types.Content(
+                            role="user",
+                            parts=[
+                                types.Part(
+                                    function_response=types.FunctionResponse(
+                                        name="list_pages",
+                                        response={
+                                            "text": f"1: Job page ({address})"
+                                        },
+                                    )
+                                )
+                            ],
+                        )
+                    ]
+                )
+                self.assertIsNone(guard_model_request(context, request))
+                shown = request.contents[0].parts[0].function_response.response["text"]
+                self.assertIn("encoded_callback_token", shown)
+                self.assertNotIn(address, shown)
+                self.assertEqual(_active_callback_session_id.get(), "session-guard")
+                _callback_tokens_for_turn.set(None)
+                _active_callback_session_id.set(None)
+                self.assertEqual(
+                    recall_callback_token(shown, tool_context=context)["text"],
+                    address,
+                )
+        finally:
+            if previous_context_length is None:
+                os.environ.pop("OLLAMA_CONTEXT_LENGTH", None)
+            else:
+                os.environ["OLLAMA_CONTEXT_LENGTH"] = previous_context_length
 
     def test_storage_stops_at_the_character_limit(self):
         begin_turn_outcome_tracking()

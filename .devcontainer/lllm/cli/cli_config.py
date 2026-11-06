@@ -7,6 +7,7 @@ lllm.adk_runtime is what actually calls ADK.
 
 import argparse
 import asyncio
+import os
 import sys
 
 import readline  # noqa: F401  GNU readline for input()
@@ -28,7 +29,14 @@ from lllm.output_channels import (
     collect_sub_agent_names,
     parse_output_channels_argument,
 )
+from lllm.session_store import (
+    SESSION_USER_ID,
+    UnknownSessionError,
+    default_session_database,
+    resolve_log_directory,
+)
 from lllm.cli.output_writer import AdkEventRenderer
+from lllm.experimental_warnings import HIDE_EXPERIMENTAL_WARNINGS_FLAG
 
 ADK_SSE_RUN_CONFIG = RunConfig(streaming_mode=StreamingMode.SSE)
 INCOMPLETE_TURN_EXIT_CODE = 75
@@ -62,8 +70,10 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         "--agent",
         choices=composed_agent_names,
         help=(
-            "Agent from the composed tree to talk to. "
-            f"The default is {composed_agent_names[0]}."
+            "Choose which agent to talk to: browser_agent for direct orders to "
+            "the browser specialist, files_agent for direct orders to the file "
+            "specialist, or lllm_default_agent (the default) for general tasks, thinking, and "
+            "coordinating the finer details of sub-agent interactions."
         ),
     )
     parser.add_argument(
@@ -105,9 +115,41 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help="Stop the turn after this many seconds.",
     )
     parser.add_argument(
+        HIDE_EXPERIMENTAL_WARNINGS_FLAG,
+        action="store_true",
+        help=(
+            "Hide ADK UserWarnings whose text starts with [EXPERIMENTAL]. "
+            "Off by default; those warnings are printed unless this flag is passed."
+        ),
+    )
+    parser.add_argument(
+        "--log-dir",
+        default=os.environ.get("LLLM_LOG_DIR") or None,
+        metavar="DIR",
+        help=(
+            "Directory for session_transcripts/<app>/<session>/transcript.txt. "
+            "Defaults to LLLM_LOG_DIR when that variable is set, otherwise "
+            ".local_only/local_llm_journal. The file includes CLI and lllm web turns. "
+            "Sessions are stored in .adk/session.db."
+        ),
+    )
+    parser.add_argument(
+        "--session",
+        metavar="ID",
+        help=(
+            "Continue the ADK session with this id in .adk/session.db. The id is "
+            "the one printed as 'lllm session:', and lllm web uses the same "
+            "database. Use the same --agent as the run that created it."
+        ),
+    )
+    parser.add_argument(
         "query", nargs="*", help="One turn. With no query, the session stays open."
     )
     return parser
+
+
+def announce_session_id(session_id: str) -> None:
+    print(f"lllm session: {session_id}", file=sys.stderr)
 
 
 def write_to_stdout(text: str) -> None:
@@ -150,13 +192,29 @@ async def run_prompt_turn(
     return root_turn_outcome(selected_root.name)
 
 
+def _exit_for_session_open_error(error: Exception) -> None:
+    if isinstance(error, UnknownSessionError):
+        print(f"lllm: unknown session {error.session_id}", file=sys.stderr)
+    raise SystemExit(2) from None
+
+
 async def main() -> None:
     parsed_args = _build_argument_parser().parse_args()
-    ensure_model_loaded()
     output_visibility = AgentOutputVisibility.from_arguments(parsed_args)
     selected_app = app_for_agent(parsed_args.agent)
+    log_dir = resolve_log_directory(parsed_args.log_dir)
     interrupted = False
-    session = await AdkSession.create(selected_app, user_id="user")
+    try:
+        session = await AdkSession.open(
+            selected_app,
+            user_id=SESSION_USER_ID,
+            session_db=default_session_database(),
+            session_id=parsed_args.session,
+            transcript_dir=log_dir,
+        )
+    except UnknownSessionError as error:
+        _exit_for_session_open_error(error)
+    ensure_model_loaded()
     try:
 
         async def run_one_prompt_turn(prompt_text: str) -> None:
@@ -174,11 +232,13 @@ async def main() -> None:
                     prompt_turn_coroutine, parsed_args.timeout
                 )
             except asyncio.TimeoutError:
+                announce_session_id(session.session.id)
                 print(
                     f"lllm: timed out after {parsed_args.timeout:g}s",
                     file=sys.stderr,
                 )
                 raise SystemExit(124) from None
+            announce_session_id(session.session.id)
             incomplete_message = incomplete_turn_message(turn_outcome)
             if incomplete_message:
                 print(incomplete_message, file=sys.stderr)

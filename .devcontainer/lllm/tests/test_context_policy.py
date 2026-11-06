@@ -7,19 +7,27 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
+from google.adk.events.event import Event
+
 from lllm.agent import (
     _CALLBACK_TOKEN_INSTRUCTION,
+    SHARED_STATIC_INSTRUCTION,
     browser_agent,
     files_agent,
     root_agent,
+)
+from lllm.runtime_modifiers.inline_subagent_trace import (
+    InlineSubagentTracePlugin,
 )
 from lllm.runtime_modifiers.turn_guards import (
     TURN_OUTCOME_COMPLETED,
     TURN_OUTCOME_CONTEXT_EXHAUSTED,
     TURN_OUTCOME_REPETITION,
     TURN_OUTCOME_STALLED,
+    _SUMMARY_NOTICE,
     _agent_state_key,
     _detach_part_from_session_history,
+    _enforce_request_token_budget,
     guard_model_request,
     guard_model_response,
     _record_turn_outcome,
@@ -89,7 +97,7 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertIn("Open the company site", kept_text)
         self.assertIn("repeated itself", kept_text)
         self.assertLess(kept_text.count("ハーベスト株式会社"), 8)
-        self.assertEqual(root_turn_outcome("lllm"), TURN_OUTCOME_COMPLETED)
+        self.assertEqual(root_turn_outcome("lllm_default_agent"), TURN_OUTCOME_COMPLETED)
         self.assertEqual(root_turn_outcome("browser_agent"), TURN_OUTCOME_REPETITION)
 
     def test_a_new_request_can_use_tools_after_an_earlier_stop(self):
@@ -176,14 +184,44 @@ class ContextPolicyTests(unittest.TestCase):
     def test_oversized_tool_result_is_shrunk_on_the_request_copy_only(self):
         original_text = "x" * 40000
         function_response = types.FunctionResponse(
-            name="take_snapshot", response={"text": original_text}
+            name="list_pages", response={"text": original_text}
         )
         session_part = types.Part(function_response=function_response)
         request_part = session_part.model_copy()
+        latest_text = "latest snapshot stays whole"
         request = LlmRequest(
             contents=[
                 types.Content(role="user", parts=[types.Part(text="inspect this page")]),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(name="list_pages", args={})
+                        )
+                    ],
+                ),
                 types.Content(role="user", parts=[request_part]),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name="take_snapshot", args={}
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            function_response=types.FunctionResponse(
+                                name="take_snapshot",
+                                response={"text": latest_text},
+                            )
+                        )
+                    ],
+                ),
             ]
         )
         context = SimpleNamespace(agent_name="browser_agent", state={})
@@ -192,6 +230,60 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertIsNot(request_part.function_response, function_response)
         self.assertLess(
             len(request_part.function_response.response["text"]), len(original_text)
+        )
+        snapshot_responses = [
+            part.function_response.response["text"]
+            for content in request.contents
+            for part in content.parts or []
+            if part.function_response is not None
+            and part.function_response.name == "take_snapshot"
+        ]
+        self.assertEqual(snapshot_responses, [latest_text])
+
+    def test_older_turns_are_summarized_and_the_latest_tool_result_stays_whole(self):
+        os.environ["OLLAMA_CONTEXT_LENGTH"] = "800"
+        older_answer = "prior observation " * 400
+        latest_result = "LATEST_RESULT_MARKER " + ("detail " * 20)
+        request = LlmRequest(
+            contents=[
+                types.Content(role="user", parts=[types.Part(text="first question")]),
+                types.Content(role="model", parts=[types.Part(text=older_answer)]),
+                types.Content(role="user", parts=[types.Part(text="second question")]),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name="take_snapshot", args={}
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            function_response=types.FunctionResponse(
+                                name="take_snapshot",
+                                response={"text": latest_result},
+                            )
+                        )
+                    ],
+                ),
+            ]
+        )
+        _enforce_request_token_budget(request, 800)
+        summary = request.contents[0].parts[0].text
+        self.assertTrue(summary.startswith(_SUMMARY_NOTICE))
+        self.assertIn("first question", summary)
+        self.assertNotIn(older_answer, summary)
+        self.assertIn(
+            types.UserContent("second question").model_dump(),
+            [content.model_dump() for content in request.contents],
+        )
+        self.assertEqual(
+            request.contents[-1].parts[0].function_response.response["text"],
+            latest_result,
         )
 
     def test_inline_image_is_omitted_from_the_request_copy_only(self):
@@ -218,7 +310,7 @@ class ContextPolicyTests(unittest.TestCase):
 
     def test_context_exhaustion_stops_without_calling_the_model(self):
         os.environ["OLLAMA_CONTEXT_LENGTH"] = "200"
-        context = SimpleNamespace(agent_name="lllm", state={})
+        context = SimpleNamespace(agent_name="lllm_default_agent", state={})
         request = LlmRequest(
             contents=[
                 types.Content(role="user", parts=[types.Part(text="hello " * 500)])
@@ -227,17 +319,17 @@ class ContextPolicyTests(unittest.TestCase):
         stopped = guard_model_request(context, request)
         self.assertIsNotNone(stopped)
         self.assertIn("context window is full", stopped.content.parts[0].text)
-        self.assertEqual(root_turn_outcome("lllm"), TURN_OUTCOME_CONTEXT_EXHAUSTED)
+        self.assertEqual(root_turn_outcome("lllm_default_agent"), TURN_OUTCOME_CONTEXT_EXHAUSTED)
 
     def test_child_task_records_an_outcome_the_parent_can_read(self):
         async def run():
             async def child():
-                _record_turn_outcome("lllm", TURN_OUTCOME_STALLED)
+                _record_turn_outcome("lllm_default_agent", TURN_OUTCOME_STALLED)
 
             await asyncio.create_task(child())
 
         asyncio.run(run())
-        self.assertEqual(root_turn_outcome("lllm"), TURN_OUTCOME_STALLED)
+        self.assertEqual(root_turn_outcome("lllm_default_agent"), TURN_OUTCOME_STALLED)
 
     def test_every_agent_is_told_how_callback_tokens_work(self):
         for agent in (browser_agent, files_agent, root_agent):
@@ -261,6 +353,142 @@ class ContextPolicyTests(unittest.TestCase):
             browser_agent.instruction,
         )
         self.assertNotIn("very long and thorough", browser_agent.instruction)
+
+    def test_browser_reports_page_identity_and_what_the_action_changed(self):
+        self.assertIn("Document Title", browser_agent.instruction)
+        self.assertIn("Actions & State-Change Log", browser_agent.instruction)
+        self.assertIn("left the page unchanged", browser_agent.instruction)
+        self.assertIn("provide the number of tabs open", browser_agent.instruction)
+        self.assertIn("Categorized Verbatim Evidence", browser_agent.instruction)
+        self.assertIn("did not go as expected", browser_agent.instruction)
+
+    def test_the_coordinator_rejects_a_conclusion_that_the_report_does_not_support(self):
+        self.assertIn("unverified attempt, not a factual finding", root_agent.instruction)
+        self.assertIn("explicit scope boundaries", root_agent.instruction)
+        self.assertIn("Leave the choice of tool to the subagent", root_agent.instruction)
+
+    def test_every_agent_sends_the_same_static_system_instruction(self):
+        for agent in (browser_agent, files_agent, root_agent):
+            self.assertEqual(agent.static_instruction, SHARED_STATIC_INSTRUCTION)
+        self.assertIn(_CALLBACK_TOKEN_INSTRUCTION.strip(), SHARED_STATIC_INSTRUCTION)
+        self.assertNotIn("BEGIN_UNTRUSTED_TOOL_DESCRIPTION", SHARED_STATIC_INSTRUCTION)
+        self.assertNotIn("Your internal name", SHARED_STATIC_INSTRUCTION)
+
+    def test_guard_keeps_role_text_ahead_of_the_turn_the_model_answers(self):
+        request = LlmRequest(
+            contents=[
+                types.Content(role="user", parts=[types.Part(text="what are the contents of it?")]),
+                types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name="browser_agent", args={"request": "summarize the page"}
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            function_response=types.FunctionResponse(
+                                name="browser_agent",
+                                response={"result": "the page is the dev UI"},
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            text=(
+                                "For context: below is a transcript of what another agent did, "
+                                "quoted between markers.\n[browser_agent] said:\nI am reporting the page."
+                            )
+                        )
+                    ],
+                ),
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            text="<<<BEGIN_SYSTEM_INSTRUCTION>>>\ncoordinator role"
+                        )
+                    ],
+                ),
+            ]
+        )
+        request.config.system_instruction = (
+            'You are an agent. Your internal name is "lllm_default_agent".'
+        )
+        context = SimpleNamespace(agent_name="lllm_default_agent", state={})
+        self.assertIsNone(guard_model_request(context, request))
+        self.assertEqual(request.config.system_instruction, SHARED_STATIC_INSTRUCTION)
+        texts = [
+            part.text
+            for content in request.contents
+            for part in content.parts or []
+            if part.text
+        ]
+        self.assertEqual(
+            texts,
+            [
+                "<<<BEGIN_SYSTEM_INSTRUCTION>>>\ncoordinator role",
+                "what are the contents of it?",
+            ],
+        )
+        self.assertEqual(
+            request.contents[-1].parts[0].function_response.response["result"],
+            "the page is the dev UI",
+        )
+
+    def test_a_wrap_up_is_appended_after_the_conversation(self):
+        context = SimpleNamespace(agent_name="browser_agent", state={})
+        request = _request_with_observations(["same page", "same page", "same page"])
+        request.config.system_instruction = "identity that must not stick"
+        self.assertIsNone(guard_model_request(context, request))
+        self.assertEqual(request.config.system_instruction, SHARED_STATIC_INSTRUCTION)
+        self.assertIn(
+            "Answer now with the findings", request.contents[-1].parts[0].text
+        )
+        self.assertNotIn(
+            "Answer now with the findings", request.config.system_instruction
+        )
+
+    def test_a_child_branch_joins_the_main_trace_and_an_own_branch_stays(self):
+        plugin = InlineSubagentTracePlugin()
+        root_invocation = SimpleNamespace(branch=None)
+        child_event = Event(
+            author="browser_agent", branch="browser_agent@call-1"
+        )
+        published = asyncio.run(
+            plugin.on_event_callback(
+                invocation_context=root_invocation, event=child_event
+            )
+        )
+        self.assertIsNone(published.branch)
+
+        own_event = Event(author="browser_agent", branch="browser_agent")
+        direct_invocation = SimpleNamespace(branch="browser_agent")
+        self.assertIsNone(
+            asyncio.run(
+                plugin.on_event_callback(
+                    invocation_context=direct_invocation, event=own_event
+                )
+            )
+        )
+        self.assertEqual(own_event.branch, "browser_agent")
+
+        unbranched = Event(author="lllm_default_agent")
+        self.assertIsNone(
+            asyncio.run(
+                plugin.on_event_callback(
+                    invocation_context=root_invocation, event=unbranched
+                )
+            )
+        )
 
 
 def _response(text: str):

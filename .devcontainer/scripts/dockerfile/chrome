@@ -1,4 +1,10 @@
 #!/bin/bash
+session_environment="${XDG_RUNTIME_DIR:-/tmp/desktop-runtime-$(id -u)}/session.env"
+if [[ -r $session_environment ]]; then
+  # shellcheck source=/dev/null
+  source "$session_environment"
+fi
+
 CHROME_PORT="${CHROME_REMOTE_DEBUGGING_PORT:-9223}"
 _profile="${CHROME_USER_DATA_DIR:-/home/developer/chrome-profile}"
 
@@ -17,7 +23,7 @@ if ! _chrome_ready; then
     --enable-features=WebMCP \
     --user-data-dir="$_profile" \
     "${@:-about:blank}" >/tmp/chrome.log 2>&1 &
-  for i in $(seq 20); do
+  for ((attempt = 0; attempt < 20; attempt++)); do
     _chrome_ready && break
     sleep 0.5
   done

@@ -2,9 +2,9 @@
 
 Ask the user before any attempt to emulate desktop input, including capturing the screen or sending pointer or keyboard events. Do not start the attempt until the user requests you to do so. Ask in words along the lines of: "I can attempt to use desktop input emulation to do … Would you like me to do so? (I will not do so unless you respond with a clear request to use desktop emulation including those words in your prompt.)" Do not use these techniques unless the user explicitly responds with that statement, indirect or implied agreement is not enough.
 
-After the user agrees, drive controls that are drawn by the desktop or by browser chrome, and that do not appear in a Chrome DevTools page snapshot, through the Xvfb display `:99`. Keep using Chrome DevTools MCP for page content.
+After the user agrees, drive controls that are drawn by the desktop or by browser chrome, and that do not appear in a Chrome DevTools page snapshot, through the KasmVNC display `:99`. Keep using Chrome DevTools MCP for page content.
 
-The noVNC desktop on host port `6080` is that same display. Its size is `NOVNC_RESOLUTION` (default `1920x1080`). Agent environments may set `DISPLAY=:0`. Use `:99` for this desktop.
+The KasmVNC desktop on host port `6080` is that same display. Its initial size is `NOVNC_RESOLUTION` (default `1920x1080`); the browser can resize it. Agent environments may set `DISPLAY=:0`. Use `:99` for this desktop.
 
 Capture the screen, then inject input with XTest (`libx11-6` and `libxtst6`, already on the image). `python3` can call them with ctypes.
 

@@ -1,19 +1,37 @@
-#!/bin/bash
-pkill Xvfb 2>/dev/null
-pkill x11vnc 2>/dev/null
-pkill websockify 2>/dev/null
-pkill -f xfce4-session 2>/dev/null
-pkill -f google-chrome 2>/dev/null
-sleep 0.3
-nohup Xvfb :99 -screen 0 "${NOVNC_RESOLUTION:-1920x1080}x24" \
-  +extension GLX +extension RENDER -noreset >/tmp/xvfb.log 2>&1 &
-sleep 0.5
-nohup env DISPLAY=:99 startxfce4 >/tmp/xfce4.log 2>&1 &
-setsid x11vnc -display :99 -nopw -forever -shared \
-  -rfbport "${VNC_PORT:-5900}" >/tmp/x11vnc.log 2>&1 &
-sleep 0.5
-nohup websockify --web /usr/share/novnc \
-  "${NOVNC_PORT:-6080}" "localhost:${VNC_PORT:-5900}" >/tmp/websockify.log 2>&1 &
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DISPLAY=${DISPLAY:-:99}
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/desktop-runtime-$(id -u)}
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+exec 9>"$XDG_RUNTIME_DIR/start.lock"
+flock 9
+
+if ! DISPLAY="$DISPLAY" xset q >/dev/null 2>&1; then
+  nohup desktop-session >/tmp/desktop-session.log 2>&1 9>&- &
+  desktop_process_id=$!
+  for ((attempt = 0; attempt < 100; attempt++)); do
+    if [[ -r $XDG_RUNTIME_DIR/session.env ]] &&
+      curl -fsS "http://127.0.0.1:${NOVNC_PORT:-6080}/" >/dev/null 2>&1 &&
+      DISPLAY="$DISPLAY" xset q >/dev/null 2>&1; then
+      break
+    fi
+    if ! kill -0 "$desktop_process_id" 2>/dev/null; then
+      cat /tmp/desktop-session.log >&2
+      exit 1
+    fi
+    sleep 0.2
+  done
+fi
+
+if [[ ! -r $XDG_RUNTIME_DIR/session.env ]] ||
+  ! curl -fsS "http://127.0.0.1:${NOVNC_PORT:-6080}/" >/dev/null; then
+  echo 'Desktop startup failed; see /tmp/desktop-session.log and /tmp/kasmvnc.log.' >&2
+  exit 1
+fi
+flock -u 9
+exec 9>&-
 chrome
-echo "noVNC ready:  http://localhost:${NOVNC_PORT:-6080}/vnc.html"
+echo "KasmVNC ready: http://localhost:${NOVNC_PORT:-6080}/ (use the published host port)"
 echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"

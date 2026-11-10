@@ -121,6 +121,9 @@ then open `http://localhost:6080/` in Chrome or Edge. Use the host port from you
 Compose override (for example, `6082`) when it differs. No host client is needed.
 Commands such as `devcontainer exec -- xterm` open windows on the same `:99`
 display. Re-running `start-vnc` preserves open applications.
+Logging out of XFCE automatically starts a fresh desktop session while KasmVNC
+keeps the browser connection available. Logout can still close applications;
+closing the browser simply disconnects without logging out.
 
 The control panel provides fullscreen, Pointer Lock (confine the pointer), and
 Game Cursor Mode (relative movement). `Ctrl+Shift+2` toggles Game Cursor Mode;

@@ -35,7 +35,7 @@ The setup steps below use VS Code, Cursor, or the Dev Containers CLI. The [specâ
 
 </details>
 
-If you're happy to not use an IDE, or otherwise prefer a terminal based approach, you can use the Dev Containers CLI (`devcontainer`) or the plain Docker Compose option via running [`./not_devcontainer`](./not_devcontainer). You may use the CLI to run `vim` (included by default) or your preferred CLI editor. It's not recommended, but you can also interact with the desktop GUI via the VNC server at `http://localhost:6080/vnc.html`.
+If you're happy to not use an IDE, or otherwise prefer a terminal based approach, you can use the Dev Containers CLI (`devcontainer`) or the plain Docker Compose option via running [`./not_devcontainer`](./not_devcontainer). You may use the CLI to run `vim` (included by default) or your preferred CLI editor. You can also interact with the XFCE desktop through KasmVNC at `http://localhost:6080/`.
 
 ### Initial setup
 
@@ -110,9 +110,39 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 
 ### Accessing the container's GUI and CLI
 
-- **GUI:** Open `http://localhost:6080/vnc.html` in your browser and press **Connect**.
+- **GUI:** Open `http://localhost:6080/` in your browser to connect.
 - **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to get a shell in the container.
 - **IDE:** Open the project folder in your preferred IDE that supports Dev Containers. VS code and Cursor will automatically detect the devcontainer and prompt you to open it - follow the prompts to open the project in the container.
+
+### Browser desktop (KasmVNC)
+
+Run `devcontainer exec -- start-vnc` to start or reconnect to the XFCE desktop,
+then open `http://localhost:6080/` in Chrome or Edge. Use the host port from your
+Compose override (for example, `6082`) when it differs. No host client is needed.
+Commands such as `devcontainer exec -- xterm` open windows on the same `:99`
+display. Re-running `start-vnc` preserves open applications.
+Logging out of XFCE automatically starts a fresh desktop session while KasmVNC
+keeps the browser connection available. Logout can still close applications;
+closing the browser simply disconnects without logging out.
+
+The control panel provides fullscreen, Pointer Lock (confine the pointer), and
+Game Cursor Mode (relative movement). `Ctrl+Shift+2` toggles Game Cursor Mode;
+Escape also releases pointer capture.
+Fullscreen requests Keyboard Lock on supported browsers; host-protected shortcuts
+remain reserved. Mouse capture and fullscreen keyboard capture are separate controls.
+Use **Clipboard** in the control panel to transfer text between the host and
+container. Seamless clipboard access is disabled on page load, including for
+previously saved browser settings, so the desktop does not automatically read
+the host clipboard. Copy/paste within the container works normally.
+The desktop resizes to the browser window.
+
+The browser endpoint has no login and is published on **host loopback only**;
+keep custom port mappings bound to `127.0.0.1`. KasmVNC serves its own web client,
+so `/vnc.html`, raw port 5900, and conventional VNC viewers are no longer used.
+`NOVNC_PORT` (internal port, default 6080) and `NOVNC_RESOLUTION` (initial size,
+default 1920x1080) retain their existing names for override compatibility.
+Startup logs are `/tmp/desktop-session.log`, `/tmp/kasmvnc.log`, and
+`/tmp/xfce4.log` inside the target container.
 
 ## Features & details
 
@@ -122,7 +152,7 @@ The devcontainer is an **Ubuntu 24.04** image with:
 - Docker CLI + Compose (Docker outside of Docker via socket mount) + Devcontainer CLI
 - Node.js, npm, Python 3
 - [mise](https://mise.jdx.dev) â€” universal version manager for Ruby, Node, Python, Go, and more
-- Desktop GUI (XFCE + VNC + noVNC) available in your browser at `http://localhost:6080/vnc.html`
+- Desktop GUI (XFCE + KasmVNC) available in your browser at `http://localhost:6080/`
 - Google Chrome with remote debugging on `CHROME_REMOTE_DEBUGGING_PORT` (default 9223), used by MCP tools like [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) and playwright.
 - [Localhost Forward Proxy](https://github.com/docker/localhost-forward-proxy) for port forwarding to your projects so they can be accessed from the container's browser at `http://localhost:<port>` in addition to the standard docker network routes.
 - AI tooling configurations for Gemini, Cursor, VS Code, Claude, and Codex.

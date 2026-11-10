@@ -359,8 +359,20 @@ COPY --chmod=0755 .devcontainer/scripts/dockerfile/desktop-session /usr/local/bi
 # Passphrase-protected keys: ssh-add once on the host against HOST_SSH_AUTH_SOCK.
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/ensure-auth
 
-# print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
-COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
+# Dev Tunnels 1.0.2115: image-owned binary, available without workspace mise state.
+# The upstream URL tracks releases; verify the pinned artifact before installing.
+RUN curl -fsSL https://aka.ms/TunnelsCliDownload/linux-x64 -o /tmp/devtunnel \
+  && echo "723d6aebdc226064aef321258fb17c8a2770c9cc2bd05004c0fb83e72b302c3f  /tmp/devtunnel" | sha256sum -c - \
+  && install -m 0755 /tmp/devtunnel /usr/local/bin/devtunnel \
+  && rm /tmp/devtunnel
+# Questionary supplies standard terminal selection, scrolling, and cancellation.
+RUN python3 -m venv /opt/gui \
+  && /opt/gui/bin/pip install --no-cache-dir questionary==2.1.1 \
+  && install -d -m 0700 -o developer -g developer /home/developer/.local/share/DevTunnels
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/gui /usr/local/bin/gui
+
+# Print the optional remote desktop command without starting remote access.
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-devtunnel-hint /usr/local/bin/print-devtunnel-hint
 
 # Ollama client only, same image tag as the local-llm service. `lllm` chats with that
 # one server through OLLAMA_HOST. The runners stay in the local-llm container.

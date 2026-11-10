@@ -20,6 +20,9 @@ services:
       # GitHub CLI auth tokens (gh auth login)
       - gh-data:/home/developer/.config/gh
       - gh-data:/workspaces/.devcontainer/persist/gh
+      # Dev Tunnels login and default ID survive container recreation.
+      - devtunnel-data:/home/developer/.local/share/DevTunnels
+      - devtunnel-data:/workspaces/.devcontainer/persist/devtunnel
       # Git XDG config (~/.config/git/config)
       - git-config:/home/developer/.config/git
       - git-config:/workspaces/.devcontainer/persist/git
@@ -44,7 +47,7 @@ services:
       - |
         export SSH_AUTH_SOCK=/ssh-agent.sock
         ensure-auth
-        print-cursor-worker-hint
+        print-devtunnel-hint
         start-vnc
         cd /workspaces
         mise install
@@ -101,3 +104,5 @@ volumes:
   # Cursor agent state (~/.cursor): agent-transcripts, CLI chats, MCP config, skills.
   # Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_cursor-data`.
   cursor-data: {}
+  # Native Dev Tunnels login and default tunnel ID.
+  devtunnel-data: {}

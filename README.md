@@ -116,6 +116,39 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 
 ### Browser desktop (KasmVNC)
 
+For optional remote access, open `devcontainer exec bash` and run `gui devtunnel`.
+Use Up/Down and Enter to choose the displayed `TUNNEL_ID` environment value,
+a random temporary ID (new URL), a saved account ID, or an ID you type.
+All saved IDs appear directly in the picker, with the last-used ID initially selected.
+`(currently active)` means the service reports a connected host, even if no viewers are connected.
+Status is checked when the picker opens. Unmarked IDs are not reported as currently hosted.
+The picker lists only IDs labelled `super-projects-gui`. GUI-created IDs receive this
+standard Dev Tunnels label and remain manageable with the normal `devtunnel` CLI.
+An explicitly supplied existing ID without that label asks before joining the GUI group;
+in a noninteractive session, add the label using `devtunnel update ID --add-labels super-projects-gui`.
+The `devtunnel-data` volume preserves GUI login and default ID separately under
+`~/.local/share/DevTunnels/gui/DevTunnels`. The GUI uses its own native CLI state,
+so its login and default selection do not alter plain `devtunnel` state.
+The first run after enabling this separation requires GUI login once. Previously created
+GUI IDs can be included by entering their ID and confirming the label.
+A second picker selects the region: the region on file (from the selected or last-used
+ID), the current CLI service region, a typed cluster code, or six common regions
+(West US 2, East US, West Europe, UK South, Japan East, Southeast Asia).
+Choosing a different region creates or picks a separate ID there, with its own URL;
+it does not relocate the original ID. Random temporary IDs also use the selected region.
+You can skip both pickers and set a region explicitly with
+`gui devtunnel YOUR_TUNNEL_ID --region usw2`.
+You can bypass the menu with `devcontainer exec -- gui devtunnel YOUR_TUNNEL_ID`.
+The command checks login status and waits for GitHub device login when needed.
+Open the printed HTTPS URL on your other device and sign in with the same account.
+Reuse a named tunnel to keep its assigned URL; Microsoft assigns the hostname.
+Run `gui devtunnel restart` to stop and relaunch the most recently started local GUI
+host, preserving its ID/region and options. If no GUI host is running, it starts the
+latest saved GUI ID. Plain `devtunnel` hosts are excluded. Restart runs in the foreground;
+Ctrl+C stops it. A temporary random tunnel gets a new URL when restarted.
+Stop hosting with Ctrl+C. No tunnel starts automatically.
+The Dev Tunnels binary is included in the image.
+
 Run `devcontainer exec -- start-vnc` to start or reconnect to the XFCE desktop,
 then open `http://localhost:6080/` in Chrome or Edge. Use the host port from your
 Compose override (for example, `6082`) when it differs. No host client is needed.

@@ -14,6 +14,7 @@ devcontainer exec --workspace-folder . -- ls -la /workspaces/.devcontainer/persi
 |----------|---------------|-----------|---------|
 | `gemini/` | `${SUPER_PROJECTS_NAME}_gemini-data` | `~/.gemini` | Gemini CLI sessions/config |
 | `gh/` | `${SUPER_PROJECTS_NAME}_gh-data` | `~/.config/gh` | GitHub CLI auth |
+| `devtunnel/` | `${SUPER_PROJECTS_NAME}_devtunnel-data` | `~/.local/share/DevTunnels` | Native Dev Tunnels state, plus separate GUI login/default state under `gui/DevTunnels/` |
 | `git/` | `${SUPER_PROJECTS_NAME}_git-config` | `~/.config/git` | Git XDG config (`config`, etc.) |
 | `mise/` | `${SUPER_PROJECTS_NAME}_mise-data` | `~/.local/share/mise` | mise downloads and tool installs |
 | `chrome/` | `${SUPER_PROJECTS_NAME}_chrome-devtools-mcp-profile` | `~/chrome-profile` | Desktop Chrome profile (logins, cookies, extensions). `pwa/` is the separate profile for the PWA launcher |
@@ -56,3 +57,9 @@ Private keys are **not** mounted. Compose forwards a host `ssh-agent` socket to 
 `initializeCommand` runs `.devcontainer/scripts/shell/initializeCommand.sh` (which calls `write-compose-ssh-agent-socket`, `write-compose-user-ids`, `write-compose-project-directory`, and `write-compose-ssh-known-hosts`) to write those Compose files. The name comes from `compose.naming.yaml`, replaced by `compose.naming.override.yaml` when that file exists. Key unlock may prompt once (TTY, Keychain, or askpass). Prefer macOS `UseKeychain yes`, 1Password’s SSH agent, or `gh auth login` (HTTPS) to avoid repeated prompts. To run Compose directly, use `./not_devcontainer <command>` (for example `./not_devcontainer down`).
 
 `known_hosts` is bind-mounted read-only from the host.
+
+## Dev Tunnels
+
+The `devtunnel-data` volume preserves native CLI state, including login and the default ID, across rebuilds. Created persistent IDs remain registered with Microsoft; the menu lists IDs for the signed-in account. These entries do not imply an active connection. Temporary random IDs are deleted when hosting stops, and service expiration still applies to persistent IDs.
+
+`gui devtunnel` scopes its child process `XDG_DATA_HOME` to `~/.local/share/DevTunnels/gui`. Plain `devtunnel` keeps its conventional state. The GUI picker filters the standard `super-projects-gui` label; this does not change how the native CLI manages those IDs.

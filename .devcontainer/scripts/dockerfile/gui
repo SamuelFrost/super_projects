@@ -1,0 +1,384 @@
+#!/opt/gui/bin/python
+"""Choose a Dev Tunnels ID and host the container desktop on demand."""
+
+import argparse
+import json
+import os
+import re
+import select
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+import questionary
+
+GUI_LABEL = "super-projects-gui"
+
+
+def gui_environment():
+    environment = os.environ.copy()
+    # Only this child CLI uses the GUI's persisted login/default ID.
+    environment["XDG_DATA_HOME"] = str(Path.home() / ".local/share/DevTunnels/gui")
+    return environment
+
+
+def run(*arguments, capture=False):
+    return subprocess.run(
+        ["devtunnel", *arguments],
+        text=True,
+        capture_output=capture,
+        check=False,
+        env=gui_environment(),
+    )
+
+
+def read_json(result):
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Dev Tunnels command failed.")
+    # The CLI can print its first-run welcome banner before the JSON response.
+    output = result.stdout
+    try:
+        return json.loads(output[output.index("{") :])
+    except (ValueError, TypeError) as error:
+        raise RuntimeError(
+            "Dev Tunnels returned an empty or invalid JSON response."
+        ) from error
+
+
+def require_login():
+    try:
+        status = read_json(run("user", "show", "--json", capture=True))
+    except RuntimeError:
+        status = {}
+    if status.get("status", "").lower() != "logged in":
+        result = run("user", "login", "--github", "--use-device-code-auth")
+        if result.returncode:
+            raise SystemExit(result.returncode)
+
+
+def choose_id():
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise RuntimeError(
+            "Open devcontainer exec bash, then run gui devtunnel; "
+            "or pass a tunnel ID to skip the menu."
+        )
+    print("Choose a tunnel ID to host. Currently active means a host is connected.")
+    tunnels = [
+        tunnel
+        for tunnel in read_json(
+            run("list", "--labels", GUI_LABEL, "--json", capture=True)
+        )["tunnels"]
+        if GUI_LABEL in tunnel.get("labels", [])
+    ]
+    try:
+        last_id = read_json(run("show", "--json", capture=True))["tunnel"]["tunnelId"]
+    except (RuntimeError, KeyError):
+        last_id = None
+    environment_id = os.environ.get("TUNNEL_ID", "")
+    active_ids = {
+        tunnel["tunnelId"] for tunnel in tunnels if tunnel.get("hostConnections", 0) > 0
+    }
+
+    def activity_label(tunnel_id):
+        # Environment IDs may omit the cluster suffix used by the listing.
+        active = any(
+            tunnel_id == active_id or tunnel_id == active_id.rsplit(".", 1)[0]
+            for active_id in active_ids
+        )
+        return " (currently active)" if active else ""
+
+    choices = [
+        questionary.Choice(
+            (
+                f"Use: {environment_id} (TUNNEL_ID){activity_label(environment_id)}"
+                if environment_id
+                else "Use TUNNEL_ID"
+            ),
+            value=environment_id,
+            disabled=None if environment_id else "not set",
+        ),
+        questionary.Choice("Create a random ID (temporary, new URL)", value=""),
+        questionary.Choice("Create or pick an ID by typing it", value="__type__"),
+        questionary.Separator("Saved GUI IDs"),
+    ]
+    default_choice = choices[0] if environment_id else choices[1]
+    for tunnel_id in sorted({tunnel["tunnelId"] for tunnel in tunnels}):
+        recent_label = " (last used)" if tunnel_id == last_id else ""
+        choice = questionary.Choice(
+            f"Pick ID: {tunnel_id}{recent_label}{activity_label(tunnel_id)}",
+            value=tunnel_id,
+        )
+        choices.append(choice)
+        if tunnel_id == last_id:
+            default_choice = choice
+    if not tunnels:
+        choices.append(questionary.Choice("No saved GUI IDs", disabled="none found"))
+    selected = questionary.select(
+        "Choose an ID to host:",
+        choices=choices,
+        default=default_choice,
+        instruction="(↑/↓, Enter; Ctrl+C cancels)",
+    ).unsafe_ask()
+    if selected == "__type__":
+        selected = questionary.text(
+            "Tunnel ID to create or pick:",
+            validate=lambda value: (
+                bool(re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]*", value))
+                or "Enter an ID using letters, numbers, dots, and hyphens."
+            ),
+        ).unsafe_ask()
+    return selected
+
+
+def choose_region(tunnel_id):
+    clusters = read_json(run("clusters", "--json", capture=True))["clusters"]
+    locations = {item["clusterId"]: item["azureLocation"] for item in clusters}
+    version = run("--version", capture=True)
+    if version.returncode:
+        raise RuntimeError(
+            version.stderr or "Cannot determine the current service region."
+        )
+    match = re.search(r"Tunnel service cluster\s*:\s*([a-z0-9]+)", version.stdout)
+    current_region = match.group(1) if match else None
+    saved_region = tunnel_id.rsplit(".", 1)[-1] if "." in tunnel_id else None
+    if saved_region not in locations:
+        try:
+            saved_id = read_json(run("show", "--json", capture=True))["tunnel"][
+                "tunnelId"
+            ]
+            saved_region = saved_id.rsplit(".", 1)[-1]
+        except (RuntimeError, KeyError):
+            saved_region = None
+    if saved_region not in locations:
+        saved_region = None
+
+    def label(region):
+        return (
+            f"{locations[region]} ({region})" if region in locations else "unavailable"
+        )
+
+    choices = [
+        questionary.Choice(
+            f"Use region on file: {label(saved_region)}",
+            value=("saved", saved_region),
+            disabled=None if saved_region else "no saved region",
+        ),
+        questionary.Choice(
+            f"Use current service region: {label(current_region)}",
+            value=("current", current_region),
+            disabled=None if current_region in locations else "not reported",
+        ),
+        questionary.Choice("Enter a region code", value="__type__"),
+        questionary.Separator("Common regions"),
+    ]
+    for region in ("usw2", "use", "euw", "uks1", "jpe1", "asse"):
+        choices.append(
+            questionary.Choice(
+                label(region),
+                value=("common", region),
+                disabled=None if region in locations else "unavailable",
+            )
+        )
+    print(
+        "A different region uses a separate tunnel ID and URL; existing IDs stay in their region."
+    )
+    selected = questionary.select(
+        "Choose the service region:",
+        choices=choices,
+        default=choices[0]
+        if saved_region
+        else choices[1]
+        if current_region in locations
+        else choices[2],
+        instruction="(↑/↓, Enter; Ctrl+C cancels)",
+    ).unsafe_ask()
+    if selected == "__type__":
+        selected = (
+            questionary.text(
+                "Region code (for example, usw2):",
+                validate=lambda value: (
+                    value.strip().lower() in locations
+                    or "Enter a region code listed by devtunnel clusters."
+                ),
+            )
+            .unsafe_ask()
+            .strip()
+            .lower()
+        )
+    return selected[1] if isinstance(selected, tuple) else selected
+
+
+def host(tunnel_id, region=None):
+    desktop_port = os.environ.get("NOVNC_PORT", "6080")
+    region_arguments = []
+    if region:
+        if not re.fullmatch(r"[a-z][a-z0-9]*", region):
+            raise RuntimeError("Invalid service region code.")
+        region_arguments = [
+            "--service-uri",
+            f"https://{region}.rel.tunnels.api.visualstudio.com",
+        ]
+    if not tunnel_id:
+        result = run("unset")
+        if result.returncode:
+            raise SystemExit(result.returncode)
+        os.execvpe(
+            "devtunnel",
+            [
+                "devtunnel",
+                "host",
+                "-p",
+                desktop_port,
+                "--protocol",
+                "http",
+                *region_arguments,
+                "--labels",
+                GUI_LABEL,
+            ],
+            gui_environment(),
+        )
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]*", tunnel_id):
+        raise RuntimeError(
+            "Invalid tunnel ID: start with a letter or number; use letters, numbers, dots, and hyphens."
+        )
+    if region:
+        # A qualified ID selects one specific service cluster; this is not a move.
+        base_id = tunnel_id.rsplit(".", 1)[0] if "." in tunnel_id else tunnel_id
+        tunnel_id = f"{base_id}.{region}"
+    result = run("show", tunnel_id, "--json", capture=True)
+    if result.returncode == 2:
+        result = run(
+            "create",
+            tunnel_id,
+            "--json",
+            *region_arguments,
+            "--labels",
+            GUI_LABEL,
+            capture=True,
+        )
+    tunnel = read_json(result)["tunnel"]
+    tunnel_id = tunnel["tunnelId"]
+    if GUI_LABEL not in tunnel.get("labels", []):
+        instruction = f"devtunnel update {tunnel_id} --add-labels {GUI_LABEL}"
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            raise RuntimeError(
+                f"ID {tunnel_id} is not marked for GUI use. To include it, run: {instruction}"
+            )
+        if not questionary.confirm(
+            f"Add existing ID {tunnel_id} to the GUI group?", default=False
+        ).unsafe_ask():
+            raise SystemExit(130)
+        read_json(
+            run("update", tunnel_id, "--add-labels", GUI_LABEL, "--json", capture=True)
+        )
+    result = run("port", "show", tunnel_id, "-p", desktop_port, capture=True)
+    if result.returncode == 2:
+        result = run(
+            "port", "create", tunnel_id, "-p", desktop_port, "--protocol", "http"
+        )
+    if result.returncode:
+        raise RuntimeError(result.stderr or "Could not configure the desktop port.")
+    result = run("set", tunnel_id, capture=True)
+    if result.returncode:
+        raise RuntimeError(result.stderr or "Could not save the last-used tunnel ID.")
+    print(f"Starting desktop access using tunnel ID: {tunnel_id}", flush=True)
+    os.execvpe("devtunnel", ["devtunnel", "host", tunnel_id], gui_environment())
+
+
+def gui_host_process(process):
+    """Identify our own user's hosts by the GUI-scoped CLI data directory."""
+    try:
+        if process.stat().st_uid != os.getuid():
+            return None
+        arguments = (process / "cmdline").read_bytes().decode().rstrip("\0").split("\0")
+        if (
+            len(arguments) < 2
+            or Path(arguments[0]).name != "devtunnel"
+            or arguments[1] != "host"
+        ):
+            return None
+        expected = f"XDG_DATA_HOME={gui_environment()['XDG_DATA_HOME']}".encode()
+        if expected not in (process / "environ").read_bytes().split(b"\0"):
+            return None
+        # /proc/PID/stat field 22 is process start time; the command can contain spaces.
+        started = int((process / "stat").read_text().rsplit(")", 1)[1].split()[19])
+        return started, int(process.name), arguments
+    except (OSError, ValueError, UnicodeError):
+        return None
+
+
+def restart():
+    processes = [
+        details
+        for process in Path("/proc").iterdir()
+        if process.name.isdigit() and (details := gui_host_process(process)) is not None
+    ]
+    if not processes:
+        result = run("show", "--json", capture=True)
+        if result.returncode == 2:
+            raise RuntimeError(
+                "No current or saved GUI tunnel. Run gui devtunnel first."
+            )
+        tunnel = read_json(result)["tunnel"]
+        if GUI_LABEL not in tunnel.get("labels", []):
+            raise RuntimeError(
+                "The saved ID is not marked for GUI use. Run gui devtunnel to choose one."
+            )
+        host(tunnel["tunnelId"])
+        return
+
+    current = max(processes, key=lambda item: (item[0], item[1]))
+    _, process_id, arguments = current
+    # A pidfd binds the signal to this process, protecting against PID reuse.
+    try:
+        process_fd = os.pidfd_open(process_id)
+    except ProcessLookupError as error:
+        raise RuntimeError(
+            "The GUI host exited. Run gui devtunnel restart again."
+        ) from error
+    try:
+        if gui_host_process(Path(f"/proc/{process_id}")) != current:
+            raise RuntimeError("The GUI host changed. Run gui devtunnel restart again.")
+        print("Stopping the most recently started GUI tunnel...", flush=True)
+        signal.pidfd_send_signal(process_fd, signal.SIGINT)
+        if not select.select([process_fd], [], [], 15)[0]:
+            raise RuntimeError(
+                "The GUI host did not stop within 15 seconds; a second host was not started."
+            )
+    finally:
+        os.close(process_fd)
+    print("Starting the GUI tunnel again (Ctrl+C to stop)...", flush=True)
+    os.execvpe("devtunnel", arguments, gui_environment())
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=["devtunnel"])
+    parser.add_argument("tunnel_id", nargs="?", metavar="TUNNEL_ID|restart")
+    parser.add_argument("--region", help="Service cluster code, e.g. usw2")
+    arguments = parser.parse_args()
+    if arguments.tunnel_id == "restart" and arguments.region:
+        parser.error(
+            "restart preserves the existing region; choose an ID with --region to change it"
+        )
+    require_login()
+    if arguments.tunnel_id == "restart":
+        restart()
+        return
+    tunnel_id = arguments.tunnel_id if arguments.tunnel_id is not None else choose_id()
+    region = arguments.region
+    if region is None and arguments.tunnel_id is None:
+        region = choose_region(tunnel_id)
+    host(tunnel_id, region)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (KeyboardInterrupt, EOFError):
+        print("\nCancelled.", file=sys.stderr)
+        sys.exit(130)
+    except (RuntimeError, KeyError, OSError) as error:
+        print(f"gui: {error}", file=sys.stderr)
+        sys.exit(1)

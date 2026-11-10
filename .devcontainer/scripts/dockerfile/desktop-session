@@ -26,7 +26,7 @@ trap 'exit 0' TERM INT
 
 # Preserve main's local-only, no-login workflow. Compose binds to host loopback.
 Xkasmvnc "$DISPLAY" -geometry "$resolution" -depth 24 \
-  -auth "$XAUTHORITY" -nolisten tcp \
+  -auth "$XAUTHORITY" -nolisten tcp -noreset \
   -interface 0.0.0.0 -websocketPort "${NOVNC_PORT:-6080}" \
   -httpd /usr/share/kasmvnc/www -sslOnly 0 -disableBasicAuth \
   -SecurityTypes None >/tmp/kasmvnc.log 2>&1 &
@@ -42,10 +42,27 @@ done
 DISPLAY="$DISPLAY" xset q >/dev/null
 
 export XDG_CURRENT_DESKTOP=XFCE XDG_SESSION_TYPE=x11
-startxfce4 >/tmp/xfce4.log 2>&1 &
-desktop_process_id=$!
 (
   umask 077
   printf 'export DBUS_SESSION_BUS_ADDRESS=%q\n' "$DBUS_SESSION_BUS_ADDRESS" >"$XDG_RUNTIME_DIR/session.env"
 )
+
+# The X server owns the VNC connection. A desktop logout starts a fresh XFCE
+# session on that display instead of taking the browser endpoint down with it.
+restart_desktop() {
+  xfce_process_id=
+  trap 'kill "${xfce_process_id:-}" 2>/dev/null || true' EXIT
+  trap 'exit 0' TERM INT
+  while true; do
+    desktop_exit_code=0
+    startxfce4 >>/tmp/xfce4.log 2>&1 &
+    xfce_process_id=$!
+    wait "$xfce_process_id" || desktop_exit_code=$?
+    xfce_process_id=
+    echo "XFCE exited with status $desktop_exit_code; restarting in 2 seconds."
+    sleep 2
+  done
+}
+restart_desktop &
+desktop_process_id=$!
 wait -n "$display_process_id" "$desktop_process_id"

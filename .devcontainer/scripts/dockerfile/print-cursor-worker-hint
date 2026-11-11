@@ -1,7 +1,0 @@
-#!/bin/bash
-name=$(hostname)
-echo ""
-echo "Cursor Cloud Agent (My Machines):"
-echo "  agent login"
-echo "  agent worker start --name \"${name}_devcontainer\""
-echo ""

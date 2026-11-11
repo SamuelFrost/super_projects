@@ -8,6 +8,11 @@ services:
       - "127.0.0.1:6080-6099:6080" # KasmVNC browser desktop
       - "9223-9242:9223"  # Chrome remote debugging — (optional for host-side npx chrome-devtools-mcp to connect)
     shm_size: '4gb'
+    # Optional: the Compose startup hint runs gui devtunnel restart in the background.
+    # Requires a saved GUI tunnel ID and login; exposes the authenticated remote URL.
+    # Disabled by default. The hint prints the URL; details: /tmp/gui-devtunnel.log.
+    # environment:
+    #   GUI_DEVTUNNEL_AUTOSTART: "true"
     # GPU: uncomment the block for this machine. Leave all of them commented on a Mac.
     # Docker Desktop's Linux VM does not receive the Apple GPU.
     #
@@ -37,8 +42,7 @@ services:
     #   - |
     #     export SSH_AUTH_SOCK=/ssh-agent.sock
     #     ensure-auth
-    #     print-cursor-worker-hint
-    #     start-vnc
+    #     gui-startup
     #     cd /super_projects_development
     #     mise install
     #     exec tail -f /dev/null

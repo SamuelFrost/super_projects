@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+start-vnc
+
+printf '\nRemote desktop: gui devtunnel | gui devtunnel restart\n'
+if [[ ${GUI_DEVTUNNEL_AUTOSTART:-false} != true ]]; then
+	printf 'Auto-start is off. Run gui devtunnel inside the container to start a tunnel.\n'
+	printf 'To enable at startup: add the environment variable GUI_DEVTUNNEL_AUTOSTART=true in your Compose setup.\n\n'
+	exit 0
+fi
+
+umask 077
+tunnel_log=/tmp/gui-devtunnel.log
+printf 'Starting saved GUI tunnel...\n'
+nohup gui devtunnel restart >"$tunnel_log" 2>&1 </dev/null &
+tunnel_process_id=$!
+
+# Return after readiness so Compose startup never attaches to the host forever.
+for ((attempt = 0; attempt < 150; attempt++)); do
+	if grep -qE '^  gui devtunnel does not generate shared tokens|^Access could not be verified:' "$tunnel_log"; then
+		grep -m 1 'Connect via browser:' "$tunnel_log"
+		sed -n '/^Access to /,/^  gui devtunnel does not generate shared tokens/p; /^Access could not be verified:/p' "$tunnel_log"
+		printf 'Log: %s\n\n' "$tunnel_log"
+		exit 0
+	fi
+	if ! kill -0 "$tunnel_process_id" 2>/dev/null; then
+		cat "$tunnel_log" >&2
+		printf 'GUI tunnel not started. Set it up with: gui devtunnel\n\n'
+		exit 0
+	fi
+	sleep 0.2
+done
+printf 'Tunnel is still starting. Check: %s\n\n' "$tunnel_log"

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+workspace_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+timeout 45s "$workspace_root/not_devcontainer" --skip-initialize logs --tail 50 --follow devcontainer &
+log_process_id=$!
+
+# Only the log viewer is terminated; Compose services keep running.
+trap 'kill "$log_process_id" 2>/dev/null || true; wait "$log_process_id" 2>/dev/null || true' EXIT
+trap 'exit 0' INT TERM
+
+if [[ -t 0 ]]; then
+  printf 'Showing startup logs for up to 45 seconds. Press any key to continue.\n'
+  while kill -0 "$log_process_id" 2>/dev/null; do
+    if IFS= read -rsn 1 -t 0.2; then
+      exit 0
+    fi
+  done
+fi
+
+wait "$log_process_id"
+log_status=$?
+if [[ $log_status == 124 ]]; then
+  exit 0
+fi
+exit "$log_status"

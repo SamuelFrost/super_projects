@@ -27,7 +27,8 @@
   // initializeCommand.sh (host): ssh-agent + key unlock, generated Compose files, persist dirs.
   "initializeCommand": "sh .devcontainer/scripts/shell/initializeCommand.sh",
 
-  "postStartCommand": "ensure-auth && print-cursor-worker-hint",
+  // Follow actual Compose startup logs briefly; service startup stays in Compose.
+  "postStartCommand": ".devcontainer/scripts/shell/show-startup-logs",
 
   "otherPortsAttributes": {
     "onAutoForward": "ignore"

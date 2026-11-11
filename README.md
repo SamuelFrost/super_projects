@@ -120,6 +120,8 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 
 ### Browser desktop (KasmVNC)
 
+Compose runs `gui-startup` to start the desktop and handle optional remote hosting.
+
 For optional remote access, open `devcontainer exec bash` and run `gui devtunnel`.
 Use Up/Down and Enter to choose the displayed `TUNNEL_ID` environment value,
 a random temporary ID (new URL), a saved account ID, or an ID you type.
@@ -150,14 +152,25 @@ Run `gui devtunnel restart` to stop and relaunch the most recently started local
 host, preserving its ID/region and options. If no GUI host is running, it starts the
 latest saved GUI ID. Plain `devtunnel` hosts are excluded. Restart runs in the foreground;
 Ctrl+C stops it. A temporary random tunnel gets a new URL when restarted.
-Stop hosting with Ctrl+C. No tunnel starts automatically.
-Every `gui devtunnel` start or restart prints live tunnel/port access rules after
-the server reports readiness, including for random IDs. The summary shows grants,
-denials, and the CLI account, followed by a short note: manually generated tokens
-remain valid for their tunnel ID until expiry. To end shared-token access, stop
-and delete the old tunnel and use a new ID. The GUI command does not generate
-shared tokens; manual sharing is generally not recommended.
-Inspect access manually with `gui devtunnel YOUR_TUNNEL_ID --show-access`.
+Stop foreground hosting with Ctrl+C. Automatic hosting is off by default.
+Set `GUI_DEVTUNNEL_AUTOSTART: "true"` in the devcontainer service environment to run
+`gui devtunnel restart` in the background from the standard Compose startup hint.
+This works with Dev Containers and `./not_devcontainer`. The Dev Containers
+`postStartCommand` uses `./not_devcontainer --skip-initialize` to stream the actual
+Compose service log tail for up to 45 seconds. Press any key to stop viewing early
+and continue startup. Without an interactive terminal, it returns after the timeout. It does not start services or cache hint output. Service startup stays
+in Compose. View logs separately with `./not_devcontainer --skip-initialize logs devcontainer`. When auto-start is off,
+the hint explains manual startup and how to enable it. The hint waits
+up to 30 seconds for readiness and prints the browser URL plus live tunnel/port
+access rules. Every `gui devtunnel` start or restart prints this same summary after the server
+reports readiness, including for random IDs. The startup hint reuses that output.
+The summary shows grants, denials, and the CLI account, followed by a short note:
+manually generated tokens remain valid for their tunnel ID until expiry. To end
+shared-token access, stop and delete the old tunnel and use a new ID. The GUI command
+does not generate shared tokens; manual sharing is generally not recommended.
+Inspect access manually with
+`gui devtunnel YOUR_TUNNEL_ID --show-access`. Set up the GUI login
+and a saved ID interactively first; details are logged to `/tmp/gui-devtunnel.log`.
 The Dev Tunnels binary is included in the image.
 
 Run `devcontainer exec -- start-vnc` to start or reconnect to the XFCE desktop,

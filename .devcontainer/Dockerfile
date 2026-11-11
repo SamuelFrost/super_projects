@@ -371,8 +371,8 @@ RUN python3 -m venv /opt/gui \
   && install -d -m 0700 -o developer -g developer /home/developer/.local/share/DevTunnels
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/gui /usr/local/bin/gui
 
-# Print the optional remote desktop command without starting remote access.
-COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-devtunnel-hint /usr/local/bin/print-devtunnel-hint
+# Compose starts optional remote desktop access and prints startup guidance.
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/gui-startup /usr/local/bin/gui-startup
 
 # Ollama client only, same image tag as the local-llm service. `lllm` chats with that
 # one server through OLLAMA_HOST. The runners stay in the local-llm container.

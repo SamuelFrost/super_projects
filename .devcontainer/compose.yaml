@@ -38,7 +38,7 @@ services:
       - cursor-data:/workspaces/.devcontainer/persist/cursor
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       # - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
-    # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
+    # gui-startup + mise install run here (not in the Dockerfile) so image builds stay
     # fast and tool installs persist in the mise-data volume across rebuilds.
     # SSH uses the host-forwarded agent at /ssh-agent.sock (ensure-auth reports status).
     command:
@@ -47,8 +47,7 @@ services:
       - |
         export SSH_AUTH_SOCK=/ssh-agent.sock
         ensure-auth
-        print-devtunnel-hint
-        start-vnc
+        gui-startup
         cd /workspaces
         mise install
         exec tail -f /dev/null

@@ -106,6 +106,10 @@ cd super_projects
   ./not_devcontainer exec devcontainer bash
   ```
 
+To use the existing generated configuration without running initialization, put
+`--skip-initialize` first, for example `./not_devcontainer --skip-initialize logs devcontainer`.
+Normal invocations still run initialization.
+
 To stop: `./not_devcontainer down` or otherwise perform a docker compose down equivalent such as docker desktop's stop button.
 
 ### Accessing the container's GUI and CLI

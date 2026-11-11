@@ -3,7 +3,14 @@
 #   <initializeCommand from devcontainer.json>
 #   docker compose --project-directory .devcontainer -f <each dockerComposeFile> <your arguments>
 # Example: ./not_devcontainer up -d
+# Existing configuration only: ./not_devcontainer --skip-initialize logs devcontainer
 set -eu
+
+skip_initialize=false
+if [ "${1:-}" = --skip-initialize ]; then
+  skip_initialize=true
+  shift
+fi
 
 cd "$(dirname "$0")"
 
@@ -12,11 +19,13 @@ compose_files=$(
     sed -n 's/.*"\([^"]*\.yaml\)".*/\1/p'
 )
 
-initialize_command=$(
-  sed -n 's/.*"initializeCommand"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' .devcontainer/devcontainer.json
-)
-if [ -n "$initialize_command" ]; then
-  sh -c "$initialize_command"
+if [ "$skip_initialize" = false ]; then
+  initialize_command=$(
+    sed -n 's/.*"initializeCommand"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' .devcontainer/devcontainer.json
+  )
+  if [ -n "$initialize_command" ]; then
+    sh -c "$initialize_command"
+  fi
 fi
 
 flags=
@@ -25,4 +34,4 @@ for compose_file in $compose_files; do
 done
 
 # shellcheck disable=SC2086
-docker compose --project-directory .devcontainer $flags "$@"
+exec docker compose --project-directory .devcontainer $flags "$@"

@@ -19,7 +19,10 @@ GUI_LABEL = "super-projects-gui"
 def gui_environment():
     environment = os.environ.copy()
     # Only this child CLI uses the GUI's persisted login/default ID.
-    environment["XDG_DATA_HOME"] = str(Path.home() / ".local/share/DevTunnels/gui")
+    data_directory = Path.home() / ".local/share/DevTunnels/gui"
+    # .NET ignores a nonexistent XDG directory and falls back to a relative path.
+    data_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    environment["XDG_DATA_HOME"] = str(data_directory)
     return environment
 
 
@@ -68,7 +71,7 @@ def choose_id():
         tunnel
         for tunnel in read_json(
             run("list", "--labels", GUI_LABEL, "--json", capture=True)
-        )["tunnels"]
+        ).get("tunnels", [])
         if GUI_LABEL in tunnel.get("labels", [])
     ]
     try:
@@ -316,7 +319,9 @@ def restart():
     ]
     if not processes:
         result = run("show", "--json", capture=True)
-        if result.returncode == 2:
+        if result.returncode == 2 or (
+            result.returncode and "A tunnel ID or name is required" in result.stderr
+        ):
             raise RuntimeError(
                 "No current or saved GUI tunnel. Run gui devtunnel first."
             )

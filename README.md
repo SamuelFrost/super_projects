@@ -151,6 +151,13 @@ host, preserving its ID/region and options. If no GUI host is running, it starts
 latest saved GUI ID. Plain `devtunnel` hosts are excluded. Restart runs in the foreground;
 Ctrl+C stops it. A temporary random tunnel gets a new URL when restarted.
 Stop hosting with Ctrl+C. No tunnel starts automatically.
+Every `gui devtunnel` start or restart prints live tunnel/port access rules after
+the server reports readiness, including for random IDs. The summary shows grants,
+denials, and the CLI account, followed by a short note: manually generated tokens
+remain valid for their tunnel ID until expiry. To end shared-token access, stop
+and delete the old tunnel and use a new ID. The GUI command does not generate
+shared tokens; manual sharing is generally not recommended.
+Inspect access manually with `gui devtunnel YOUR_TUNNEL_ID --show-access`.
 The Dev Tunnels binary is included in the image.
 
 Run `devcontainer exec -- start-vnc` to start or reconnect to the XFCE desktop,

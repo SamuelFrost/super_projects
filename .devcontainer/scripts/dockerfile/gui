@@ -9,6 +9,7 @@ import select
 import signal
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import questionary
@@ -212,6 +213,56 @@ def choose_region(tunnel_id):
     return selected[1] if isinstance(selected, tuple) else selected
 
 
+def stream_host(arguments):
+    """Relay native host output and inspect access once the actual ID is ready."""
+    process = subprocess.Popen(
+        arguments,
+        env=gui_environment(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        start_new_session=True,
+    )
+    reported_id = None
+    interrupted = False
+
+    def stop_requested(_signal, _frame):
+        raise KeyboardInterrupt
+
+    previous_handler = signal.signal(signal.SIGTERM, stop_requested)
+    try:
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            ready = re.search(r"Ready to accept connections for tunnel:\s*(\S+)", line)
+            if ready and ready.group(1) != reported_id:
+                try:
+                    show_access(ready.group(1))
+                except (RuntimeError, KeyError, OSError, TypeError) as error:
+                    print(f"Access could not be verified: {error}", flush=True)
+                else:
+                    reported_id = ready.group(1)
+                sys.stdout.flush()
+        process.wait()
+    except KeyboardInterrupt:
+        interrupted = True
+    finally:
+        if process.poll() is None:
+            process.send_signal(signal.SIGINT)
+            try:
+                process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+        process.stdout.close()
+        signal.signal(signal.SIGTERM, previous_handler)
+    raise SystemExit(130 if interrupted else process.returncode)
+
+
 def host(tunnel_id, region=None):
     desktop_port = os.environ.get("NOVNC_PORT", "6080")
     region_arguments = []
@@ -226,8 +277,7 @@ def host(tunnel_id, region=None):
         result = run("unset")
         if result.returncode:
             raise SystemExit(result.returncode)
-        os.execvpe(
-            "devtunnel",
+        stream_host(
             [
                 "devtunnel",
                 "host",
@@ -239,7 +289,6 @@ def host(tunnel_id, region=None):
                 "--labels",
                 GUI_LABEL,
             ],
-            gui_environment(),
         )
     if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]*", tunnel_id):
         raise RuntimeError(
@@ -286,7 +335,7 @@ def host(tunnel_id, region=None):
     if result.returncode:
         raise RuntimeError(result.stderr or "Could not save the last-used tunnel ID.")
     print(f"Starting desktop access using tunnel ID: {tunnel_id}", flush=True)
-    os.execvpe("devtunnel", ["devtunnel", "host", tunnel_id], gui_environment())
+    stream_host(["devtunnel", "host", tunnel_id])
 
 
 def gui_host_process(process):
@@ -354,7 +403,99 @@ def restart():
     finally:
         os.close(process_fd)
     print("Starting the GUI tunnel again (Ctrl+C to stop)...", flush=True)
-    os.execvpe("devtunnel", arguments, gui_environment())
+    stream_host(arguments)
+
+
+def access_rule_lines(entries):
+    """Describe connection ACLs without treating missing/unknown fields as private."""
+    lines = []
+    seen = set()
+    for entry in entries:
+        scopes = entry.get("scopes")
+        if isinstance(scopes, list) and "connect" not in scopes and "*" not in scopes:
+            continue
+        rule = {key: value for key, value in entry.items() if key != "isInherited"}
+        key = json.dumps(rule, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        kind = entry.get("type", "Unknown")
+        provider = entry.get("provider") or ""
+        subjects = ", ".join(str(subject) for subject in entry.get("subjects", []))
+        if kind == "Anonymous":
+            who = (
+                "all authenticated users"
+                if entry.get("isInverse")
+                else "anyone, without signing in"
+            )
+        else:
+            kinds = {
+                "Users": "users",
+                "Groups": "group members",
+                "Organizations": "organization members",
+                "Repositories": "users with repository access",
+                "PublicKeys": "public-key holders",
+                "IPAddressRanges": "source IP ranges",
+            }
+            who = f"{provider} {kinds.get(kind, kind)}: {subjects or '(subjects not reported)'}".strip()
+            if entry.get("isInverse"):
+                who = f"everyone except {who}"
+        suffix = ""
+        if entry.get("expiration"):
+            expires = entry["expiration"]
+            try:
+                expired = datetime.fromisoformat(expires) <= datetime.now(UTC)
+            except (ValueError, TypeError):
+                suffix = f" (expiration not understood: {expires})"
+            else:
+                suffix = f" ({'expired' if expired else 'expires'}: {expires})"
+        if scopes is None:
+            suffix += " (connection scope not reported; verify rule)"
+        action = "Deny" if entry.get("isDeny") else "Allow"
+        lines.append(f"  {action}: {who}{suffix}")
+    return lines
+
+
+def show_access(tunnel_id=None):
+    arguments = ["show"] + ([tunnel_id] if tunnel_id else []) + ["--json"]
+    tunnel = read_json(run(*arguments, capture=True))["tunnel"]
+    tunnel_id = tunnel["tunnelId"]
+    port = os.environ.get("NOVNC_PORT", "6080")
+    identity = read_json(run("user", "show", "--json", capture=True))
+    entries = []
+    for arguments in [
+        ["access", "list", tunnel_id, "--json"],
+        ["access", "list", tunnel_id, "-p", port, "--json"],
+    ]:
+        data = read_json(run(*arguments, capture=True))
+        if not isinstance(data.get("accessControlEntries"), list):
+            raise TypeError(
+                "Access rules were not returned; access could not be verified."
+            )
+        if any(not isinstance(entry, dict) for entry in data["accessControlEntries"]):
+            raise TypeError("Unrecognized access rules; access could not be verified.")
+        entries.extend(data["accessControlEntries"])
+    lines = access_rule_lines(entries)
+    print(f"Access to {tunnel_id}, port {port}:")
+    print("  Owner: tunnel creator (identity not exposed by the CLI).")
+    provider = identity.get("provider", "unknown provider")
+    username = identity.get("username", "unknown account")
+    print(f"  CLI account: {provider}:{username}.")
+    if lines:
+        print("\n".join(lines))
+        if any(entry.get("isDeny") for entry in entries):
+            print("  Deny rules take precedence over allow rules.")
+    else:
+        print("  Additional connection grants: none.")
+    print("  Note: if you manually generate a token with a command like:")
+    print(f"    devtunnel token {tunnel_id} --scopes connect")
+    print(
+        "  it remains valid for that ID until it expires. To end shared-token access,"
+    )
+    print("  stop and delete the old tunnel, then use a new ID.")
+    print(
+        "  gui devtunnel does not generate shared tokens; manual sharing is generally not recommended."
+    )
 
 
 def main():
@@ -362,11 +503,21 @@ def main():
     parser.add_argument("command", choices=["devtunnel"])
     parser.add_argument("tunnel_id", nargs="?", metavar="TUNNEL_ID|restart")
     parser.add_argument("--region", help="Service cluster code, e.g. usw2")
+    parser.add_argument(
+        "--show-access",
+        action="store_true",
+        help="Inspect tunnel and desktop-port access without hosting",
+    )
     arguments = parser.parse_args()
     if arguments.tunnel_id == "restart" and arguments.region:
         parser.error(
             "restart preserves the existing region; choose an ID with --region to change it"
         )
+    if arguments.show_access:
+        if arguments.region or arguments.tunnel_id == "restart":
+            parser.error("--show-access accepts a tunnel ID, not restart or --region")
+        show_access(arguments.tunnel_id)
+        return
     require_login()
     if arguments.tunnel_id == "restart":
         restart()
@@ -384,6 +535,6 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, EOFError):
         print("\nCancelled.", file=sys.stderr)
         sys.exit(130)
-    except (RuntimeError, KeyError, OSError) as error:
+    except (RuntimeError, KeyError, OSError, TypeError) as error:
         print(f"gui: {error}", file=sys.stderr)
         sys.exit(1)

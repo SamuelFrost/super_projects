@@ -434,6 +434,22 @@ RUN sed -i -E 's#^Exec=(/usr/share/cursor/cursor|chatgpt|claude-desktop) #Exec=\
       /usr/share/applications/cursor.desktop /usr/share/applications/chatgpt.desktop \
       /usr/share/applications/com.anthropic.Claude.desktop /home/developer/Desktop/
 
+# Image-owned controls apply to existing state volumes as well as fresh profiles.
+# These disable optional local reporting, not provider account training consent.
+COPY .devcontainer/privacy/codex/config.toml /etc/codex/config.toml
+COPY .devcontainer/privacy/gemini-cli/settings.json /etc/gemini-cli/settings.json
+ENV DO_NOT_TRACK=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1 \
+    GEMINI_TELEMETRY_ENABLED=false \
+    GEMINI_TELEMETRY_TRACES_ENABLED=false \
+    GEMINI_TELEMETRY_LOG_PROMPTS=false \
+    OTEL_SDK_DISABLED=true
+# Cursor's inherited Electron/VS Code switches disable optional local reporting.
+RUN sed -i 's/ --disable-gpu / --disable-gpu --disable-telemetry --disable-crash-reporter /g' \
+      /usr/share/applications/cursor.desktop /home/developer/Desktop/cursor.desktop
+
+
 # Official VS Code stable package; apt selects the image's target architecture.
 # Reuse Microsoft's signing key installed for Azure CLI.
 RUN printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n' "$TARGETARCH" \
@@ -455,6 +471,8 @@ RUN install -d -m 0700 -o developer -g developer \
       fi; \
     done
 
+# Machine policy lives outside persisted profiles and also covers CLI launches.
+COPY .devcontainer/privacy/vscode/policy.json /etc/vscode/policy.json
 # Native Linux GUI is intentional even when the Docker host uses WSL.
 ENV DONT_PROMPT_WSL_INSTALL=1
 USER developer:developer

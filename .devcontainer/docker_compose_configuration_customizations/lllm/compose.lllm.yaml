@@ -15,6 +15,8 @@ services:
     environment:
       # Listen address inside this container. Clients use http://local-llm:11434.
       OLLAMA_HOST: 0.0.0.0:11434
+      # Keep inference local; model downloads remain available.
+      OLLAMA_NO_CLOUD: "1"
       GEMMA_MODEL: gemma4:e2b
       # How long the model stays loaded after the last request. 5m is the Ollama default.
       # An override can set a duration, such as 20m, or -1 to keep it until the container stops.

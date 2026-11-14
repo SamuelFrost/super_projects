@@ -14,6 +14,31 @@ services:
       # See .devcontainer/persist/README.md. Do not mount whole /home/developer — that freezes
       # image-owned installs (Gemini, agent, .bashrc) after the first volume create.
 
+      # Mount each application state directory directly; binaries stay in the image.
+      - codex-state:/home/developer/.codex
+      - codex-state:/workspaces/.devcontainer/persist/codex
+      - chatgpt-state:/home/developer/.config/Codex
+      - chatgpt-state:/workspaces/.devcontainer/persist/chatgpt
+      - claude-code-state:/home/developer/.claude
+      - claude-code-state:/workspaces/.devcontainer/persist/claude-code
+      - claude-desktop-state:/home/developer/.config/Claude
+      - claude-desktop-state:/workspaces/.devcontainer/persist/claude-desktop
+      - cursor-data:/home/developer/.cursor
+      - cursor-data:/workspaces/.devcontainer/persist/cursor
+      - cursor-config-state:/home/developer/.config/cursor
+      - cursor-config-state:/workspaces/.devcontainer/persist/cursor-config
+      - cursor-desktop-state:/home/developer/.config/Cursor
+      - cursor-desktop-state:/workspaces/.devcontainer/persist/cursor-desktop
+      # Remote Cursor settings/extensions/session state are separate from its GUI profile.
+      - cursor-server-state:/home/developer/.cursor-server
+      - cursor-server-state:/workspaces/.devcontainer/persist/cursor-server
+      # VS Code desktop profile, local extensions/CLI state, and remote IDE state.
+      - vscode-profile-state:/home/developer/.config/Code
+      - vscode-profile-state:/workspaces/.devcontainer/persist/vscode-profile
+      - vscode-extensions-state:/home/developer/.vscode
+      - vscode-extensions-state:/workspaces/.devcontainer/persist/vscode-extensions
+      - vscode-server-state:/home/developer/.vscode-server
+      - vscode-server-state:/workspaces/.devcontainer/persist/vscode-server
       # Gemini CLI sessions/config
       - gemini-data:/home/developer/.gemini
       - gemini-data:/workspaces/.devcontainer/persist/gemini
@@ -30,9 +55,9 @@ services:
       # mise tool cache: persists downloads/installs across rebuilds
       - mise-data:/home/developer/.local/share/mise
       - mise-data:/workspaces/.devcontainer/persist/mise
-      # Cursor agent state: transcripts, CLI sessions, MCP config, skills
-      - cursor-data:/home/developer/.cursor
-      - cursor-data:/workspaces/.devcontainer/persist/cursor
+      # Secret Service credentials used by native desktop applications.
+      - desktop-keyrings:/home/developer/.local/share/keyrings
+      - desktop-keyrings:/workspaces/.devcontainer/persist/desktop-keyrings
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       # - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
     # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
@@ -62,9 +87,10 @@ services:
     # Chrome's sandbox creates user, PID, and network namespaces. Docker's
     # built-in seccomp profile blocks those unless the container has CAP_SYS_ADMIN.
     # Base profile: moby/profiles seccomp/default.json @ 6fe7deb1b9fb7c0397a4593480d7d22b9ee8caef (2026-09-17), 
-    # plus three allow rules for those namespaces added in this project (2026-10-13).
+    # plus Chrome, Cursor, and VS Code terminal sandbox namespace/filesystem rules.
+    # See seccomp/README.md for scope and verification.
     security_opt:
-      - seccomp=seccomp/chrome-sandbox.json
+      - seccomp=seccomp/desktop-sandboxes.json
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
 
@@ -98,6 +124,17 @@ volumes:
   gh-data: {}
   # git XDG config (~/.config/git). Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_git-config`.
   git-config: {}
-  # Cursor agent state (~/.cursor): agent-transcripts, CLI chats, MCP config, skills.
-  # Lost only on `docker volume rm ${SUPER_PROJECTS_NAME:-super_projects}_cursor-data`.
+  # Separate stores mounted directly at each application's normal state path.
+  codex-state: {}
+  chatgpt-state: {}
+  claude-code-state: {}
+  claude-desktop-state: {}
   cursor-data: {}
+  cursor-config-state: {}
+  cursor-desktop-state: {}
+  cursor-server-state: {}
+  vscode-profile-state: {}
+  vscode-extensions-state: {}
+  vscode-server-state: {}
+  # Secret Service credentials shared by native desktop applications.
+  desktop-keyrings: {}

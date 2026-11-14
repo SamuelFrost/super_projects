@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=lllm web GUI
+Comment=Open the local lllm web interface in Chrome
+Exec=google-chrome --user-data-dir=/home/developer/chrome-profile --new-window http://127.0.0.1:8000
+TryExec=google-chrome
+Icon=google-chrome
+Terminal=false
+Categories=Network;WebBrowser;
+StartupNotify=false

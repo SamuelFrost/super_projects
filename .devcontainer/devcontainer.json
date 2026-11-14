@@ -47,6 +47,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "GitHub.copilot-chat",
         "openai.chatgpt",
         "Shopify.ruby-lsp",
         "streetsidesoftware.code-spell-checker",
@@ -69,14 +70,10 @@
         // Named-volume shortcuts under persist/ can be huge (mise installs, Chrome profile).
         // Keep them out of the workspace file watcher and search index.
         "files.watcherExclude": {
-          "**/.devcontainer/persist/mise/**": true,
-          "**/.devcontainer/persist/chrome/**": true,
-          "**/.devcontainer/persist/cursor/**": true
+          "**/.devcontainer/persist/**": true
         },
         "search.exclude": {
-          "**/.devcontainer/persist/mise": true,
-          "**/.devcontainer/persist/chrome": true,
-          "**/.devcontainer/persist/cursor": true
+          "**/.devcontainer/persist": true
         }
       }
     }

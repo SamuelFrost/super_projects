@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=lllm Browser Agent
+Comment=Open lllm Browser Agent in the workspace
+Exec=xfce4-terminal --hold --working-directory=/workspaces --title="lllm Browser Agent" --execute bash -lc "exec lllm --agent=browser_agent"
+TryExec=xfce4-terminal
+Icon=web-browser
+Terminal=false
+Categories=Development;
+StartupNotify=false

@@ -227,7 +227,7 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
 #   A wrapper at /usr/local/bin/chrome applies the container-required flags:
 #     --enable-unsafe-swiftshader  Software WebGL (no GPU in the container).
 #     --enable-features=WebMCP  WebMCP tools for chrome-devtools-mcp (Chrome 150+).
-#   The namespace sandbox is enabled by .devcontainer/seccomp/chrome-sandbox.json.
+#   The namespace sandbox is enabled by .devcontainer/seccomp/desktop-sandboxes.json.
 # ------------------------------------------------------------------------------
 ARG TARGETARCH
 RUN install -m 0755 -d /etc/apt/keyrings \
@@ -332,7 +332,7 @@ RUN npm config set prefix /home/developer/.npm-global && \
 # ------------------------------------------------------------------------------
 # AI coding CLI: OpenAI Codex.  Run `codex` in the terminal.
 #   - Sign in with a ChatGPT account, or export OPENAI_API_KEY.
-#   - Config/sessions live in ~/.codex.
+#   - Login/config/sessions live in ~/.codex, mounted directly from codex-state.
 #   Docs: https://github.com/openai/codex
 # ------------------------------------------------------------------------------
 RUN npm install -g @openai/codex
@@ -341,6 +341,8 @@ RUN npm install -g @openai/codex
 # Cursor agent CLI — register this devcontainer as a My Machines Cloud Agent worker.
 #   Docs: https://cursor.com/docs/cloud-agent/my-machines
 # ------------------------------------------------------------------------------
+# Linux login is in ~/.config/cursor; chats/config are in ~/.cursor.
+# Both are backed by named volumes; binaries in ~/.local/share stay image-owned.
 RUN curl https://cursor.com/install -fsS | bash
 ENV PATH="/home/developer/.npm-global/bin:/home/developer/.local/bin:${PATH}"
 USER root
@@ -374,25 +376,91 @@ COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr
 COPY --from=ollama/ollama:0.40.8 /usr/bin/ollama /usr/local/bin/ollama
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/lllm /usr/local/bin/lllm
 
-# ------------------------------------------------------------------------------
-# Claude Code CLI (commented out; uncomment and rebuild to enable)
-#   Requires ANTHROPIC_API_KEY or a Claude Pro/Max/Console login.
-# ------------------------------------------------------------------------------
-# RUN apt-get update -qq && apt-get install -y --no-install-recommends jq && rm -rf /var/lib/apt/lists/*
-# ARG CLAUDE_GCS_BUCKET=https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases
-# RUN set -eux; \
-#   ARCH=$(dpkg --print-architecture); \
-#   case "$ARCH" in amd64) SUFFIX=x64;; arm64) SUFFIX=arm64;; *) echo "Unsupported arch: $ARCH" >&2; exit 1;; esac; \
-#   PLATFORM=linux-$SUFFIX; \
-#   VERSION=$(curl -fsSL "$CLAUDE_GCS_BUCKET/latest"); \
-#   MANIFEST=$(curl -fsSL "$CLAUDE_GCS_BUCKET/$VERSION/manifest.json"); \
-#   CHECKSUM=$(echo "$MANIFEST" | jq -r ".platforms[\"$PLATFORM\"].checksum"); \
-#   curl -fsSL "$CLAUDE_GCS_BUCKET/$VERSION/$PLATFORM/claude" -o /tmp/claude; \
-#   echo "$CHECKSUM  /tmp/claude" | sha256sum -c -; \
-#   chmod 755 /tmp/claude; \
-#   mv /tmp/claude /usr/local/bin/claude
-
 USER developer:developer
+# ------------------------------------------------------------------------------
+# Claude Code CLI: native stable release. Run `claude` and sign in interactively.
+# Keep the native binary in ~/.local/share/claude (image-owned), not the state volume.
+# Explicit CLAUDE_CONFIG_DIR also puts global .claude.json inside that volume.
+# Docs: https://code.claude.com/docs/en/setup
+# ------------------------------------------------------------------------------
+ENV CLAUDE_CONFIG_DIR=/home/developer/.claude
+RUN curl -fsSL https://claude.ai/install.sh -o /tmp/install-claude.sh \
+  && bash /tmp/install-claude.sh stable \
+  && rm /tmp/install-claude.sh
+
+# Official Linux desktop applications. Cursor uses its published Debian package;
+# ChatGPT configures OpenAI's signed update repository during package installation.
+# Claude Desktop is installed from Anthropic's signed stable apt repository.
+USER root
+ARG CURSOR_DESKTOP_VERSION=3.29
+RUN case "$TARGETARCH" in amd64) cursor_architecture=x64 ;; arm64) cursor_architecture=arm64 ;; *) echo "Unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; esac \
+  && curl -fsSL https://downloads.claude.ai/claude-desktop/key.asc \
+      -o /usr/share/keyrings/claude-desktop-archive-keyring.asc \
+  && echo "deb [signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" \
+      > /etc/apt/sources.list.d/claude-desktop.list \
+  && curl -fsSL "https://api2.cursor.sh/updates/download/golden/linux-${cursor_architecture}-deb/cursor/${CURSOR_DESKTOP_VERSION}" -o /tmp/cursor.deb \
+  && curl -fsSL https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_${TARGETARCH}.deb -o /tmp/chatgpt.deb \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends /tmp/cursor.deb /tmp/chatgpt.deb claude-desktop gnome-keyring \
+  && rm /tmp/cursor.deb /tmp/chatgpt.deb \
+  && rm -rf /var/lib/apt/lists/*
+
+# Create application mount points with the developer's ownership for fresh volumes.
+RUN install -d -m 0700 -o developer -g developer \
+    /home/developer/.codex \
+    /home/developer/.config/Codex \
+    /home/developer/.claude \
+    /home/developer/.config/Claude \
+    /home/developer/.cursor \
+    /home/developer/.config/cursor \
+    /home/developer/.config/Cursor
+
+# Native desktop secrets are shared through the user's Secret Service keyring.
+RUN install -d -m 0700 -o developer -g developer /home/developer/.local/share/keyrings
+COPY .devcontainer/desktop/autostart/ /etc/xdg/autostart/
+
+# AI CLI shortcuts for the XFCE desktop and application menu.
+COPY .devcontainer/desktop/icons/ /usr/local/share/icons/super-projects/
+COPY .devcontainer/desktop/*.desktop /usr/local/share/applications/
+COPY --chown=developer:developer --chmod=0755 .devcontainer/desktop/*.desktop /home/developer/Desktop/
+# Open the workspace bind mount directly from the desktop file manager.
+# Electron apps need software rendering on the virtual desktop (no GPU device).
+# Preserve vendor names, icons, actions, and URL handlers while adding this flag.
+RUN sed -i -E 's#^Exec=(/usr/share/cursor/cursor|chatgpt|claude-desktop) #Exec=\1 --disable-gpu #' \
+      /usr/share/applications/cursor.desktop /usr/share/applications/chatgpt.desktop \
+      /usr/share/applications/com.anthropic.Claude.desktop \
+  && sed -i 's#^Exec=/usr/share/cursor/cursor --disable-gpu %F#Exec=/usr/share/cursor/cursor --disable-gpu --ozone-platform=x11 --new-window /workspaces %F#' /usr/share/applications/cursor.desktop \
+  && install -o developer -g developer -m 0755 \
+      /usr/share/applications/cursor.desktop /usr/share/applications/chatgpt.desktop \
+      /usr/share/applications/com.anthropic.Claude.desktop /home/developer/Desktop/
+
+# Official VS Code stable package; apt selects the image's target architecture.
+# Reuse Microsoft's signing key installed for Azure CLI.
+RUN printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n' "$TARGETARCH" \
+      > /etc/apt/sources.list.d/vscode.sources \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends code \
+  && rm -rf /var/lib/apt/lists/*
+
+# Use the package's desktop IDs (current releases use reverse-domain names).
+RUN install -d -m 0700 -o developer -g developer \
+      /home/developer/.config/Code /home/developer/.config/Code/User \
+      /home/developer/.config/Cursor/User /home/developer/.vscode /home/developer/.vscode-server \
+      /home/developer/.cursor-server \
+  && for desktop_entry in $(dpkg-query -L code | sed -n '\#^/usr/share/applications/.*\.desktop$#p'); do \
+      sed -i 's#^Exec=/usr/share/code/code #Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 #' "$desktop_entry"; \
+      if grep -q '^Type=Application' "$desktop_entry" && ! grep -q '^NoDisplay=true' "$desktop_entry"; then \
+        sed -i '0,/ %F/s# %F# --new-window /workspaces %F#' "$desktop_entry"; \
+        install -o developer -g developer -m 0755 "$desktop_entry" /home/developer/Desktop/; \
+      fi; \
+    done
+
+# Native Linux GUI is intentional even when the Docker host uses WSL.
+ENV DONT_PROMPT_WSL_INSTALL=1
+USER developer:developer
+# Fresh extension volumes inherit these defaults; user-installed extensions persist.
+RUN code --disable-telemetry --install-extension openai.chatgpt
+
 # USER root
 # dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
 # compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.

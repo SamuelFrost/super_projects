@@ -49,7 +49,17 @@ services:
     #   - git-config:/super_projects_development/.devcontainer/persist/git
     #   - chrome-devtools-mcp-profile:/super_projects_development/.devcontainer/persist/chrome
     #   - mise-data:/super_projects_development/.devcontainer/persist/mise
+    #   - codex-state:/super_projects_development/.devcontainer/persist/codex
+    #   - chatgpt-state:/super_projects_development/.devcontainer/persist/chatgpt
+    #   - claude-code-state:/super_projects_development/.devcontainer/persist/claude-code
+    #   - claude-desktop-state:/super_projects_development/.devcontainer/persist/claude-desktop
     #   - cursor-data:/super_projects_development/.devcontainer/persist/cursor
+    #   - cursor-config-state:/super_projects_development/.devcontainer/persist/cursor-config
+    #   - cursor-desktop-state:/super_projects_development/.devcontainer/persist/cursor-desktop
+    #   - cursor-server-state:/super_projects_development/.devcontainer/persist/cursor-server
+    #   - vscode-profile-state:/super_projects_development/.devcontainer/persist/vscode-profile
+    #   - vscode-extensions-state:/super_projects_development/.devcontainer/persist/vscode-extensions
+    #   - vscode-server-state:/super_projects_development/.devcontainer/persist/vscode-server
     # args:
     #   SUPER_PROJECTS_WORKDIR: /super_projects_development
     # environment:

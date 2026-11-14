@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Secret Service
+Comment=Keep desktop application credentials in the persisted user keyring
+Exec=gnome-keyring-daemon --start --components=secrets
+OnlyShowIn=XFCE;
+NoDisplay=true

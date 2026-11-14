@@ -16,6 +16,7 @@ Clone this repository and open it with an IDE that supports Dev Containers, or u
 
 - Linux or macOS. On Windows, use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install)
 - Docker installed and running. [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- With Buildx 0.37.2 or later, use Docker Compose 5.7.0 or later on the host for [build-input permission support](https://github.com/docker/compose/pull/14325).
 - An IDE with Dev Container support is highly recommended
 
 <details>
@@ -221,7 +222,39 @@ Inside the devcontainer you are the `developer` user. That user is created with 
 
 The `developer` user also belongs to a `docker` group created with that socket's group id, which is what allows it to use the socket. The group id is set when the image is built, so a different socket group needs a rebuild.
 
-#### Local LLM (Ollama)
+<details>
+<summary>Image architecture</summary>
+
+Host initialization selects the Docker daemon's architecture for building and running the services. Supported platforms are `linux/amd64` and `linux/arm64`. BuildKit's `TARGETARCH` selects architecture-specific package downloads.
+
+The selection is written to the ignored `architecture/compose.architecture.yaml` layer. To override it, set `platform` in the final miscellaneous Compose override. Running a different architecture requires Docker emulation support.
+
+</details>
+
+</details>
+
+### AI tools
+
+The environment includes AI command-line tools, desktop applications, and a local model service.
+
+<details>
+<summary>AI applications and desktop shortcuts</summary>
+
+Gemini CLI, Codex CLI, Cursor CLI, and Claude Code have terminal launchers. VS Code, Cursor, ChatGPT, and Claude Desktop are installed from official Linux packages; Gemini opens its web app in Chrome. Native GUI profiles and the Secret Service keyring persist across rebuilds.
+
+VS Code opens `/workspaces` with Copilot Chat available and the Codex extension installed for fresh profiles. The desktop's `workspaces` folder shortcut also opens `/workspaces`.
+
+</details>
+
+<details>
+<summary>AI privacy defaults</summary>
+
+AI tools default to reduced optional reporting. See [AI privacy defaults](.devcontainer/privacy/README.md) for local controls and provider account training opt-outs.
+
+</details>
+
+<details>
+<summary>Local LLM (Ollama and lllm)</summary>
 
 By default, Gemma 4 is used with the Ollama docker service started by devcontainer. The default is `gemma4:e2b` with a `12g` RAM cap. See `local_llm_spec_guideline.md` for configuration and setup guidelines-- it's highly recommended to adjust settings for your machine to get the most out of the LLM.
 
@@ -234,7 +267,14 @@ lllm
 > hi
 ```
 
-If you prefer a GUI for the Agent Development Kit, you can run `lllm web` to open the development UI at `http://127.0.0.1:8000` inside the container (set up port forwarding as needed).
+<details>
+<summary>lllm desktop launchers and history</summary>
+
+The desktop includes **lllm CLI**, **lllm Browser Agent** (`lllm --agent=browser_agent`), **lllm Web Server**, and **lllm web GUI**. The server shortcut runs `lllm web` in a terminal; closing that terminal stops the server. The GUI shortcut opens Chrome at `http://127.0.0.1:8000` using the persisted browser profile. Start the server before opening the GUI.
+
+CLI and web conversations share `.devcontainer/lllm/.adk/session.db`; transcripts are stored under `.devcontainer/lllm/.local_only/local_llm_journal/`. Both are on the workspace bind mount and survive rebuilds.
+
+</details>
 
 By default every author shows thinking, its reply, and tool names such as `[new_page]`. A sub-agent also shows the request it was given, labeled `[files_agent]`, and its reply, labeled `[files_agent response]`. Tool results stay off. `--outputChannels` takes one JSON object. `defaults` applies to every author, `sub_agent_defaults` then applies to agents under the root, and each `agent_overrides` entry wins for the agents in `target_agents`. Omitted keys keep the layer below. Values are booleans: `thinking`, `answer`, `tool_calls`, `tool_results`, and `prompt`.
 
@@ -263,20 +303,41 @@ The service downloads `GEMMA_MODEL` each time it starts. Models stay in the `loc
 
 </details>
 
-### Persisted volumes
+### Persistent storage and cleanup
+
+<details>
+<summary>Persisted volumes and host IDE preferences</summary>
 
 State is preserved across container rebuilds via named Docker volumes:
 
 | Volume | Mount in container | Purpose |
 |--------|-------------------|---------|
+| `<name>_codex-state` | `~/.codex` | Codex login, settings, and sessions |
+| `<name>_chatgpt-state` | `~/.config/Codex` | ChatGPT desktop profile |
+| `<name>_claude-code-state` | `~/.claude` | Claude Code login, settings, and sessions |
+| `<name>_claude-desktop-state` | `~/.config/Claude` | Claude Desktop profile |
+| `<name>_cursor-data` | `~/.cursor` | Cursor Agent state and sessions |
+| `<name>_cursor-config-state` | `~/.config/cursor` | Cursor Agent Linux login and configuration |
+| `<name>_cursor-desktop-state` | `~/.config/Cursor` | Cursor IDE profile |
+| `<name>_cursor-server-state` | `~/.cursor-server` | Cursor remote server, extensions, settings, and remote workspace state |
+| `<name>_vscode-profile-state` | `~/.config/Code` | VS Code settings, workspace state, chat history, and account profile |
+| `<name>_vscode-extensions-state` | `~/.vscode` | VS Code installed desktop extensions and CLI state |
+| `<name>_vscode-server-state` | `~/.vscode-server` | VS Code remote server, extensions, settings, and remote workspace state |
 | `<name>_gemini-data` | `~/.gemini` | Gemini CLI sessions/config |
+| `<name>_desktop-keyrings` | `~/.local/share/keyrings` | Desktop login secrets |
 | `<name>_gh-data` | `~/.config/gh` | GitHub CLI auth |
 | `<name>_git-config` | `~/.config/git` | Git configuration |
 | `<name>_mise-data` | `~/.local/share/mise` | Downloaded tools & runtimes |
-| `<name>_chrome-devtools-mcp-profile` | `~/chrome-profile` | Chrome browser logins & extensions |
-| `<name>_cursor-data` | `~/.cursor` | Cursor CLI sessions & agent transcripts |
+| `<name>_chrome-devtools-mcp-profile` | `~/chrome-profile` | Browser profiles and Gemini web app |
+| `<name>_local-llm` | `/root/.ollama` in `local-llm` (separate container service) | Ollama downloaded models and model metadata |
 
-These volumes are also dual-mounted under `.devcontainer/persist/` inside the container for easy inspection. To wipe state, delete the corresponding Docker volume (e.g., `docker volume rm <name>_gh-data`).
+Named volumes are managed by Docker on macOS, WSL2, and Linux. See the [persistence guide](.devcontainer/persist/README.md) for storage details.
+
+Host initialization also shares existing VS Code and Cursor user settings and key mappings read-only from standard macOS, Linux, and Windows/WSL profile locations. Missing profiles, remote Docker, and nested initialization keep independent persisted preferences. This shares preferences, not chat databases; see [host user settings](.devcontainer/persist/README.md#host-user-settings) for behavior and overrides.
+
+The devcontainer’s tool-state volumes are also dual-mounted under `.devcontainer/persist/` for inspection. Ollama’s volume is mounted only in the `local-llm` service; downloaded models survive service recreation and image rebuilds. To wipe state, delete the corresponding Docker volume (e.g., `docker volume rm <name>_gh-data`).
+
+</details>
 
 <details>
 <summary>To fully remove the containers and all associated data:</summary>
@@ -285,7 +346,7 @@ Note, if you have set up projects with multiple names, you will need to run this
 
 #### To fully remove the containers and volumes:
 
-This stops `devcontainer` and `localhost_forward_proxy`, removes the project network, and deletes the named volumes in the table above (Gemini, GitHub CLI auth, git config, mise installs, Chrome profile, and Cursor state). The built images stay, so the next start can reuse them.
+This stops the project’s services, removes the project network, and deletes the named volumes listed under persisted volumes (AI tool logins and history, GitHub CLI auth, git config, mise installs, Chrome profile, and Ollama models). The built images stay, so the next start can reuse them.
 
 ```sh
 ./not_devcontainer down -v

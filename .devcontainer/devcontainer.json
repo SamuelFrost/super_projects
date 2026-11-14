@@ -4,10 +4,12 @@
   "name": "super_projects",
   "dockerComposeFile": [
     "compose.yaml",
+    "docker_compose_configuration_customizations/architecture/compose.architecture.yaml",
     "docker_compose_configuration_customizations/naming/compose.naming.yaml",
     "docker_compose_configuration_customizations/naming/compose.naming.override.yaml",
     "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml",
     "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml",
+    "docker_compose_configuration_customizations/host_ide_settings/compose.host-ide-settings.yaml",
     "docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml",
     "docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml",
     "docker_compose_configuration_customizations/lllm/compose.lllm.yaml",
@@ -46,6 +48,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "GitHub.copilot-chat",
         "openai.chatgpt",
         "Shopify.ruby-lsp",
         "streetsidesoftware.code-spell-checker",
@@ -65,17 +68,14 @@
       ],
       "settings": {
         "autoOpenWorkspace.enableAutoOpenAlwaysFirst": true,
+        "telemetry.telemetryLevel": "off",
         // Named-volume shortcuts under persist/ can be huge (mise installs, Chrome profile).
         // Keep them out of the workspace file watcher and search index.
         "files.watcherExclude": {
-          "**/.devcontainer/persist/mise/**": true,
-          "**/.devcontainer/persist/chrome/**": true,
-          "**/.devcontainer/persist/cursor/**": true
+          "**/.devcontainer/persist/**": true
         },
         "search.exclude": {
-          "**/.devcontainer/persist/mise": true,
-          "**/.devcontainer/persist/chrome": true,
-          "**/.devcontainer/persist/cursor": true
+          "**/.devcontainer/persist": true
         }
       }
     }

@@ -4,6 +4,7 @@
   "name": "super_projects",
   "dockerComposeFile": [
     "compose.yaml",
+    "docker_compose_configuration_customizations/architecture/compose.architecture.yaml",
     "docker_compose_configuration_customizations/naming/compose.naming.yaml",
     "docker_compose_configuration_customizations/naming/compose.naming.override.yaml",
     "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml",

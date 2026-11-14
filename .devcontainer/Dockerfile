@@ -222,18 +222,19 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
 
 # ------------------------------------------------------------------------------
 # Google Chrome
-#   ~250 MB; amd64-only (Google does not publish arm64 Chrome debs).
+#   Official repository supplies amd64 and arm64 packages.
 #   fonts-liberation: core fonts Chrome needs for proper text rendering.
 #   A wrapper at /usr/local/bin/chrome applies the container-required flags:
 #     --enable-unsafe-swiftshader  Software WebGL (no GPU in the container).
 #     --enable-features=WebMCP  WebMCP tools for chrome-devtools-mcp (Chrome 150+).
 #   The namespace sandbox is enabled by .devcontainer/seccomp/chrome-sandbox.json.
 # ------------------------------------------------------------------------------
+ARG TARGETARCH
 RUN install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
        | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
   && chmod a+r /etc/apt/keyrings/google-chrome.gpg \
-  && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
+  && echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
        > /etc/apt/sources.list.d/google-chrome.list \
   && apt-get update -qq \
   && apt-get install -y --no-install-recommends \

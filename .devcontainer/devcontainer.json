@@ -9,6 +9,7 @@
     "docker_compose_configuration_customizations/naming/compose.naming.override.yaml",
     "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.user-ids.yaml",
     "docker_compose_configuration_customizations/host_filesystem_compatibility/compose.project-directory.yaml",
+    "docker_compose_configuration_customizations/host_ide_settings/compose.host-ide-settings.yaml",
     "docker_compose_configuration_customizations/ssh_agent_socket/compose.ssh-agent-socket.yaml",
     "docker_compose_configuration_customizations/ssh_known_hosts/compose.ssh-known-hosts.yaml",
     "docker_compose_configuration_customizations/lllm/compose.lllm.yaml",

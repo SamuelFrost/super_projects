@@ -59,3 +59,7 @@
 .devcontainer/persist/*
 !.devcontainer/persist/README.md
 .devcontainer/cursor-migration-backup/
+
+# Host-specific IDE preference bindings generated at initialization.
+.devcontainer/docker_compose_configuration_customizations/host_ide_settings/compose.host-ide-settings.yaml
+.devcontainer/docker_compose_configuration_customizations/host_ide_settings/compose.host-ide-settings.yaml.tmp

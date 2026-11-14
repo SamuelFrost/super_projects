@@ -12,6 +12,7 @@ sh .devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/wr
 sh .devcontainer/docker_compose_configuration_customizations/architecture/write-compose-architecture
 sh .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/write-compose-user-ids
 sh .devcontainer/docker_compose_configuration_customizations/host_filesystem_compatibility/write-compose-project-directory
+sh .devcontainer/docker_compose_configuration_customizations/host_ide_settings/write-compose-host-ide-settings
 sh .devcontainer/docker_compose_configuration_customizations/ssh_known_hosts/write-compose-ssh-known-hosts
 mkdir -p \
 	.devcontainer/persist/codex \

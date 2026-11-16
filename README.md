@@ -308,30 +308,11 @@ The service downloads `GEMMA_MODEL` each time it starts. Models stay in the `loc
 <details>
 <summary>Persisted volumes and host IDE preferences</summary>
 
-State is preserved across container rebuilds via named Docker volumes:
-
-| Volume | Mount in container | Purpose |
-|--------|-------------------|---------|
-| `<name>_codex-state` | `~/.codex` | Codex login, settings, and sessions |
-| `<name>_chatgpt-state` | `~/.config/Codex` | ChatGPT desktop profile |
-| `<name>_claude-code-state` | `~/.claude` | Claude Code login, settings, and sessions |
-| `<name>_claude-desktop-state` | `~/.config/Claude` | Claude Desktop profile |
-| `<name>_cursor-data` | `~/.cursor` | Cursor Agent state and sessions |
-| `<name>_cursor-config-state` | `~/.config/cursor` | Cursor Agent Linux login and configuration |
-| `<name>_cursor-desktop-state` | `~/.config/Cursor` | Cursor IDE profile |
-| `<name>_cursor-server-state` | `~/.cursor-server` | Cursor remote server, extensions, settings, and remote workspace state |
-| `<name>_vscode-profile-state` | `~/.config/Code` | VS Code settings, workspace state, chat history, and account profile |
-| `<name>_vscode-extensions-state` | `~/.vscode` | VS Code installed desktop extensions and CLI state |
-| `<name>_vscode-server-state` | `~/.vscode-server` | VS Code remote server, extensions, settings, and remote workspace state |
-| `<name>_gemini-data` | `~/.gemini` | Gemini CLI sessions/config |
-| `<name>_desktop-keyrings` | `~/.local/share/keyrings` | Desktop login secrets |
-| `<name>_gh-data` | `~/.config/gh` | GitHub CLI auth |
-| `<name>_git-config` | `~/.config/git` | Git configuration |
-| `<name>_mise-data` | `~/.local/share/mise` | Downloaded tools & runtimes |
-| `<name>_chrome-devtools-mcp-profile` | `~/chrome-profile` | Browser profiles and Gemini web app |
-| `<name>_local-llm` | `/root/.ollama` in `local-llm` (separate container service) | Ollama downloaded models and model metadata |
-
-Named volumes are managed by Docker on macOS, WSL2, and Linux. See the [persistence guide](.devcontainer/persist/README.md) for storage details.
+Named Docker volumes preserve AI tool logins, settings, local histories, IDE extensions,
+remote server state, desktop credentials, browser profiles, and downloaded tools
+across rebuilds. Ollama models persist in a separate volume mounted in the
+`local-llm` service. See the [persistence guide](.devcontainer/persist/README.md)
+for the complete volume inventory and paths.
 
 Host initialization also shares existing VS Code and Cursor user settings and key mappings read-only from standard macOS, Linux, and Windows/WSL profile locations. Missing profiles, remote Docker, and nested initialization keep independent persisted preferences. This shares preferences, not chat databases; see [host user settings](.devcontainer/persist/README.md#host-user-settings) for behavior and overrides.
 
@@ -346,7 +327,7 @@ Note, if you have set up projects with multiple names, you will need to run this
 
 #### To fully remove the containers and volumes:
 
-This stops the project’s services, removes the project network, and deletes the named volumes listed under persisted volumes (AI tool logins and history, GitHub CLI auth, git config, mise installs, Chrome profile, and Ollama models). The built images stay, so the next start can reuse them.
+This stops the project’s services, removes the project network, and deletes the named volumes described in the persistence guide (AI tool logins and history, GitHub CLI auth, git config, mise installs, Chrome profile, and Ollama models). The built images stay, so the next start can reuse them.
 
 ```sh
 ./not_devcontainer down -v

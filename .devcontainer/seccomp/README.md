@@ -23,7 +23,8 @@ requirements and the architecture-specific argument positions used below.
 
 All eight rules use `SCMP_ACT_ALLOW` and exclude containers that already hold
 `CAP_SYS_ADMIN`; those containers retain Docker's broader upstream rules.
-The `comment` fields explain the application-specific intent.
+The `comment` fields explain the application-specific intent. Application names
+identify why each exception exists; the rules apply to all processes in the container.
 
 | Added rule | Fields and constraints | Goal |
 | --- | --- | --- |

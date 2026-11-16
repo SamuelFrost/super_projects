@@ -28,8 +28,10 @@ Volume names are prefixed by the Compose project name. Set a distinct name in `d
 ## Application storage
 
 Each application uses its normal directory, mounted directly from a named Docker
-volume. Application binaries remain in the image outside these volumes. CLI and
-desktop applications retain separate profiles and may require separate logins.
+volume. Image-installed application binaries remain outside these volumes.
+Downloaded remote IDE servers, extensions, and mise-managed tools persist in
+their respective volumes. CLI and desktop applications retain separate profiles
+and may require separate logins.
 
 `CLAUDE_CONFIG_DIR=/home/developer/.claude` keeps global `.claude.json` inside the persisted `~/.claude` directory as well. GNOME Keyring starts in the XFCE session. Follow its normal prompt to create or unlock the login keyring when an application needs it; no keyring password is stored in the image.
 

@@ -70,7 +70,9 @@ services:
         export SSH_AUTH_SOCK=/ssh-agent.sock
         ensure-auth
         print-cursor-worker-hint
+        report-desktop-launcher-errors
         start-vnc
+        start-desktop-browser
         cd /workspaces
         mise install
         exec tail -f /dev/null

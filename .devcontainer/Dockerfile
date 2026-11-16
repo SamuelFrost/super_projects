@@ -356,14 +356,6 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends python3-ven
   && ln -sf /opt/google-adk/bin/adk /usr/local/bin/adk \
   && rm -rf /var/lib/apt/lists/*
 
-# ------------------------------------------------------------------------------
-# start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
-#   Safe to call repeatedly — kills stale processes first.
-#   Uses nohup so background processes survive when postStartCommand's shell exits.
-# ------------------------------------------------------------------------------
-COPY --chmod=0755 .devcontainer/scripts/dockerfile/start-vnc /usr/local/bin/start-vnc
-
-
 # ensure-auth: report host-forwarded SSH agent + GitHub CLI status (keys stay on the host).
 # Passphrase-protected keys: ssh-add once on the host against HOST_SSH_AUTH_SOCK.
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/ensure-auth
@@ -426,13 +418,14 @@ COPY --chown=developer:developer --chmod=0755 .devcontainer/desktop/*.desktop /h
 # Open the workspace bind mount directly from the desktop file manager.
 # Electron apps need software rendering on the virtual desktop (no GPU device).
 # Preserve vendor names, icons, actions, and URL handlers while adding this flag.
-RUN sed -i -E 's#^Exec=(/usr/share/cursor/cursor|chatgpt|claude-desktop) #Exec=\1 --disable-gpu #' \
-      /usr/share/applications/cursor.desktop /usr/share/applications/chatgpt.desktop \
-      /usr/share/applications/com.anthropic.Claude.desktop \
-  && sed -i 's#^Exec=/usr/share/cursor/cursor --disable-gpu %F#Exec=/usr/share/cursor/cursor --disable-gpu --ozone-platform=x11 --new-window /workspaces %F#' /usr/share/applications/cursor.desktop \
-  && install -o developer -g developer -m 0755 \
-      /usr/share/applications/cursor.desktop /usr/share/applications/chatgpt.desktop \
-      /usr/share/applications/com.anthropic.Claude.desktop /home/developer/Desktop/
+RUN for desktop_entry in /usr/share/applications/cursor.desktop /usr/share/applications/chatgpt.desktop /usr/share/applications/com.anthropic.Claude.desktop; do \
+      [ -f "$desktop_entry" ] || continue; \
+      sed -i -E 's#^Exec=(/usr/share/cursor/cursor|chatgpt|claude-desktop) #Exec=\1 --disable-gpu #' "$desktop_entry"; \
+      if [ "$desktop_entry" = /usr/share/applications/cursor.desktop ]; then \
+        sed -i 's#^Exec=/usr/share/cursor/cursor --disable-gpu %F#Exec=/usr/share/cursor/cursor --disable-gpu --ozone-platform=x11 --new-window /workspaces %F#' "$desktop_entry"; \
+      fi; \
+      install -o developer -g developer -m 0755 "$desktop_entry" /home/developer/Desktop/; \
+    done
 
 # Image-owned controls apply to existing state volumes as well as fresh profiles.
 # These disable optional local reporting, not provider account training consent.
@@ -446,8 +439,10 @@ ENV DO_NOT_TRACK=1 \
     GEMINI_TELEMETRY_LOG_PROMPTS=false \
     OTEL_SDK_DISABLED=true
 # Cursor's inherited Electron/VS Code switches disable optional local reporting.
-RUN sed -i 's/ --disable-gpu / --disable-gpu --disable-telemetry --disable-crash-reporter /g' \
-      /usr/share/applications/cursor.desktop /home/developer/Desktop/cursor.desktop
+RUN for desktop_entry in /usr/share/applications/cursor.desktop /home/developer/Desktop/cursor.desktop; do \
+      [ -f "$desktop_entry" ] || continue; \
+      sed -i 's/ --disable-gpu / --disable-gpu --disable-telemetry --disable-crash-reporter /g' "$desktop_entry"; \
+    done
 
 
 # Official VS Code stable package; apt selects the image's target architecture.
@@ -479,8 +474,18 @@ USER developer:developer
 # Fresh extension volumes inherit these defaults; user-installed extensions persist.
 RUN code --disable-telemetry --install-extension openai.chatgpt
 
+# ------------------------------------------------------------------------------
+# start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
+#   Safe to call repeatedly — kills stale processes first.
+#   Uses nohup so background processes survive when postStartCommand's shell exits.
+# ------------------------------------------------------------------------------
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/start-vnc \
+    .devcontainer/scripts/dockerfile/report-desktop-launcher-errors \
+    .devcontainer/scripts/dockerfile/start-desktop-browser /usr/local/bin/
+
+
 # USER root
 # dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
 # compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["bash", "-c", "start-vnc && exec tail -f /dev/null"]
+CMD ["bash", "-c", "report-desktop-launcher-errors; start-vnc; start-desktop-browser; exec tail -f /dev/null"]

@@ -1,0 +1,5 @@
+#!/bin/bash
+# Restart Chrome after the virtual display and desktop are ready.
+pkill -f google-chrome 2>/dev/null
+chrome
+echo "Chrome DevTools: http://localhost:${CHROME_REMOTE_DEBUGGING_PORT:-9223}"

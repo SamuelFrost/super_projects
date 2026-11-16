@@ -438,6 +438,10 @@ RUN install -d -m 0700 -o developer -g developer \
 # Native desktop secrets are shared through the user's Secret Service keyring.
 RUN install -d -m 0700 -o developer -g developer /home/developer/.local/share/keyrings
 COPY .devcontainer/desktop/autostart/ /etc/xdg/autostart/
+COPY .devcontainer/desktop/mimeapps.list /etc/xdg/mimeapps.list
+# XFCE browser shortcuts use the same debugging-enabled wrapper as URL handlers.
+RUN sed -i 's/^WebBrowser=.*/WebBrowser=google-chrome/' /etc/xdg/xfce4/helpers.rc \
+  && sed -i 's/^X-XFCE-Binaries=.*/X-XFCE-Binaries=chrome;/' /usr/share/xfce4/helpers/google-chrome.desktop
 
 # AI CLI shortcuts for the XFCE desktop and application menu.
 COPY .devcontainer/desktop/icons/ /usr/local/share/icons/super-projects/

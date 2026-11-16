@@ -27,7 +27,6 @@ mkdir -p \
 	.devcontainer/persist/vscode-extensions \
 	.devcontainer/persist/vscode-server \
 	.devcontainer/persist/gemini \
-	.devcontainer/persist/desktop-keyrings \
 	.devcontainer/persist/gh \
 	.devcontainer/persist/git \
 	.devcontainer/persist/mise \

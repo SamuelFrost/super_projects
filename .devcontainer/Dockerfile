@@ -310,7 +310,7 @@ RUN --mount=from=cursor-desktop-download,source=/tmp/cursor.deb,target=/tmp/curs
   && echo "deb [signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" \
       > /etc/apt/sources.list.d/claude-desktop.list \
   && apt-get update -qq \
-  && apt-get install -y --no-install-recommends /tmp/cursor.deb /tmp/chatgpt.deb claude-desktop gnome-keyring \
+  && apt-get install -y --no-install-recommends /tmp/cursor.deb /tmp/chatgpt.deb claude-desktop \
   && rm -rf /var/lib/apt/lists/*
 
 # Official VS Code stable package; apt selects the image's target architecture.
@@ -407,15 +407,14 @@ RUN sed -i \
 # Trust any mise config under /workspaces without interactive `mise trust`.
 ENV MISE_TRUSTED_CONFIG_PATHS=/workspaces
 
-# Source mise-shell-init for interactive terminals; report auth status on TTYs.
+# Source mise-shell-init without accessing credentials when a terminal opens.
 RUN printf '%s\n' \
   '[ -r /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh ] && . /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh' \
-  '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' \
   >> /home/developer/.bashrc
 
-# ensure-auth: report host-forwarded SSH agent + GitHub CLI status (keys stay on the host).
+# ensure-auth: report host-forwarded SSH agent status and GitHub login instructions.
 # Passphrase-protected keys: ssh-add once on the host against HOST_SSH_AUTH_SOCK.
-COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/ensure-auth
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/
 
 # print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
@@ -435,9 +434,6 @@ RUN install -d -m 0700 -o developer -g developer \
     /home/developer/.config/cursor \
     /home/developer/.config/Cursor
 
-# Native desktop secrets are shared through the user's Secret Service keyring.
-RUN install -d -m 0700 -o developer -g developer /home/developer/.local/share/keyrings
-COPY .devcontainer/desktop/autostart/ /etc/xdg/autostart/
 COPY .devcontainer/desktop/mimeapps.list /etc/xdg/mimeapps.list
 # XFCE browser shortcuts use the same debugging-enabled wrapper as URL handlers.
 RUN sed -i 's/^WebBrowser=.*/WebBrowser=google-chrome/' /etc/xdg/xfce4/helpers.rc \

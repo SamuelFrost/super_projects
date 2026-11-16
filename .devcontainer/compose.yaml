@@ -55,9 +55,6 @@ services:
       # mise tool cache: persists downloads/installs across rebuilds
       - mise-data:/home/developer/.local/share/mise
       - mise-data:/workspaces/.devcontainer/persist/mise
-      # Secret Service credentials used by native desktop applications.
-      - desktop-keyrings:/home/developer/.local/share/keyrings
-      - desktop-keyrings:/workspaces/.devcontainer/persist/desktop-keyrings
       # Bash history: mounts from host home directory for continuity with non-devcontainer shells
       # - ${HOST_HOME_DIR:-${HOME}}/.bash_history:/home/developer/.bash_history
     # start-vnc + mise install run here (not in the Dockerfile) so image builds stay
@@ -137,5 +134,3 @@ volumes:
   vscode-profile-state: {}
   vscode-extensions-state: {}
   vscode-server-state: {}
-  # Secret Service credentials shared by native desktop applications.
-  desktop-keyrings: {}

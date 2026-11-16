@@ -18,7 +18,6 @@ Volume names are prefixed by the Compose project name. Set a distinct name in `d
 | `vscode-extensions/` | `<name>_vscode-extensions-state` | `~/.vscode` | VS Code installed desktop extensions and CLI state |
 | `vscode-server/` | `<name>_vscode-server-state` | `~/.vscode-server` | VS Code remote server, extensions, settings, and remote workspace state |
 | `gemini/` | `<name>_gemini-data` | `~/.gemini` | Gemini CLI login, sessions, settings, and caches |
-| `desktop-keyrings/` | `<name>_desktop-keyrings` | `~/.local/share/keyrings` | Secret Service credentials shared by native GUI apps |
 | `chrome/` | `<name>_chrome-devtools-mcp-profile` | `~/chrome-profile` | Browser logins, profiles, extensions; Gemini web app; separate `pwa/` profile |
 | `gh/` | `<name>_gh-data` | `~/.config/gh` | GitHub CLI authentication |
 | `git/` | `<name>_git-config` | `~/.config/git` | Git configuration |
@@ -33,7 +32,9 @@ Downloaded remote IDE servers, extensions, and mise-managed tools persist in
 their respective volumes. CLI and desktop applications retain separate profiles
 and may require separate logins.
 
-`CLAUDE_CONFIG_DIR=/home/developer/.claude` keeps global `.claude.json` inside the persisted `~/.claude` directory as well. GNOME Keyring starts in the XFCE session. Follow its normal prompt to create or unlock the login keyring when an application needs it; no keyring password is stored in the image.
+`CLAUDE_CONFIG_DIR=/home/developer/.claude` keeps global `.claude.json` inside the persisted `~/.claude` directory as well.
+
+Opening a terminal and container startup diagnostics do not access GitHub credentials; use `gh auth status` explicitly to check them.
 
 Gemini's GUI uses the shared Chrome profile rather than a separate native desktop store. Host IDE installations have their own profiles. The local `lllm` database and transcripts remain on the workspace bind mount under `.devcontainer/lllm/.adk/` and `.devcontainer/lllm/.local_only/`; Ollama models and metadata persist in the separate `local-llm` service’s volume across service recreation and image rebuilds. Changing `GEMMA_MODEL` retains previously downloaded models; use `ollama rm` in that service to remove models no longer needed.
 

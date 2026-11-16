@@ -350,7 +350,7 @@ ARG DOCKER_GID=1
 RUN userdel --remove ubuntu 2>/dev/null || true && \
     groupadd --gid ${DOCKER_GID} docker || groupadd --gid 1001 docker || groupadd docker || true
 
-# Create developer user matching the host UID (updateRemoteUserUID in devcontainer.json can adjust UID at start)
+# Create the developer user with the UID supplied by host filesystem compatibility.
 RUN groupadd --system developer && \
   useradd --uid ${DEVELOPER_UID} --gid developer --create-home --shell /bin/bash developer && \
   usermod -aG docker developer

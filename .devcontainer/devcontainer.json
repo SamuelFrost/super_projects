@@ -24,7 +24,8 @@
   "shutdownAction": "none",
 
   // "remoteUser": "developer",
-  // "updateRemoteUserUID": true,
+  // initializeCommand supplies the host UID to the image build.
+  "updateRemoteUserUID": false,
 
   // initializeCommand.sh (host): ssh-agent + key unlock, generated Compose files, persist dirs.
   "initializeCommand": "sh .devcontainer/scripts/shell/initializeCommand.sh",

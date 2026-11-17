@@ -244,15 +244,17 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   xterm \
   && rm -rf /var/lib/apt/lists/*
 
-# Match the Ubuntu 24.04 / amd64 Chrome image above. Verify the release artifact.
-# KasmVNC 1.5.2, Ubuntu Noble amd64. The immutable release-asset API also
-# avoids cached failures on GitHub's human-facing download redirects.
-ARG KASMVNC_ASSET_ID=671999996
-ARG KASMVNC_SHA256=89a5d1fbe9e032b122202be158a2b25f15c97e0a5b8dcf92a5e6835c7b7b2acd
-RUN curl -fL --retry 3 --retry-all-errors -H "Accept: application/octet-stream" \
-      "https://api.github.com/repos/kasmtech/KasmVNC/releases/assets/${KASMVNC_ASSET_ID}" \
+# KasmVNC 1.5.2 release assets for Ubuntu Noble, verified by architecture.
+ARG TARGETARCH
+RUN case "$TARGETARCH" in \
+      amd64) kasmvnc_asset_id=671999996; kasmvnc_sha256=89a5d1fbe9e032b122202be158a2b25f15c97e0a5b8dcf92a5e6835c7b7b2acd ;; \
+      arm64) kasmvnc_asset_id=671999980; kasmvnc_sha256=4d680f3d1eb77fb155ae67af7f9fa25d7fbd38a7f69ae146784c7f738e2eed1a ;; \
+      *) echo "Unsupported KasmVNC architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+  && curl -fL --retry 3 --retry-all-errors -H "Accept: application/octet-stream" \
+      "https://api.github.com/repos/kasmtech/KasmVNC/releases/assets/${kasmvnc_asset_id}" \
       -o /tmp/kasmvnc.deb \
-  && echo "${KASMVNC_SHA256}  /tmp/kasmvnc.deb" | sha256sum -c - \
+  && echo "${kasmvnc_sha256}  /tmp/kasmvnc.deb" | sha256sum -c - \
   && apt-get update -qq \
   && apt-get install -y --no-install-recommends /tmp/kasmvnc.deb \
   && rm -f /tmp/kasmvnc.deb \

@@ -1,8 +1,8 @@
 #!/bin/bash
 session_environment="${XDG_RUNTIME_DIR:-/tmp/desktop-runtime-$(id -u)}/session.env"
 if [[ -r $session_environment ]]; then
-  # shellcheck source=/dev/null
-  source "$session_environment"
+	# shellcheck source=/dev/null
+	source "$session_environment"
 fi
 
 CHROME_PORT="${CHROME_REMOTE_DEBUGGING_PORT:-9223}"

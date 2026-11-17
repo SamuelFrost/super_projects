@@ -226,42 +226,38 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
-# VNC server stack
-#   Xvfb:        headless virtual X display (DISPLAY=:99)
-#   x11vnc:      shares the Xvfb display over VNC (port 5900)
-#   novnc + websockify: bridge VNC → WebSocket for browser access (port 6080)
-#   x11-xserver-utils: xsetroot and other X utilities
-#   xterm:       lightweight fallback terminal
+# KasmVNC provides the headless X display and serves its browser client directly.
+# Keep DISPLAY and the existing NOVNC_* settings for launcher/override compatibility.
 # ------------------------------------------------------------------------------
 ENV DISPLAY=:99 \
-    VNC_PORT=5900 \
     NOVNC_PORT=6080 \
     NOVNC_RESOLUTION=1920x1080 \
     CHROME_REMOTE_DEBUGGING_PORT=9223 \
     LIBGL_ALWAYS_SOFTWARE=1
 
-# --- VNC server stack dependencies ---
-# libegl1:        EGL library, needed for WebGL support in Chrome.
-# libgbm1:        GBM library, needed for hardware acceleration in Chrome.
-# libgl1:         OpenGL library, needed for graphics in Chrome.
-# libgl1-mesa-dri: Mesa OpenGL drivers, needed for graphics in Chrome.
-# novnc:          noVNC web client, needed for VNC access.
-# websockify:     WebSocket to TCP proxy, needed for noVNC.
-# x11-xserver-utils: X11 utilities, needed for X11 display management.
-# x11vnc:         VNC server, needed for VNC access.
-# xterm:          lightweight fallback terminal, needed for debugging.
-# xvfb:          virtual X display, needed for headless Chrome.
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   libegl1 \
   libgbm1 \
   libgl1 \
   libgl1-mesa-dri \
-  novnc \
-  websockify \
   x11-xserver-utils \
-  x11vnc \
   xterm \
-  xvfb \
+  && rm -rf /var/lib/apt/lists/*
+
+# KasmVNC 1.5.2 release assets for Ubuntu Noble, verified by architecture.
+ARG TARGETARCH
+RUN case "$TARGETARCH" in \
+      amd64) kasmvnc_asset_id=671999996; kasmvnc_sha256=89a5d1fbe9e032b122202be158a2b25f15c97e0a5b8dcf92a5e6835c7b7b2acd ;; \
+      arm64) kasmvnc_asset_id=671999980; kasmvnc_sha256=4d680f3d1eb77fb155ae67af7f9fa25d7fbd38a7f69ae146784c7f738e2eed1a ;; \
+      *) echo "Unsupported KasmVNC architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+  && curl -fL --retry 3 --retry-all-errors -H "Accept: application/octet-stream" \
+      "https://api.github.com/repos/kasmtech/KasmVNC/releases/assets/${kasmvnc_asset_id}" \
+      -o /tmp/kasmvnc.deb \
+  && echo "${kasmvnc_sha256}  /tmp/kasmvnc.deb" | sha256sum -c - \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends /tmp/kasmvnc.deb \
+  && rm -f /tmp/kasmvnc.deb \
   && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
@@ -488,13 +484,16 @@ RUN install -d -m 0700 -o developer -g developer \
 
 # Machine policy lives outside persisted profiles and also covers CLI launches.
 COPY .devcontainer/privacy/vscode/policy.json /etc/vscode/policy.json
+# Set the browser clipboard preference before KasmVNC initializes its client.
+COPY .devcontainer/scripts/dockerfile/kasmvnc-clipboard.js /usr/share/kasmvnc/www/clipboard-settings.js
+RUN sed -i 's|<head>|<head><script src="./clipboard-settings.js"></script>|' /usr/share/kasmvnc/www/index.html
+
 USER developer:developer
 # ------------------------------------------------------------------------------
-# start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
-#   Safe to call repeatedly — kills stale processes first.
-#   Uses nohup so background processes survive when postStartCommand's shell exits.
+# start-vnc: starts or reconnects to the persistent KasmVNC/XFCE desktop.
 # ------------------------------------------------------------------------------
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/start-vnc \
+    .devcontainer/scripts/dockerfile/desktop-session \
     .devcontainer/scripts/dockerfile/report-desktop-launcher-errors \
     .devcontainer/scripts/dockerfile/start-desktop-browser /usr/local/bin/
 

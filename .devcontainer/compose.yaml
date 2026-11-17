@@ -79,7 +79,7 @@ services:
       SSH_AUTH_SOCK: /ssh-agent.sock
       EDITOR: code
     ports:
-      - "6080:6080"   # noVNC  — browser GUI for VNC
+      - "127.0.0.1:6080:6080"   # KasmVNC browser desktop (local access only)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Chrome's sandbox creates user, PID, and network namespaces. Docker's

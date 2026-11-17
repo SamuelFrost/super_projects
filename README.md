@@ -249,6 +249,8 @@ VS Code opens `/workspaces` with Copilot Chat available and the Codex extension 
 <details>
 <summary>AI privacy defaults</summary>
 
+For CLI sign-in using your host browser, see [login instructions and credential protection boundaries](.devcontainer/persist/README.md#login-from-the-host-browser).
+
 AI tools default to reduced optional reporting. See [AI privacy defaults](.devcontainer/privacy/README.md) for local controls and provider account training opt-outs.
 
 </details>

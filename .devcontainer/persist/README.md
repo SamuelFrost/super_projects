@@ -40,6 +40,47 @@ Gemini's GUI uses the shared Chrome profile rather than a separate native deskto
 
 Changing `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `CURSOR_CONFIG_DIR`, `GEMINI_CLI_HOME`, or XDG paths requires corresponding storage changes. Environment-provided API keys must still be supplied after rebuilding. Apps can expire logins or prune old sessions according to their retention settings. Volumes persist on the selected Docker daemon; they do not automatically synchronize between machines.
 
+## Login from the host browser
+
+Run these commands in an interactive terminal **inside the container**, then open
+the supplied authorization URL in your host browser. Complete sign-in there using
+your existing browser session or password manager. The provider issues credentials
+to the container application; your account password need not enter the container.
+
+| Tool | Container login command | Host browser action |
+| --- | --- | --- |
+| Codex | `codex login --device-auth` | Open the URL and enter the one-time code. Device login must be enabled in your account or workspace settings. |
+| Claude Code | `claude auth login` (or `/login` inside Claude) | Open the supplied URL and approve access. If shown an authorization code, paste it into Claude's terminal prompt. |
+| Cursor CLI | `NO_OPEN_BROWSER=1 agent login` | Open the printed URL and approve access. |
+| Gemini CLI | `NO_BROWSER=true gemini` | Select Google login and follow the manual URL/code prompts. |
+
+The resulting login state uses the volumes listed above and survives rebuilds.
+Applications refresh credentials according to provider behavior; expired or revoked
+access can require another login. CLI login does not automatically sign in separate
+desktop apps or websites. Their own login flows can require application-specific
+callback handling.
+
+Sources: [Codex authentication](https://learn.chatgpt.com/docs/auth),
+[Claude Code authentication](https://code.claude.com/docs/en/authentication),
+[Cursor CLI authentication](https://cursor.com/docs/cli/reference/authentication),
+and [Gemini's manual authorization implementation](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/code_assist/oauth2.ts).
+
+### Credential protection boundary
+
+Host-browser authorization separates your account password from the container,
+but access and refresh tokens are still reusable credentials stored inside it.
+API-key authentication likewise supplies a reusable secret to the container.
+Agents running as the same user can access application state, and access to the
+host Docker socket can bypass container file permissions. Passwords entered into
+the container's agent-controlled browser may also be observed during login.
+
+Credential encryption and stronger isolation from agents are deferred work; this
+setup does not provide a shared encrypted credential store. Keep original passwords
+and SSH private keys on the host, using host SSH-agent forwarding for SSH. Host
+disk encryption (FileVault, BitLocker, or Linux LUKS) can protect Docker storage
+while offline when the volume containing that storage is encrypted; it does not
+protect credentials from processes in a running, unlocked environment.
+
 ## Host and desktop IDE boundaries
 
 Cursor and VS Code desktop launchers open `/workspaces`. Project `.vscode/`,

@@ -1,0 +1,30 @@
+--- a/common/network/websocket.c
++++ b/common/network/websocket.c
+@@ -1939,26 +1939,9 @@
+         usleep(10);
+     }
+ 
+-    // Proxied?
++    // Authentication throttling must use the socket peer, not client headers.
+     char origip[64];
+     memcpy(origip, ip, 64);
+-    const char *fwd = strcasestr(handshake, "X-Forwarded-For: ");
+-    if (fwd) {
+-        fwd += 17;
+-        const char *end = strchr(fwd, '\r');
+-        const char *comma = memchr(fwd, ',', end - fwd);
+-        if (comma)
+-            end = comma;
+-
+-        // Sanity checks, in case it's malicious input
+-        if (!isValidIp(fwd, end - fwd) || (end - fwd) >= 64) {
+-            wserr("An invalid X-Forwarded-For was passed, maybe an attack\n");
+-        } else {
+-            memcpy(ip, fwd, end - fwd);
+-            ip[end - fwd] = '\0';
+-            handler_msg("X-Forwarded-For ip '%s'\n", ip);
+-        }
+-    }
+ 
+     // Early URL parsing for the auth denies
+     char url[2048] = "-";

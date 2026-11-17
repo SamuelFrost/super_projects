@@ -1,0 +1,82 @@
+--- a/common/network/websocket.c
++++ b/common/network/websocket.c
+@@ -900,68 +900,6 @@
+     return 1;
+ }
+ 
+-static void dirlisting(ws_ctx_t *ws_ctx, const char fullpath[], const char path[],
+-                       const char * const user, const char * const ip,
+-                       const char * const origip) {
+-    char buf[WS_MAX_BUF_SIZE];
+-    char enc[PATH_MAX * 3 + 1];
+-    unsigned i;
+-
+-    // Redirect?
+-    const unsigned len = strlen(fullpath);
+-    if (fullpath[len - 1] != '/') {
+-        sprintf(buf, "HTTP/1.1 301 Moved Permanently\r\n"
+-                     "Server: KasmVNC/4.0\r\n"
+-                     "Location: %s/\r\n"
+-                     "Connection: close\r\n"
+-                     "Content-type: text/plain\r\n"
+-                     "%s"
+-                     "\r\n", path, extra_headers ? extra_headers : "");
+-        ws_send(ws_ctx, buf, strlen(buf));
+-        weblog(301, wsthread_handler_id, 0, origip, ip, user, 1, path, strlen(buf));
+-        return;
+-    }
+-
+-    const char *start = memrchr(path, '/', len - 1);
+-    if (!start) start = path;
+-
+-    // Directory listing
+-    sprintf(buf, "HTTP/1.1 200 OK\r\n"
+-                 "Server: KasmVNC/4.0\r\n"
+-                 "Connection: close\r\n"
+-                 "Content-type: text/html\r\n"
+-                 "%s"
+-                 "\r\n<html><title>Directory Listing</title><body><h2>%s</h2><hr><ul>",
+-                 extra_headers ? extra_headers : "", path);
+-    ws_send(ws_ctx, buf, strlen(buf));
+-    unsigned totallen = strlen(buf);
+-
+-    struct dirent **names;
+-    const unsigned num = scandir(fullpath, &names, NULL, alphasort);
+-
+-    for (i = 0; i < num; i++) {
+-        if (!strcmp(names[i]->d_name, ".") || !strcmp(names[i]->d_name, ".."))
+-            continue;
+-
+-        percent_encode(names[i]->d_name, enc);
+-
+-        if (names[i]->d_type == DT_DIR)
+-	        sprintf(buf, "<li><a href=\"%s/\">%s/</a></li>", enc,
+-	                names[i]->d_name);
+-        else
+-	        sprintf(buf, "<li><a href=\"%s\">%s</a></li>", enc,
+-	                names[i]->d_name);
+-
+-        ws_send(ws_ctx, buf, strlen(buf));
+-        totallen += strlen(buf);
+-    }
+-
+-    sprintf(buf, "</ul></body></html>");
+-    ws_send(ws_ctx, buf, strlen(buf));
+-    totallen += strlen(buf);
+-    weblog(200, wsthread_handler_id, 0, origip, ip, user, 1, path, totallen);
+-}
+-
+ static void servefile(ws_ctx_t *ws_ctx, const char *in, const char * const user,
+                       const char * const ip, const char * const origip) {
+     char buf[WS_MAX_BUF_SIZE], path[PATH_MAX], fullpath[PATH_MAX];
+@@ -1006,8 +944,8 @@
+     DIR *dir = opendir(fullpath);
+     if (dir) {
+         closedir(dir);
+-        dirlisting(ws_ctx, fullpath, buf, user, ip, origip);
+-        return;
++        // Directory enumeration is not needed to serve the browser client.
++        goto nope;
+     }
+ 
+     FILE *f = fopen(fullpath, "r");

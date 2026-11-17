@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Claude Code
+Comment=Open Claude Code in the workspace terminal
+Exec=xfce4-terminal --working-directory=/workspaces --title="Claude Code" --execute bash -lc "exec claude"
+TryExec=xfce4-terminal
+Icon=/usr/local/share/icons/super-projects/claude.svg
+Terminal=false
+Categories=Development;
+StartupNotify=false

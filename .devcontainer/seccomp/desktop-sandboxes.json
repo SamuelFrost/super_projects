@@ -1291,6 +1291,101 @@
 					"CAP_PERFMON"
 				]
 			}
+		},
+		{
+			"names": [
+				"unshare"
+			],
+			"action": "SCMP_ACT_ALLOW",
+			"comment": "Cursor terminal sandbox: allow mount, UTS, and IPC namespaces only alongside CLONE_NEWUSER; CLONE_NEWCGROUP stays blocked. Kernel user-namespace capability checks still apply.",
+			"args": [
+				{
+					"index": 0,
+					"value": 301989888,
+					"valueTwo": 268435456,
+					"op": "SCMP_CMP_MASKED_EQ"
+				}
+			],
+			"excludes": {
+				"caps": [
+					"CAP_SYS_ADMIN"
+				]
+			}
+		},
+		{
+			"names": [
+				"mount"
+			],
+			"action": "SCMP_ACT_ALLOW",
+			"comment": "Cursor terminal sandbox remounts its filesystem inside a new user/mount namespace. Without CAP_SYS_ADMIN in the container namespace, the kernel still rejects mounts there.",
+			"excludes": {
+				"caps": [
+					"CAP_SYS_ADMIN"
+				]
+			}
+		},
+		{
+			"names": [
+				"clone"
+			],
+			"action": "SCMP_ACT_ALLOW",
+			"comment": "VS Code Bubblewrap sandbox: create mount, UTS, IPC, PID, and network namespaces alongside CLONE_NEWUSER; reject CLONE_NEWCGROUP.",
+			"args": [
+				{
+					"index": 0,
+					"value": 301989888,
+					"valueTwo": 268435456,
+					"op": "SCMP_CMP_MASKED_EQ"
+				}
+			],
+			"excludes": {
+				"caps": [
+					"CAP_SYS_ADMIN"
+				],
+				"arches": [
+					"s390",
+					"s390x"
+				]
+			}
+		},
+		{
+			"names": [
+				"clone"
+			],
+			"action": "SCMP_ACT_ALLOW",
+			"comment": "VS Code Bubblewrap sandbox: create mount, UTS, IPC, PID, and network namespaces alongside CLONE_NEWUSER; reject CLONE_NEWCGROUP.",
+			"args": [
+				{
+					"index": 1,
+					"value": 301989888,
+					"valueTwo": 268435456,
+					"op": "SCMP_CMP_MASKED_EQ"
+				}
+			],
+			"excludes": {
+				"caps": [
+					"CAP_SYS_ADMIN"
+				]
+			},
+			"includes": {
+				"arches": [
+					"s390",
+					"s390x"
+				]
+			}
+		},
+		{
+			"names": [
+				"pivot_root",
+				"umount2"
+			],
+			"action": "SCMP_ACT_ALLOW",
+			"comment": "VS Code Bubblewrap sandbox: switch to the isolated root and detach setup mounts. Linux capability checks still apply in the caller namespace.",
+			"excludes": {
+				"caps": [
+					"CAP_SYS_ADMIN"
+				]
+			}
 		}
 	]
 }

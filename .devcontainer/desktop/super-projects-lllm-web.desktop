@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=lllm Web Server
+Comment=Start the local lllm web server
+Exec=xfce4-terminal --working-directory=/workspaces --title="lllm Web Server" --execute bash -lc "exec lllm web"
+TryExec=xfce4-terminal
+Icon=applications-internet
+Terminal=false
+Categories=Development;
+StartupNotify=false

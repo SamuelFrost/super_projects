@@ -1,5 +1,9 @@
 {
   "recommendations": [
+    // AI assistants
+    "GitHub.copilot-chat",
+    "openai.chatgpt",
+
     // Remote development
     "ms-vscode-remote.remote-containers",
     "ms-vscode-remote.remote-wsl",

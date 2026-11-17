@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Gemini
+Comment=Open the official Gemini web app
+Exec=/usr/bin/google-chrome --user-data-dir=/home/developer/chrome-profile --app=https://gemini.google.com/app
+TryExec=/usr/bin/google-chrome
+Icon=/usr/local/share/icons/super-projects/gemini-app.svg
+Terminal=false
+Categories=Network;
+StartupNotify=false

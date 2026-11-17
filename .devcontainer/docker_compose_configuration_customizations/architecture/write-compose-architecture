@@ -1,0 +1,24 @@
+#!/bin/sh
+# initializeCommand generates the platform from the selected Docker daemon,
+# which can differ from this shell's machine (remote Docker or a nested container).
+set -eu
+
+cd "$(dirname "$0")/../../.."
+
+architecture_configuration=.devcontainer/docker_compose_configuration_customizations/architecture/compose.architecture.yaml
+daemon_platform=$(docker info --format '{{.OSType}}/{{.Architecture}}')
+case "$daemon_platform" in
+linux/amd64 | linux/x86_64) target_platform=linux/amd64 ;;
+linux/arm64 | linux/aarch64) target_platform=linux/arm64 ;;
+*)
+	echo "architecture: unsupported Docker daemon platform: $daemon_platform (expected Linux amd64 or arm64)" >&2
+	exit 1
+	;;
+esac
+
+{
+	printf '%s\n' '# Written by write-compose-architecture. Do not edit.' 'services:'
+	for service_name in devcontainer localhost_forward_proxy local-llm; do
+		printf '  %s:\n    platform: "%s"\n' "$service_name" "$target_platform"
+	done
+} >"$architecture_configuration"

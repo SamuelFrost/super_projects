@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=lllm CLI
+Comment=Open lllm CLI in the workspace
+Exec=xfce4-terminal --hold --working-directory=/workspaces --title="lllm CLI" --execute bash -lc "exec lllm"
+TryExec=xfce4-terminal
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;
+StartupNotify=false

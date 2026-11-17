@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Cursor CLI
+Comment=Open Cursor CLI in the workspace terminal
+Exec=xfce4-terminal --working-directory=/workspaces --title="Cursor CLI" --execute bash -lc "exec agent"
+TryExec=xfce4-terminal
+Icon=/usr/local/share/icons/super-projects/cursor.svg
+Terminal=false
+Categories=Development;
+StartupNotify=false

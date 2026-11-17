@@ -162,7 +162,6 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 
 - Tool **state** (auth, config, caches, profiles) uses named Docker volumes; tool **binaries** stay in the image.
 - Each volume is dual-mounted: conventional home path + shortcut under `.devcontainer/persist/` (browse inside the container; host dirs are often empty mount points). See `.devcontainer/persist/README.md`.
-- Volumes: `gemini-data` → `~/.gemini`, `gh-data` → `~/.config/gh`, `git-config` → `~/.config/git`, `mise-data` → `~/.local/share/mise`, `chrome-devtools-mcp-profile` → `~/chrome-profile`, `cursor-data` → `~/.cursor` (CLI auth/session state, agent transcripts, MCP config).
 - SSH: host agent socket only; passphrase unlock via `initializeCommand` (IDE / `devcontainer up`). Prefer Keychain, 1Password, or `gh auth login`. `known_hosts` is a read-only host file bind.
 
 #### Base Terminal And System Tools
@@ -214,7 +213,10 @@ The devcontainer installs or configures these tools through `.devcontainer/Docke
 - `npm`: bundled with the NodeSource Node.js install.
 - `mise`: system-installed runtime/version manager; interactive terminals use mise shims.
 - `gemini`: Google Gemini CLI installed globally with npm as `@google/gemini-cli`.
-- `agent`: Cursor Agent CLI installed by `curl https://cursor.com/install -fsS | bash`.
+- `agent`: Cursor Agent CLI installed through the official native installer.
+- `codex`: OpenAI Codex CLI installed globally with npm as `@openai/codex`.
+- Native GUI apps: VS Code (with Copilot Chat and Codex), Cursor, ChatGPT, and Claude Desktop. Gemini uses its web app. See `.devcontainer/persist/README.md` for storage and `.devcontainer/privacy/README.md` for privacy controls.
+- `claude`: Claude Code CLI installed through the official native installer (stable channel).
 
 #### mise-managed Workspace Runtimes
 

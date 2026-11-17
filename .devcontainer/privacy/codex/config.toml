@@ -1,0 +1,12 @@
+# Local analytics controls; account-level training controls are separate.
+[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+[otel]
+exporter = "none"
+trace_exporter = "none"
+metrics_exporter = "none"
+log_user_prompt = false

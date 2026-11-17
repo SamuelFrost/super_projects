@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Gemini CLI
+Comment=Open Gemini CLI in the workspace terminal
+Exec=xfce4-terminal --working-directory=/workspaces --title="Gemini CLI" --execute bash -lc "exec gemini"
+TryExec=xfce4-terminal
+Icon=/usr/local/share/icons/super-projects/gemini.svg
+Terminal=false
+Categories=Development;
+StartupNotify=false

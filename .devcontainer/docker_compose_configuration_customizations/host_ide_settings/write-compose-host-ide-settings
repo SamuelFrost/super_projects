@@ -1,0 +1,124 @@
+#!/bin/sh
+# Host initializeCommand hook. Share only existing IDE user settings files;
+# profiles, credentials, global databases, and chat histories are never mounted.
+set -eu
+
+cd "$(dirname "$0")/../../.."
+configuration=.devcontainer/docker_compose_configuration_customizations/host_ide_settings/compose.host-ide-settings.yaml
+temporary_configuration="${configuration}.tmp"
+trap 'rm -f "$temporary_configuration"' EXIT HUP INT TERM
+printf '%s\n' '# Written by write-compose-host-ide-settings. Do not edit.' 'services:' '  devcontainer: {}' >"$temporary_configuration"
+
+finish_without_bindings() {
+	printf 'host IDE settings: %s; keeping container preferences\n' "$1" >&2
+	mv "$temporary_configuration" "$configuration"
+	exit 0
+}
+
+if [ "${SUPER_PROJECTS_HOST_IDE_SETTINGS:-auto}" = disabled ]; then
+	finish_without_bindings 'sharing disabled'
+fi
+if [ -f /.dockerenv ]; then
+	finish_without_bindings 'initialization is running inside a container, not on the host'
+fi
+# A remote Docker daemon cannot mount files on this client machine.
+docker_endpoint=${DOCKER_HOST:-}
+if [ -z "$docker_endpoint" ]; then
+	docker_endpoint=$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null) || docker_endpoint=
+fi
+[ -n "$docker_endpoint" ] || finish_without_bindings 'Docker endpoint discovery is unavailable'
+case "$docker_endpoint" in
+ssh://* | tcp://* | http://* | https://*) finish_without_bindings 'Docker uses a remote endpoint' ;;
+esac
+
+windows_application_data=
+host_platform=$(uname -s)
+case "$host_platform" in
+Darwin) native_configuration_directory="$HOME/Library/Application Support" ;;
+Linux)
+	native_configuration_directory=${XDG_CONFIG_HOME:-$HOME/.config}
+	case "$(uname -r)" in
+	*microsoft* | *Microsoft* | *WSL*)
+		if command -v powershell.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
+			windows_application_data=$(powershell.exe -NoProfile -NonInteractive -Command '[Environment]::GetFolderPath("ApplicationData")' 2>/dev/null | tr -d '\r\n') || windows_application_data=
+			if [ -n "$windows_application_data" ]; then
+				windows_application_data=$(wslpath -u "$windows_application_data" 2>/dev/null) || windows_application_data=
+			fi
+		fi
+		;;
+	esac
+	;;
+MINGW* | MSYS* | CYGWIN*)
+	native_configuration_directory=${APPDATA:-}
+	if [ -n "$native_configuration_directory" ] && command -v cygpath >/dev/null 2>&1; then
+		native_configuration_directory=$(cygpath -m "$native_configuration_directory")
+	fi
+	;;
+*) finish_without_bindings "unsupported initialization platform $host_platform" ;;
+esac
+
+compose_yaml_quote() {
+	printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/$$/g')"
+}
+
+bindings_started=false
+share_preference_file() {
+	editor_directory=$1
+	preference_name=$2
+	preference_file=$3
+	[ -n "$preference_file" ] && [ -f "$preference_file" ] && [ -r "$preference_file" ] || return 0
+	case "$preference_file" in
+	/* | [A-Za-z]:/*) ;;
+	*)
+		echo "host IDE settings: ignoring non-absolute $editor_directory $preference_name path" >&2
+		return 0
+		;;
+	esac
+	case "$preference_file" in
+	*'
+'*)
+		echo "host IDE settings: ignoring preference path containing a newline" >&2
+		return 0
+		;;
+	esac
+	if [ "$bindings_started" = false ]; then
+		printf '%s\n' '# Written by write-compose-host-ide-settings. Do not edit.' 'services:' '  devcontainer:' '    volumes:' >"$temporary_configuration"
+		bindings_started=true
+	fi
+	printf '%s\n' \
+		'      - type: bind' \
+		"        source: $(compose_yaml_quote "$preference_file")" \
+		"        target: /home/developer/.config/$editor_directory/User/$preference_name" \
+		'        read_only: true' \
+		'        bind:' \
+		'          create_host_path: false' >>"$temporary_configuration"
+	printf 'host IDE settings: sharing %s %s read-only\n' "$editor_directory" "$preference_name" >&2
+}
+
+share_editor_preferences() {
+	editor_directory=$1
+	explicit_settings_file=$2
+	explicit_keybindings_file=$3
+	profile_directory=
+	if [ -n "$explicit_settings_file" ]; then
+		profile_directory=$(dirname "$explicit_settings_file")
+	elif [ -n "$explicit_keybindings_file" ]; then
+		profile_directory=$(dirname "$explicit_keybindings_file")
+	elif [ -n "$windows_application_data" ] && {
+		[ -f "$windows_application_data/$editor_directory/User/settings.json" ] ||
+			[ -f "$windows_application_data/$editor_directory/User/keybindings.json" ]
+	}; then
+		# Select one profile for both files instead of mixing Windows and Linux preferences.
+		profile_directory="$windows_application_data/$editor_directory/User"
+	elif [ -n "$native_configuration_directory" ]; then
+		profile_directory="$native_configuration_directory/$editor_directory/User"
+	fi
+	if [ -n "$profile_directory" ]; then
+		share_preference_file "$editor_directory" settings.json "${explicit_settings_file:-$profile_directory/settings.json}"
+		share_preference_file "$editor_directory" keybindings.json "${explicit_keybindings_file:-$profile_directory/keybindings.json}"
+	fi
+}
+
+share_editor_preferences Code "${SUPER_PROJECTS_VSCODE_USER_SETTINGS:-}" "${SUPER_PROJECTS_VSCODE_USER_KEYBINDINGS:-}"
+share_editor_preferences Cursor "${SUPER_PROJECTS_CURSOR_USER_SETTINGS:-}" "${SUPER_PROJECTS_CURSOR_USER_KEYBINDINGS:-}"
+mv "$temporary_configuration" "$configuration"

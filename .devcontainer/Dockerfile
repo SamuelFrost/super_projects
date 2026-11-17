@@ -1,6 +1,85 @@
+# syntax=docker/dockerfile:1
 ARG UBUNTU_VERSION=24.04
-FROM ubuntu:${UBUNTU_VERSION}
 
+# Independent installers share only download tools, not the desktop or host IDs.
+FROM ubuntu:${UBUNTU_VERSION} AS installer-base
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    ca-certificates curl gnupg \
+  && rm -rf /var/lib/apt/lists/*
+RUN install -m 0755 -d /etc/apt/keyrings
+
+# Resolve Node once so npm installers and the final image use the same package.
+FROM installer-base AS node-package
+WORKDIR /tmp
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
+       > /etc/apt/sources.list.d/nodesource.list \
+  && apt-get update -qq \
+  && apt-get download nodejs \
+  && mv nodejs_*.deb nodejs.deb \
+  && rm -rf /var/lib/apt/lists/*
+
+FROM installer-base AS node-base
+RUN --mount=from=node-package,source=/tmp/nodejs.deb,target=/tmp/nodejs.deb \
+    apt-get update -qq \
+  && apt-get install -y --no-install-recommends /tmp/nodejs.deb \
+  && rm -rf /var/lib/apt/lists/*
+# Keep the update repository, adding it after apt consumes the local package.
+COPY --link --from=node-package /etc/apt/keyrings/nodesource.gpg /etc/apt/keyrings/nodesource.gpg
+COPY --link --from=node-package /etc/apt/sources.list.d/nodesource.list /etc/apt/sources.list.d/nodesource.list
+
+# Native npm dependencies may need compilation; these stages share the toolchain.
+FROM node-base AS npm-installer-base
+RUN apt-get update -qq && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+FROM npm-installer-base AS gemini-cli
+RUN npm install --global --prefix /home/developer/.npm-global @google/gemini-cli
+
+FROM npm-installer-base AS codex-cli
+RUN npm install --global --prefix /home/developer/.npm-global @openai/codex
+
+FROM npm-installer-base AS devcontainers-cli
+RUN npm install --global --prefix /usr @devcontainers/cli
+
+FROM npm-installer-base AS herb-dependencies
+RUN npm install --prefix /opt/herb-lsp-deps --omit=dev vscode-html-languageservice@^5.1.0
+
+# Native installers use the final home path, with ownership applied at assembly.
+FROM installer-base AS native-installer-base
+RUN userdel --remove ubuntu 2>/dev/null || true
+RUN useradd --uid 1000 --create-home --shell /bin/bash developer
+USER developer
+
+FROM native-installer-base AS cursor-cli
+RUN curl https://cursor.com/install -fsS | bash
+
+FROM native-installer-base AS claude-cli
+RUN curl -fsSL https://claude.ai/install.sh -o /tmp/install-claude.sh \
+  && bash /tmp/install-claude.sh stable \
+  && rm /tmp/install-claude.sh
+
+FROM installer-base AS google-adk
+RUN apt-get update -qq && apt-get install -y --no-install-recommends python3-venv gcc g++ make \
+  && python3 -m venv /opt/google-adk \
+  && /opt/google-adk/bin/pip install --upgrade pip \
+  && /opt/google-adk/bin/pip install "litellm>=1.84" "google-adk[mcp]" \
+  && rm -rf /var/lib/apt/lists/*
+
+FROM installer-base AS cursor-desktop-download
+ARG TARGETARCH
+ARG CURSOR_DESKTOP_VERSION=3.29
+RUN case "$TARGETARCH" in amd64) cursor_architecture=x64 ;; arm64) cursor_architecture=arm64 ;; *) echo "Unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; esac \
+  && curl -fsSL "https://api2.cursor.sh/updates/download/golden/linux-${cursor_architecture}-deb/cursor/${CURSOR_DESKTOP_VERSION}" -o /tmp/cursor.deb
+
+FROM installer-base AS chatgpt-desktop-download
+ARG TARGETARCH
+RUN curl -fsSL https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_${TARGETARCH}.deb -o /tmp/chatgpt.deb
+
+# Apt installs run in the runtime filesystem to retain dependencies and package hooks.
+FROM installer-base AS desktop-runtime
 WORKDIR /workspaces
 
 # Prevent interactive prompts during apt installs
@@ -46,6 +125,7 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   ripgrep \
   socat \
   python3 \
+  python3-venv \
   poppler-utils \
   ffmpeg \
   tzdata \
@@ -80,37 +160,6 @@ RUN locale-gen en_US.UTF-8
 
 # Generate a stable machine-id so Chrome doesn't emit the "0 characters" warning.
 RUN head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' > /etc/machine-id
-
-# Build args: populated by initializeCommand with host `id -u` and `docker.sock` gid
-ARG DEVELOPER_UID=501
-ARG DOCKER_GID=1
-
-# Ubuntu 24.04 ships a default `ubuntu` user at UID 1000; remove it before
-# creating `developer` so there is no UID conflict when the host uid is 1000.
-# Create docker group with the host's GID so the mounted docker.sock is accessible.
-RUN userdel --remove ubuntu 2>/dev/null || true && \
-    groupadd --gid ${DOCKER_GID} docker || groupadd --gid 1001 docker || groupadd docker || true
-
-# Create developer user matching the host UID (updateRemoteUserUID in devcontainer.json can adjust UID at start)
-RUN groupadd --system developer && \
-  useradd --uid ${DEVELOPER_UID} --gid developer --create-home --shell /bin/bash developer && \
-  usermod -aG docker developer
-
-# Ensure developer owns their home directory.
-# Pre-create directories that will be backed by named volumes so Docker
-# initialises those volumes with developer ownership rather than root
-# (Docker creates missing mount-point directories as root if they don't exist).
-# ~/.ssh holds only known_hosts (host file bind); private keys are not mounted.
-RUN mkdir -p /home/developer/chrome-profile \
-             /home/developer/.local/share/mise \
-             /home/developer/.local/state/mise \
-             /home/developer/.config/gh \
-             /home/developer/.config/git \
-             /home/developer/.gemini \
-             /home/developer/.ssh && \
-    touch /home/developer/.ssh/known_hosts && \
-    chmod 700 /home/developer/.ssh && \
-    chown -R developer:developer /home/developer
 
 # ------------------------------------------------------------------------------
 # GitHub CLI (gh)
@@ -163,11 +212,6 @@ RUN . /etc/os-release && \
   && apt-get update -qq \
   && apt-get install -y --no-install-recommends azure-cli \
   && rm -rf /var/lib/apt/lists/*
-
-# ==============================================================================
-# HEAVY LAYERS — placed early so they are cached and never re-run when lighter
-# things (Gemini CLI, startup scripts) change.
-# ==============================================================================
 
 # ------------------------------------------------------------------------------
 # Desktop GUI: XFCE4
@@ -222,18 +266,19 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
 
 # ------------------------------------------------------------------------------
 # Google Chrome
-#   ~250 MB; amd64-only (Google does not publish arm64 Chrome debs).
+#   Official repository supplies amd64 and arm64 packages.
 #   fonts-liberation: core fonts Chrome needs for proper text rendering.
 #   A wrapper at /usr/local/bin/chrome applies the container-required flags:
 #     --enable-unsafe-swiftshader  Software WebGL (no GPU in the container).
 #     --enable-features=WebMCP  WebMCP tools for chrome-devtools-mcp (Chrome 150+).
-#   The namespace sandbox is enabled by .devcontainer/seccomp/chrome-sandbox.json.
+#   The namespace sandbox is enabled by .devcontainer/seccomp/desktop-sandboxes.json.
 # ------------------------------------------------------------------------------
+ARG TARGETARCH
 RUN install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
        | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
   && chmod a+r /etc/apt/keyrings/google-chrome.gpg \
-  && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
+  && echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
        > /etc/apt/sources.list.d/google-chrome.list \
   && apt-get update -qq \
   && apt-get install -y --no-install-recommends \
@@ -242,6 +287,107 @@ RUN install -m 0755 -d /etc/apt/keyrings \
        fonts-noto-cjk \
        dumb-init \
   && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------------------------
+# mise — universal version manager for Ruby, Node, Python, Go, Java, etc.
+#   Installed system-wide via apt; each developer's tool installs go in ~/.local.
+#   Docs: https://mise.jdx.dev
+# ------------------------------------------------------------------------------
+RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
+       -o /etc/apt/keyrings/mise-archive-keyring.asc \
+  && printf "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.asc] https://mise.jdx.dev/deb stable main\n" \
+       > /etc/apt/sources.list.d/mise.list \
+  && apt-get update -qq && apt-get install -y --no-install-recommends mise \
+  && rm -rf /var/lib/apt/lists/*
+
+# Official Linux desktop applications. Cursor uses its published Debian package;
+# ChatGPT configures OpenAI's signed update repository during package installation.
+# Claude Desktop is installed from Anthropic's signed stable apt repository.
+RUN --mount=from=cursor-desktop-download,source=/tmp/cursor.deb,target=/tmp/cursor.deb \
+    --mount=from=chatgpt-desktop-download,source=/tmp/chatgpt.deb,target=/tmp/chatgpt.deb \
+    curl -fsSL https://downloads.claude.ai/claude-desktop/key.asc \
+      -o /usr/share/keyrings/claude-desktop-archive-keyring.asc \
+  && echo "deb [signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" \
+      > /etc/apt/sources.list.d/claude-desktop.list \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends /tmp/cursor.deb /tmp/chatgpt.deb claude-desktop \
+  && rm -rf /var/lib/apt/lists/*
+
+# Official VS Code stable package; apt selects the image's target architecture.
+# Reuse Microsoft's signing key installed for Azure CLI.
+RUN printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n' "$TARGETARCH" \
+      > /etc/apt/sources.list.d/vscode.sources \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends code \
+  && rm -rf /var/lib/apt/lists/*
+
+# Extension downloads depend on VS Code, but not on host IDs or other installers.
+FROM desktop-runtime AS vscode-extensions
+ENV DONT_PROMPT_WSL_INSTALL=1
+RUN install -d -o ubuntu -g ubuntu /home/developer/.vscode/extensions
+USER ubuntu
+RUN code --disable-telemetry --user-data-dir /tmp/vscode-user-data \
+    --extensions-dir /home/developer/.vscode/extensions --install-extension openai.chatgpt
+
+FROM desktop-runtime AS devcontainer
+# Install Node after the desktop so Node updates do not invalidate desktop packages.
+RUN --mount=from=node-package,source=/tmp/nodejs.deb,target=/tmp/nodejs.deb \
+    apt-get update -qq \
+  && apt-get install -y --no-install-recommends /tmp/nodejs.deb \
+  && rm -rf /var/lib/apt/lists/*
+# Keep the update repository, adding it after apt consumes the local package.
+COPY --link --from=node-package /etc/apt/keyrings/nodesource.gpg /etc/apt/keyrings/nodesource.gpg
+COPY --link --from=node-package /etc/apt/sources.list.d/nodesource.list /etc/apt/sources.list.d/nodesource.list
+
+# Host identity is applied after system packages, without invalidating installers.
+# Build args: populated by initializeCommand with host `id -u` and `docker.sock` gid
+ARG DEVELOPER_UID=501
+ARG DOCKER_GID=1
+
+# Ubuntu 24.04 ships a default `ubuntu` user at UID 1000; remove it before
+# creating `developer` so there is no UID conflict when the host uid is 1000.
+# Create docker group with the host's GID so the mounted docker.sock is accessible.
+RUN userdel --remove ubuntu 2>/dev/null || true && \
+    groupadd --gid ${DOCKER_GID} docker || groupadd --gid 1001 docker || groupadd docker || true
+
+# Create the developer user with the UID supplied by host filesystem compatibility.
+RUN groupadd --system developer && \
+  useradd --uid ${DEVELOPER_UID} --gid developer --create-home --shell /bin/bash developer && \
+  usermod -aG docker developer
+
+# Ensure developer owns their home directory.
+# Pre-create directories that will be backed by named volumes so Docker
+# initialises those volumes with developer ownership rather than root
+# (Docker creates missing mount-point directories as root if they don't exist).
+# ~/.ssh holds only known_hosts (host file bind); private keys are not mounted.
+RUN mkdir -p /home/developer/chrome-profile \
+             /home/developer/.local/share/mise \
+             /home/developer/.local/state/mise \
+             /home/developer/.config/gh \
+             /home/developer/.config/git \
+             /home/developer/.gemini \
+             /home/developer/.ssh && \
+    touch /home/developer/.ssh/known_hosts && \
+    chmod 700 /home/developer/.ssh && \
+    chown -R developer:developer /home/developer
+
+# Linked copies allow independent tool layers to be reused during assembly.
+COPY --link --from=gemini-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
+COPY --link --from=codex-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
+COPY --link --from=devcontainers-cli /usr/lib/node_modules/@devcontainers/ /usr/lib/node_modules/@devcontainers/
+COPY --link --from=herb-dependencies /opt/herb-lsp-deps/ /opt/herb-lsp-deps/
+COPY --link --from=cursor-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
+COPY --link --from=claude-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
+COPY --link --from=google-adk /opt/google-adk/ /opt/google-adk/
+COPY --link --from=vscode-extensions --chown=developer:developer /home/developer/.vscode/ /home/developer/.vscode/
+RUN ln -sf /usr/lib/node_modules/@devcontainers/cli/devcontainer.js /usr/bin/devcontainer \
+  && ln -sfn /opt/herb-lsp-deps/node_modules /home/developer/node_modules \
+  && ln -sf /opt/google-adk/bin/adk /usr/local/bin/adk \
+  && printf 'prefix=/home/developer/.npm-global\n' > /home/developer/.npmrc \
+  && chown developer:developer /home/developer/.npmrc
+ENV PATH="/home/developer/.npm-global/bin:/home/developer/.local/bin:${PATH}" \
+    CLAUDE_CONFIG_DIR=/home/developer/.claude \
+    DONT_PROMPT_WSL_INSTALL=1
 
 # Idempotent Chrome launcher.
 # Checks the remote debugging endpoint to detect a running instance;
@@ -258,142 +404,102 @@ RUN sed -i \
   's|Exec=/usr/bin/google-chrome-stable|Exec=/usr/local/bin/chrome|g' \
   /usr/share/applications/google-chrome.desktop
 
-# ==============================================================================
-# LIGHTER / MORE FREQUENTLY UPDATED LAYERS
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# Node.js 24 LTS via NodeSource (Ubuntu ships an older Node; Gemini CLI and
-# chrome-devtools-mcp require a current LTS).
-# npm is bundled with the NodeSource nodejs package — no separate install needed.
-# ------------------------------------------------------------------------------
-RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
-       > /etc/apt/sources.list.d/nodesource.list \
-  && apt-get update -qq \
-  && apt-get install -y --no-install-recommends nodejs \
-  && rm -rf /var/lib/apt/lists/*
-
-# Herb LSP 0.11 starts a language server that requires vscode-html-languageservice,
-# but the published extension does not include it. The editor installs that
-# extension under the developer home directory, and Node walks upward from the
-# server file until it reaches /home/developer/node_modules. The symlink makes
-# that lookup succeed in every container built from this image. This can be
-# removed once a Herb release ships a self-contained server or a way to
-# run via mise managed software.
-RUN mkdir -p /opt/herb-lsp-deps \
-  && npm install --prefix /opt/herb-lsp-deps --omit=dev \
-       vscode-html-languageservice@^5.1.0 \
-  && ln -sfn /opt/herb-lsp-deps/node_modules /home/developer/node_modules
-
-# ------------------------------------------------------------------------------
-# Dev Containers CLI (devcontainer)
-#   Create, build, and run dev containers from the terminal (up, exec, build, …).
-#   Uses the host Docker daemon via the mounted socket.
-#   Docs: https://github.com/devcontainers/cli
-# ------------------------------------------------------------------------------
-RUN npm install -g @devcontainers/cli
-
-# ------------------------------------------------------------------------------
-# mise — universal version manager for Ruby, Node, Python, Go, Java, etc.
-#   Installed system-wide via apt; each developer's tool installs go in ~/.local.
-#   Docs: https://mise.jdx.dev
-# ------------------------------------------------------------------------------
-RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
-       -o /etc/apt/keyrings/mise-archive-keyring.asc \
-  && printf "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.asc] https://mise.jdx.dev/deb stable main\n" \
-       > /etc/apt/sources.list.d/mise.list \
-  && apt-get update -qq && apt-get install -y --no-install-recommends mise \
-  && rm -rf /var/lib/apt/lists/*
-
 # Trust any mise config under /workspaces without interactive `mise trust`.
 ENV MISE_TRUSTED_CONFIG_PATHS=/workspaces
 
-# Source mise-shell-init for interactive terminals; report auth status on TTYs.
+# Source mise-shell-init without accessing credentials when a terminal opens.
 RUN printf '%s\n' \
   '[ -r /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh ] && . /workspaces/.devcontainer/scripts/shell/mise-shell-init.sh' \
-  '[ -t 0 ] && ensure-auth >/dev/null 2>&1 || true' \
   >> /home/developer/.bashrc
 
-# ------------------------------------------------------------------------------
-# AI coding CLI: Gemini CLI.  Run `gemini` in the terminal.
-#   - Free tier: run `gemini` and sign in with Google (no API key needed).
-#   - Or export GEMINI_API_KEY (https://aistudio.google.com/apikey) for API key auth.
-#   - Config/sessions live in ~/.gemini; compose mounts the gemini-data
-#     named volume there (and under .devcontainer/persist/gemini).
-#   Docs: https://github.com/google-gemini/gemini-cli
-# ------------------------------------------------------------------------------
-USER developer:developer
-RUN npm config set prefix /home/developer/.npm-global && \
-    npm install -g @google/gemini-cli
-
-# ------------------------------------------------------------------------------
-# AI coding CLI: OpenAI Codex.  Run `codex` in the terminal.
-#   - Sign in with a ChatGPT account, or export OPENAI_API_KEY.
-#   - Config/sessions live in ~/.codex.
-#   Docs: https://github.com/openai/codex
-# ------------------------------------------------------------------------------
-RUN npm install -g @openai/codex
-
-# ------------------------------------------------------------------------------
-# Cursor agent CLI — register this devcontainer as a My Machines Cloud Agent worker.
-#   Docs: https://cursor.com/docs/cloud-agent/my-machines
-# ------------------------------------------------------------------------------
-RUN curl https://cursor.com/install -fsS | bash
-ENV PATH="/home/developer/.npm-global/bin:/home/developer/.local/bin:${PATH}"
-USER root
-
-# Google Agent Development Kit and LiteLLM. ADK talks to the local Ollama
-# server and to MCP tools. litellm>=1.84 avoids the 1.82.7 and 1.82.8 releases.
-RUN apt-get update -qq && apt-get install -y --no-install-recommends python3-venv \
-  && python3 -m venv /opt/google-adk \
-  && /opt/google-adk/bin/pip install --upgrade pip \
-  && /opt/google-adk/bin/pip install "litellm>=1.84" "google-adk[mcp]" \
-  && ln -sf /opt/google-adk/bin/adk /usr/local/bin/adk \
-  && rm -rf /var/lib/apt/lists/*
-
-# ------------------------------------------------------------------------------
-# start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
-#   Safe to call repeatedly — kills stale processes first.
-#   Uses nohup so background processes survive when postStartCommand's shell exits.
-# ------------------------------------------------------------------------------
-COPY --chmod=0755 .devcontainer/scripts/dockerfile/start-vnc /usr/local/bin/start-vnc
-
-
-# ensure-auth: report host-forwarded SSH agent + GitHub CLI status (keys stay on the host).
+# ensure-auth: report host-forwarded SSH agent status and GitHub login instructions.
 # Passphrase-protected keys: ssh-add once on the host against HOST_SSH_AUTH_SOCK.
-COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/ensure-auth
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/ensure-auth /usr/local/bin/
 
 # print-cursor-worker-hint: quick start for My Machines Cloud Agent workers.
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/print-cursor-worker-hint /usr/local/bin/print-cursor-worker-hint
 
 # Ollama client only, same image tag as the local-llm service. `lllm` chats with that
 # one server through OLLAMA_HOST. The runners stay in the local-llm container.
-COPY --from=ollama/ollama:0.40.8 /usr/bin/ollama /usr/local/bin/ollama
+COPY --link --from=ollama/ollama:0.40.8 /usr/bin/ollama /usr/local/bin/ollama
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/lllm /usr/local/bin/lllm
 
-# ------------------------------------------------------------------------------
-# Claude Code CLI (commented out; uncomment and rebuild to enable)
-#   Requires ANTHROPIC_API_KEY or a Claude Pro/Max/Console login.
-# ------------------------------------------------------------------------------
-# RUN apt-get update -qq && apt-get install -y --no-install-recommends jq && rm -rf /var/lib/apt/lists/*
-# ARG CLAUDE_GCS_BUCKET=https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases
-# RUN set -eux; \
-#   ARCH=$(dpkg --print-architecture); \
-#   case "$ARCH" in amd64) SUFFIX=x64;; arm64) SUFFIX=arm64;; *) echo "Unsupported arch: $ARCH" >&2; exit 1;; esac; \
-#   PLATFORM=linux-$SUFFIX; \
-#   VERSION=$(curl -fsSL "$CLAUDE_GCS_BUCKET/latest"); \
-#   MANIFEST=$(curl -fsSL "$CLAUDE_GCS_BUCKET/$VERSION/manifest.json"); \
-#   CHECKSUM=$(echo "$MANIFEST" | jq -r ".platforms[\"$PLATFORM\"].checksum"); \
-#   curl -fsSL "$CLAUDE_GCS_BUCKET/$VERSION/$PLATFORM/claude" -o /tmp/claude; \
-#   echo "$CHECKSUM  /tmp/claude" | sha256sum -c -; \
-#   chmod 755 /tmp/claude; \
-#   mv /tmp/claude /usr/local/bin/claude
+# Create application mount points with the developer's ownership for fresh volumes.
+RUN install -d -m 0700 -o developer -g developer \
+    /home/developer/.codex \
+    /home/developer/.config/Codex \
+    /home/developer/.claude \
+    /home/developer/.config/Claude \
+    /home/developer/.cursor \
+    /home/developer/.config/cursor \
+    /home/developer/.config/Cursor
 
+COPY .devcontainer/desktop/mimeapps.list /etc/xdg/mimeapps.list
+# XFCE browser shortcuts use the same debugging-enabled wrapper as URL handlers.
+RUN sed -i 's/^WebBrowser=.*/WebBrowser=google-chrome/' /etc/xdg/xfce4/helpers.rc \
+  && sed -i 's/^X-XFCE-Binaries=.*/X-XFCE-Binaries=chrome;/' /usr/share/xfce4/helpers/google-chrome.desktop
+
+# AI CLI shortcuts for the XFCE desktop and application menu.
+COPY .devcontainer/desktop/icons/ /usr/local/share/icons/super-projects/
+COPY .devcontainer/desktop/*.desktop /usr/local/share/applications/
+COPY --chown=developer:developer --chmod=0755 .devcontainer/desktop/*.desktop /home/developer/Desktop/
+# Open the workspace bind mount directly from the desktop file manager.
+# Electron apps need software rendering on the virtual desktop (no GPU device).
+# Preserve vendor names, icons, actions, and URL handlers while adding this flag.
+RUN for desktop_entry in /usr/share/applications/cursor.desktop /usr/share/applications/chatgpt.desktop /usr/share/applications/com.anthropic.Claude.desktop; do \
+      [ -f "$desktop_entry" ] || continue; \
+      sed -i -E 's#^Exec=(/usr/share/cursor/cursor|chatgpt|claude-desktop) #Exec=\1 --disable-gpu #' "$desktop_entry"; \
+      if [ "$desktop_entry" = /usr/share/applications/cursor.desktop ]; then \
+        sed -i 's#^Exec=/usr/share/cursor/cursor --disable-gpu %F#Exec=/usr/share/cursor/cursor --disable-gpu --ozone-platform=x11 --new-window /workspaces %F#' "$desktop_entry"; \
+      fi; \
+      install -o developer -g developer -m 0755 "$desktop_entry" /home/developer/Desktop/; \
+    done
+
+# Image-owned controls apply to existing state volumes as well as fresh profiles.
+# These disable optional local reporting, not provider account training consent.
+COPY .devcontainer/privacy/codex/config.toml /etc/codex/config.toml
+COPY .devcontainer/privacy/gemini-cli/settings.json /etc/gemini-cli/settings.json
+ENV DO_NOT_TRACK=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1 \
+    GEMINI_TELEMETRY_ENABLED=false \
+    GEMINI_TELEMETRY_TRACES_ENABLED=false \
+    GEMINI_TELEMETRY_LOG_PROMPTS=false \
+    OTEL_SDK_DISABLED=true
+# Cursor's inherited Electron/VS Code switches disable optional local reporting.
+RUN for desktop_entry in /usr/share/applications/cursor.desktop /home/developer/Desktop/cursor.desktop; do \
+      [ -f "$desktop_entry" ] || continue; \
+      sed -i 's/ --disable-gpu / --disable-gpu --disable-telemetry --disable-crash-reporter /g' "$desktop_entry"; \
+    done
+
+
+# Use the package's desktop IDs (current releases use reverse-domain names).
+RUN install -d -m 0700 -o developer -g developer \
+      /home/developer/.config/Code /home/developer/.config/Code/User \
+      /home/developer/.config/Cursor/User /home/developer/.vscode /home/developer/.vscode-server \
+      /home/developer/.cursor-server \
+  && for desktop_entry in $(dpkg-query -L code | sed -n '\#^/usr/share/applications/.*\.desktop$#p'); do \
+      sed -i 's#^Exec=/usr/share/code/code #Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 #' "$desktop_entry"; \
+      if grep -q '^Type=Application' "$desktop_entry" && ! grep -q '^NoDisplay=true' "$desktop_entry"; then \
+        sed -i '0,/ %F/s# %F# --new-window /workspaces %F#' "$desktop_entry"; \
+        install -o developer -g developer -m 0755 "$desktop_entry" /home/developer/Desktop/; \
+      fi; \
+    done
+
+# Machine policy lives outside persisted profiles and also covers CLI launches.
+COPY .devcontainer/privacy/vscode/policy.json /etc/vscode/policy.json
 USER developer:developer
-# USER root
+# ------------------------------------------------------------------------------
+# start-vnc: launches Xvfb → XFCE4 → x11vnc → noVNC.
+#   Safe to call repeatedly — kills stale processes first.
+#   Uses nohup so background processes survive when postStartCommand's shell exits.
+# ------------------------------------------------------------------------------
+COPY --chmod=0755 .devcontainer/scripts/dockerfile/start-vnc \
+    .devcontainer/scripts/dockerfile/report-desktop-launcher-errors \
+    .devcontainer/scripts/dockerfile/start-desktop-browser /usr/local/bin/
+
+
 # dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
 # compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["bash", "-c", "start-vnc && exec tail -f /dev/null"]
+CMD ["bash", "-c", "report-desktop-launcher-errors; start-vnc; start-desktop-browser; exec tail -f /dev/null"]

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Version=1.0
+Type=Link
+Name=workspaces
+Comment=Open the canonical workspace directory
+URL=file:///workspaces
+Icon=folder

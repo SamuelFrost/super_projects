@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Codex CLI
+Comment=Open Codex in the workspace terminal
+Exec=xfce4-terminal --working-directory=/workspaces --title="Codex CLI" --execute bash -lc "exec codex"
+TryExec=xfce4-terminal
+Icon=chatgpt
+Terminal=false
+Categories=Development;
+StartupNotify=false

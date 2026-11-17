@@ -242,6 +242,8 @@ The environment includes AI command-line tools, desktop applications, and a loca
 
 Gemini CLI, Codex CLI, Cursor CLI, and Claude Code have terminal launchers. VS Code, Cursor, ChatGPT, and Claude Desktop are installed from official Linux packages; Gemini opens its web app in Chrome. Native GUI profiles persist across rebuilds.
 
+Cached rebuilds reuse installed tool versions; they do not automatically fetch updates. See [build cache and tool updates](.devcontainer/.directory_information.md#build-cache-and-tool-updates) for version selection and reuse across project names.
+
 VS Code opens `/workspaces` with Copilot Chat available and the Codex extension installed for fresh profiles. The desktop's `workspaces` folder shortcut also opens `/workspaces`.
 
 </details>

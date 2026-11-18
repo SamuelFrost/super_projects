@@ -143,16 +143,13 @@ For developer convenience, the devcontainer automatically forwards your host's S
 <details>
 <summary>How to set up your Host Machine's SSH keys so they can be used in the container</summary>
 
-The devcontainer looks for keys on your host in this order:
+On macOS with Docker Desktop, the devcontainer uses [Docker Desktop’s SSH agent bridge](https://docs.docker.com/desktop/features/networking/networking-how-tos/#ssh-agent-forwarding). Keys are loaded into the macOS session agent. Set `AddKeysToAgent yes` and `UseKeychain yes` in `~/.ssh/config` to use Keychain. To use 1Password, configure Docker Desktop to inherit its agent socket when it starts.
+
+On Linux and WSL, the devcontainer looks for keys on your host in this order:
 
 - **Existing agent:** If `SSH_AUTH_SOCK` is already set in your host environment and has unlocked keys, it is used directly.
 - **1Password:** Turn on the 1Password SSH agent. If unlocked, the devcontainer detects and uses it automatically.
-- **macOS Keychain:** Add the following to `~/.ssh/config` so macOS can unlock keys without needing an interactive terminal:
-  ```ssh-config
-  AddKeysToAgent yes
-  UseKeychain yes
-  ```
-- **Default SSH keys (`~/.ssh/id_*`):** If no agent has keys loaded, the startup script starts a dedicated agent and tries to load standard keys (`id_ed25519`, `id_rsa`, etc.). It will prompt for your passphrase via terminal, macOS Keychain, or a GUI askpass dialog if available.
+- **Default SSH keys (`~/.ssh/id_*`):** If no agent has keys loaded, the startup script starts a dedicated agent and tries to load standard keys (`id_ed25519`, `id_rsa`, etc.). It will prompt for your passphrase in a terminal or through a GUI askpass dialog if available.
 - **Windows / WSL2:** The devcontainer must run inside WSL because container mounts require a Linux Unix socket (Windows OpenSSH uses named pipes, which cannot be forwarded here). If you run VS Code or Cursor from Windows, ensure your user `settings.json` has:
   ```json
   "dev.containers.executeInWSL": true
@@ -166,11 +163,11 @@ The devcontainer looks for keys on your host in this order:
 
 Before starting the container, `initializeCommand` runs [`write-compose-ssh-agent-socket`](.devcontainer/docker_compose_configuration_customizations/ssh_agent_socket/write-compose-ssh-agent-socket) (also executed by `./not_devcontainer`):
 
-1. **Socket discovery:** It checks for active keys (`ssh-add -l`) across:
+1. **Socket discovery:** With Docker Desktop on macOS, the script uses the session agent and mounts Docker Desktop’s bridge. On Linux and WSL, it checks for active keys (`ssh-add -l`) across:
    1. `$SSH_AUTH_SOCK`
    2. 1Password agent sockets (`~/Library/Group Containers/...` or `~/.1password/agent.sock`)
    3. A project-managed socket in `$XDG_RUNTIME_DIR/` or `~/.cache/` (named after the Compose project)
-2. **Fallback loading:** If all agents are empty, it launches or reuses the project-managed socket and attempts to add standard keys from `~/.ssh/`.
+2. **Fallback loading:** On Linux and WSL, it launches or reuses the project-managed socket when all agents are empty. It attempts to add standard keys from `~/.ssh/` to the selected host agent.
 3. **Mount generation:** It writes `compose.ssh-agent-socket.yaml`, bind-mounting the selected socket to `/ssh-agent.sock` inside the container.
 4. **Nested containers:** When running inside another devcontainer, it automatically resolves `HOST_SSH_AUTH_SOCK` from the outer environment so the bind mount refers to the actual Docker host path.
 
@@ -208,7 +205,7 @@ During startup, `initializeCommand` (or `./not_devcontainer`) runs [`write-compo
 
 #### Docker socket access and workspace directory mounting
 
-The host's `/var/run/docker.sock` is mounted into the container at the same path, so `docker` commands inside the container use the host daemon. 
+The Docker daemon's `/var/run/docker.sock` is mounted into the container at the same path. On macOS, the active Docker context connects to Docker Desktop and initialization reads the socket group inside its Linux VM. The optional macOS `/var/run/docker.sock` symlink is unnecessary.
 
 The repository root is bind-mounted to `/workspaces` inside the container using an explicit host path rather than a simple relative mount (like `../:/workspaces`). That path is also recorded as `HOST_WORKSPACE_DIR`. Docker commands run inside the container use the host daemon, which cannot mount `/workspaces`, so they pass `HOST_WORKSPACE_DIR` instead.
 
@@ -220,7 +217,7 @@ When creating docker compose configurations to run inside the container, you wil
 
 Inside the devcontainer you are the `developer` user. That user is created with your host user id, so files it creates in the mounted workspace are owned by you on the host. The id is set when the image is built.
 
-The `developer` user also belongs to a `docker` group created with that socket's group id, which is what allows it to use the socket. The group id is set when the image is built, so a different socket group needs a rebuild.
+Compose adds the mounted socket's numeric group ID to the `developer` user's supplementary groups so the user can access Docker. The image also creates a named `docker` group.
 
 <details>
 <summary>Image architecture</summary>

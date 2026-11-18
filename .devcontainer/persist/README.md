@@ -142,6 +142,11 @@ server's `extensions` directory through a read-only mount. Restart the
 desktop editor to pick up changes if it's already open. Extensions that run
 only in the host editor stay on the host.
 
+Before the desktop starts, Compose prepares the persisted VS Code and Cursor
+desktop profiles for the configured developer UID. This also repairs older
+profiles created as root. Host settings and keybindings are mounted separately
+and stay read-only.
+
 Editor profiles and remote extension stores persist across rebuilds. The
 browser desktop launchers use the server stores in place of any extensions
 previously installed into the standalone desktop directories. The read-only

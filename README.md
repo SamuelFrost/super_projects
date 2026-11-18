@@ -115,6 +115,16 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 - **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to get a shell in the container.
 - **IDE:** Open the project folder in your preferred IDE that supports Dev Containers. VS code and Cursor will automatically detect the devcontainer and prompt you to open it - follow the prompts to open the project in the container.
 
+#### Cursor on Windows with WSL
+
+If **Reopen in Container** reports **Failed to read devcontainer configuration**
+and the Dev Containers log shows `Wsl/Service/WSAETIMEDOUT`, start the container
+with `devcontainer up` from the project directory in WSL if it is stopped.
+Then open a local Cursor window, choose **Dev Containers: Attach to Running
+Container**, select your project's `devcontainer` service container, and open
+`/workspaces/`. This route connects through Docker Desktop and skips Cursor’s
+WSL configuration-reading step.
+
 ## Features & details
 
 The devcontainer is an **Ubuntu 24.04** image with:

@@ -4,6 +4,9 @@ services:
       context: ..
       dockerfile: .devcontainer/Dockerfile
     pull_policy: never
+    depends_on:
+      editor-profile-init:
+        condition: service_completed_successfully
     volumes:
       # - ${HOST_WORKSPACE_DIR:-../}:/workspaces:cached # WSL requires route specified, override file provides
       # Reuse host Docker daemon (achieves similar effect to devcontainer feature "docker-outside-of-docker")
@@ -106,6 +109,33 @@ services:
       - seccomp=seccomp/desktop-sandboxes.json
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
+
+  # Migrate existing desktop profiles before mounting the host preference files.
+  editor-profile-init:
+    image: alpine
+    user: "0:0"
+    network_mode: none
+    environment:
+      DEVELOPER_UID: "501"
+    volumes:
+      - vscode-profile-state:/profiles/vscode
+      - cursor-desktop-state:/profiles/cursor
+    command:
+      - sh
+      - -ec
+      - |
+        for profile_directory in /profiles/vscode /profiles/cursor; do
+          user_directory="$$profile_directory/User"
+          if [ -L "$$user_directory" ]; then
+            printf 'Editor profile User directory is a symlink: %s\n' "$$user_directory" >&2
+            exit 1
+          fi
+          mkdir -p "$$user_directory"
+          if [ "$$(stat -c '%u' "$$profile_directory")" != "$$DEVELOPER_UID" ] ||
+             [ "$$(stat -c '%u' "$$user_directory")" != "$$DEVELOPER_UID" ]; then
+            find "$$profile_directory" -depth ! -user "$$DEVELOPER_UID" -exec chown -h "$$DEVELOPER_UID" {} +
+          fi
+        done
 
   # Mirrors published TCP ports of docker compose stacks in the workspace onto super_projects default network localhost (127.0.0.1 and ::1) so
   # Chrome / chrome-devtools-mcp in the devcontainer can use http://localhost:<port> like on the host (see scripts/localhost_forward_proxy/.directory_information.md).

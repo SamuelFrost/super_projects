@@ -32,6 +32,13 @@ services:
       # Remote Cursor settings/extensions/session state are separate from its GUI profile.
       - cursor-server-state:/home/developer/.cursor-server
       - cursor-server-state:/workspaces/.devcontainer/persist/cursor-server
+      # Only the writable server mount seeds the volume. The desktop view is read-only.
+      - type: volume
+        source: cursor-server-state
+        target: /usr/local/share/super-projects/remote-extension-stores/cursor
+        read_only: true
+        volume:
+          nocopy: true
       # VS Code desktop profile, local extensions/CLI state, and remote IDE state.
       - vscode-profile-state:/home/developer/.config/Code
       - vscode-profile-state:/workspaces/.devcontainer/persist/vscode-profile
@@ -39,6 +46,13 @@ services:
       - vscode-extensions-state:/workspaces/.devcontainer/persist/vscode-extensions
       - vscode-server-state:/home/developer/.vscode-server
       - vscode-server-state:/workspaces/.devcontainer/persist/vscode-server
+      # Only the writable server mount seeds the volume. The desktop view is read-only.
+      - type: volume
+        source: vscode-server-state
+        target: /usr/local/share/super-projects/remote-extension-stores/vscode
+        read_only: true
+        volume:
+          nocopy: true
       # Gemini CLI sessions/config
       - gemini-data:/home/developer/.gemini
       - gemini-data:/workspaces/.devcontainer/persist/gemini
@@ -67,6 +81,7 @@ services:
         export SSH_AUTH_SOCK=/ssh-agent.sock
         ensure-auth
         print-cursor-worker-hint
+        initialize-editor-extension-stores
         report-desktop-launcher-errors
         start-vnc
         start-desktop-browser

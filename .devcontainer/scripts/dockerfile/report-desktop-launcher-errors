@@ -12,20 +12,24 @@ check_desktop_launcher() {
 	return 0
 }
 
+cursor_desktop_command_pattern='^Exec=/usr/share/cursor/cursor --disable-gpu --disable-telemetry --disable-crash-reporter --extensions-dir /usr/local/share/super-projects/remote-extension-stores/cursor/extensions '
+vscode_desktop_command_pattern='^Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 --extensions-dir /usr/local/share/super-projects/remote-extension-stores/vscode/extensions '
+
 for launcher_directory in /usr/share/applications "$HOME/Desktop"; do
-	check_desktop_launcher "$launcher_directory/cursor.desktop" '^Exec=/usr/share/cursor/cursor --disable-gpu --disable-telemetry --disable-crash-reporter ' '^Exec=/usr/share/cursor/cursor .* --ozone-platform=x11 --new-window /workspaces %F$'
+	check_desktop_launcher "$launcher_directory/cursor.desktop" "$cursor_desktop_command_pattern" '^Exec=/usr/share/cursor/cursor .* --ozone-platform=x11 --new-window /workspaces %F$'
 	check_desktop_launcher "$launcher_directory/chatgpt.desktop" '^Exec=chatgpt --disable-gpu '
 	check_desktop_launcher "$launcher_directory/com.anthropic.Claude.desktop" '^Exec=claude-desktop --disable-gpu '
 done
+check_desktop_launcher /usr/share/applications/cursor-url-handler.desktop "$cursor_desktop_command_pattern"
 
 vscode_launcher_found=false
 while IFS= read -r desktop_entry; do
-	check_desktop_launcher "$desktop_entry" '^Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 '
+	check_desktop_launcher "$desktop_entry" "$vscode_desktop_command_pattern"
 	if grep -q '^Type=Application' "$desktop_entry" && ! grep -q '^NoDisplay=true' "$desktop_entry"; then
 		vscode_launcher_found=true
-		check_desktop_launcher "$HOME/Desktop/${desktop_entry##*/}" '^Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 ' '^Exec=/usr/share/code/code .* --new-window /workspaces %F$'
+		check_desktop_launcher "$HOME/Desktop/${desktop_entry##*/}" "$vscode_desktop_command_pattern" '^Exec=/usr/share/code/code .* --new-window /workspaces %F$'
 	fi
-done < <(dpkg-query -L code 2>/dev/null | sed -n '\#^/usr/share/applications/.*\.desktop$#p')
+done < /usr/local/share/super-projects/vscode-launchers
 if [ "$vscode_launcher_found" = false ]; then
 	echo "ERROR: VS Code package contains no desktop launcher" >&2
 fi

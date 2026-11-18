@@ -1,0 +1,16 @@
+#!/bin/sh
+# Desktop editors need a readable extension manifest before the first host install.
+set -eu
+
+for extension_store in "$HOME/.vscode-server/extensions" "$HOME/.cursor-server/extensions"; do
+  mkdir -p "$extension_store"
+  extension_manifest="$extension_store/extensions.json"
+  if [ ! -e "$extension_manifest" ] && [ -z "$(find "$extension_store" -mindepth 1 -maxdepth 1 -type d -print -quit)" ]; then
+    (
+      temporary_manifest=$(mktemp "$extension_store/.extensions.json.XXXXXX")
+      trap 'rm -f -- "$temporary_manifest"' EXIT
+      printf '[]\n' > "$temporary_manifest"
+      ln -T -- "$temporary_manifest" "$extension_manifest" || [ -f "$extension_manifest" ]
+    )
+  fi
+done

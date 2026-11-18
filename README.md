@@ -244,7 +244,7 @@ Gemini CLI, Codex CLI, Cursor CLI, and Claude Code have terminal launchers. VS C
 
 Cached rebuilds reuse installed tool versions; they do not automatically fetch updates. See [build cache and tool updates](.devcontainer/.directory_information.md#build-cache-and-tool-updates) for version selection and reuse across project names.
 
-VS Code opens `/workspaces` with Copilot Chat available and the Codex extension installed for fresh profiles. The desktop's `workspaces` folder shortcut also opens `/workspaces`.
+VS Code opens `/workspaces` with Copilot Chat available. Dev Containers clients install the configured extensions during editor setup. VS Code and Cursor on the browser desktop read extensions installed by their respective host editor connections. The desktop's `workspaces` folder shortcut also opens `/workspaces`. See [editor extension persistence](.devcontainer/persist/README.md#editor-extensions).
 
 </details>
 

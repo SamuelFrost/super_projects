@@ -131,7 +131,7 @@ The devcontainer is an **Ubuntu 24.04** image with:
 
 - `git`, `gh` (GitHub CLI), `openssh-client`
 - Docker CLI + Compose (Docker outside of Docker via socket mount) + Devcontainer CLI
-- Node.js, npm, Python 3
+- Node.js, npm, Python 3, and the Biome CLI
 - [mise](https://mise.jdx.dev) — universal version manager for Ruby, Node, Python, Go, and more
 - Desktop GUI (XFCE + VNC + noVNC) available in your browser at `http://localhost:6080/vnc.html`
 - Google Chrome with remote debugging on `CHROME_REMOTE_DEBUGGING_PORT` (default 9223), used by MCP tools like [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp) and playwright.

@@ -52,6 +52,9 @@ RUN npm install --global --prefix /home/developer/.npm-global @google/gemini-cli
 FROM node-base AS codex-cli
 RUN npm install --global --prefix /home/developer/.npm-global @openai/codex
 
+FROM node-base AS biome-cli
+RUN npm install --global --prefix /home/developer/.npm-global @biomejs/biome
+
 FROM node-base AS devcontainers-cli
 RUN npm install --global --prefix /usr @devcontainers/cli
 
@@ -523,6 +526,9 @@ COPY --chmod=0755 .devcontainer/scripts/dockerfile/start-vnc \
     .devcontainer/scripts/dockerfile/report-desktop-launcher-errors \
     .devcontainer/scripts/dockerfile/start-desktop-browser /usr/local/bin/
 
+
+# Keep the independent Biome layer after the desktop setup.
+COPY --link --from=biome-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
 
 # dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
 # compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.

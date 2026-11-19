@@ -369,12 +369,12 @@ RUN mkdir -p /home/developer/chrome-profile \
     chmod 700 /home/developer/.ssh && \
     chown -R developer:developer /home/developer
 
-# Linked copies allow independent tool layers to be reused during assembly.
-COPY --link --from=gemini-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
-COPY --link --from=codex-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
+# Tool layers are built in independent stages and assembled here.
+COPY --from=gemini-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
+COPY --from=codex-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
 COPY --link --from=devcontainers-cli /usr/lib/node_modules/@devcontainers/ /usr/lib/node_modules/@devcontainers/
-COPY --link --from=cursor-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
-COPY --link --from=claude-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
+COPY --from=cursor-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
+COPY --from=claude-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
 COPY --link --from=google-adk /opt/google-adk/ /opt/google-adk/
 RUN ln -sf /usr/lib/node_modules/@devcontainers/cli/devcontainer.js /usr/bin/devcontainer \
   && ln -sf /opt/google-adk/bin/adk /usr/local/bin/adk \

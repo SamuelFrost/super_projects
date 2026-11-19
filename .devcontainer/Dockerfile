@@ -300,6 +300,7 @@ RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target
 #   fonts-liberation: core fonts Chrome needs for proper text rendering.
 #   A wrapper at /usr/local/bin/chrome applies the container-required flags:
 #     --enable-unsafe-swiftshader  Software WebGL (no GPU in the container).
+#     --no-first-run  Skip the first-run dialog, which blocks startup on a new profile.
 #     --enable-features=WebMCP  WebMCP tools for chrome-devtools-mcp (Chrome 150+).
 #   The namespace sandbox is enabled by .devcontainer/seccomp/desktop-sandboxes.json.
 # ------------------------------------------------------------------------------

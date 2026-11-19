@@ -95,12 +95,15 @@ services:
     # Chrome requires more shared memory than Docker's default 64 MB.
     shm_size: '3gb'
 
-  # Migrate existing desktop profiles before mounting the host preference files.
+  # Docker creates the mount points of the host preference files as root inside
+  # the desktop profile volumes. Hand those, and profiles from older images,
+  # to the developer before the editors use them.
   editor-profile-init:
     image: alpine
     user: "0:0"
     network_mode: none
     environment:
+      # Same default as the Dockerfile. write-compose-user-ids sets both to the host UID.
       DEVELOPER_UID: "501"
     volumes:
       - vscode-profile-state:/profiles/vscode
@@ -109,18 +112,8 @@ services:
       - sh
       - -ec
       - |
-        for profile_directory in /profiles/vscode /profiles/cursor; do
-          user_directory="$$profile_directory/User"
-          if [ -L "$$user_directory" ]; then
-            printf 'Editor profile User directory is a symlink: %s\n' "$$user_directory" >&2
-            exit 1
-          fi
-          mkdir -p "$$user_directory"
-          if [ "$$(stat -c '%u' "$$profile_directory")" != "$$DEVELOPER_UID" ] ||
-             [ "$$(stat -c '%u' "$$user_directory")" != "$$DEVELOPER_UID" ]; then
-            find "$$profile_directory" -depth ! -user "$$DEVELOPER_UID" -exec chown -h "$$DEVELOPER_UID" {} +
-          fi
-        done
+        mkdir -p /profiles/vscode/User /profiles/cursor/User
+        find /profiles ! -user "$$DEVELOPER_UID" -exec chown -h "$$DEVELOPER_UID" {} +
 
   # Mirrors published TCP ports of docker compose stacks in the workspace onto super_projects default network localhost (127.0.0.1 and ::1) so
   # Chrome / chrome-devtools-mcp in the devcontainer can use http://localhost:<port> like on the host (see scripts/localhost_forward_proxy/.directory_information.md).

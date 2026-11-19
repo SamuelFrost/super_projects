@@ -96,28 +96,6 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc -o /tmp/microso
   && chmod a+r /etc/apt/keyrings/microsoft.gpg \
   && rm /tmp/microsoft.asc
 
-# Fetch and unpack the signed vendor package independently of other desktop apps.
-FROM microsoft-key AS vscode
-ARG VSCODE_VERSION
-WORKDIR /tmp
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n' "$TARGET_ARCHITECTURE" \
-      > /etc/apt/sources.list.d/vscode.sources \
-  && apt-get -o Dir::Etc::sourceparts=- -o Dir::Etc::sourcelist=sources.list.d/vscode.sources \
-       -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get -o Dir::Etc::sourceparts=- -o Dir::Etc::sourcelist=sources.list.d/vscode.sources \
-       download "code${VSCODE_VERSION:+=$VSCODE_VERSION}" \
-  && dpkg-deb --extract ./code_*.deb /opt/vscode-root \
-  && rm ./code_*.deb \
-  && install -d /opt/vscode-root/usr/bin /opt/vscode-root/usr/local/share/super-projects \
-  && ln -s /usr/share/code/bin/code /opt/vscode-root/usr/bin/code \
-  && if [ -x /opt/vscode-root/usr/share/code/bin/copilot-shim/copilot ]; then \
-       ln -s /usr/share/code/bin/copilot-shim/copilot /opt/vscode-root/usr/bin/copilot; \
-     fi \
-  && find /opt/vscode-root/usr/share/applications -maxdepth 1 -type f -name '*.desktop' \
-       -printf '/usr/share/applications/%f\n' > /opt/vscode-root/usr/local/share/super-projects/vscode-launchers \
-  && test -s /opt/vscode-root/usr/local/share/super-projects/vscode-launchers
-
 # Apt installs run in the runtime filesystem to retain dependencies and package hooks.
 FROM build-toolchain AS desktop-runtime
 WORKDIR /workspaces
@@ -343,6 +321,15 @@ RUN --mount=from=cursor-desktop-download,source=/tmp/cursor.deb,target=/tmp/curs
   && apt-get -o APT::Get::List-Cleanup=false update -qq \
   && apt-get install -y --no-install-recommends /tmp/cursor.deb /tmp/chatgpt.deb claude-desktop
 
+# Official VS Code stable package from Microsoft's signed repository, using the
+# signing key installed for Azure CLI. VSCODE_VERSION pins a Debian package version.
+ARG VSCODE_VERSION
+RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
+    printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n' "$TARGET_ARCHITECTURE" \
+      > /etc/apt/sources.list.d/vscode.sources \
+  && apt-get -o APT::Get::List-Cleanup=false update -qq \
+  && apt-get install -y --no-install-recommends "code${VSCODE_VERSION:+=$VSCODE_VERSION}"
+
 FROM desktop-runtime AS devcontainer
 # Install Node after the desktop so Node updates do not invalidate desktop packages.
 RUN --mount=from=node-package,source=/tmp/nodejs.deb,target=/tmp/nodejs.deb \
@@ -486,24 +473,18 @@ RUN for desktop_entry in $(dpkg-query -L cursor | sed -n '\#^/usr/share/applicat
     done
 
 
-# Use the vendor's desktop entries and wire up the system integration for the
-# staged VS Code payload.
-COPY --link --from=vscode /opt/vscode-root/ /
-COPY --link --from=vscode /etc/apt/sources.list.d/vscode.sources /etc/apt/sources.list.d/vscode.sources
+# Use the package's desktop IDs (current releases use reverse-domain names).
 RUN install -d -m 0700 -o developer -g developer \
       /home/developer/.config/Code /home/developer/.config/Code/User \
       /home/developer/.config/Cursor/User /home/developer/.vscode \
       /home/developer/.vscode-server /home/developer/.cursor-server \
-  && update-alternatives --install /usr/bin/editor editor /usr/bin/code 0 \
-  && while IFS= read -r desktop_entry; do \
+  && for desktop_entry in $(dpkg-query -L code | sed -n '\#^/usr/share/applications/.*\.desktop$#p'); do \
       sed -i 's#^Exec=/usr/share/code/code #Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 --extensions-dir /home/developer/.vscode-server/extensions #' "$desktop_entry"; \
       if grep -q '^Type=Application' "$desktop_entry" && ! grep -q '^NoDisplay=true' "$desktop_entry"; then \
         sed -i '0,/ %F/s# %F# --new-window /workspaces %F#' "$desktop_entry"; \
         install -o developer -g developer -m 0755 "$desktop_entry" /home/developer/Desktop/; \
       fi; \
-    done < /usr/local/share/super-projects/vscode-launchers \
-  && update-desktop-database \
-  && update-mime-database /usr/share/mime
+    done
 
 # Machine policy lives outside persisted profiles and also covers CLI launches.
 COPY .devcontainer/privacy/vscode/policy.json /etc/vscode/policy.json

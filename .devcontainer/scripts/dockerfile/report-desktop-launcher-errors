@@ -29,7 +29,7 @@ while IFS= read -r desktop_entry; do
 		vscode_launcher_found=true
 		check_desktop_launcher "$HOME/Desktop/${desktop_entry##*/}" "$vscode_desktop_command_pattern" '^Exec=/usr/share/code/code .* --new-window /workspaces %F$'
 	fi
-done < /usr/local/share/super-projects/vscode-launchers
+done < <(dpkg-query -L code 2>/dev/null | sed -n '\#^/usr/share/applications/.*\.desktop$#p')
 if [ "$vscode_launcher_found" = false ]; then
 	echo "ERROR: VS Code package contains no desktop launcher" >&2
 fi

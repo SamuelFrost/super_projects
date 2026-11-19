@@ -141,7 +141,8 @@ corresponding remote server (`~/.vscode-server/extensions` and
 `~/.cursor-server/extensions`), so an extension installed or updated from the
 host editor or from the desktop editor is available in both. Restart the other
 editor to pick up changes if it's already open. Extensions that run only in
-the host editor stay on the host.
+the host editor stay on the host. The `code` and `cursor` terminal commands do
+not use these stores unless given the same `--extensions-dir`.
 
 Before the desktop starts, Compose prepares the persisted VS Code and Cursor
 desktop profiles for the configured developer UID. This also repairs older

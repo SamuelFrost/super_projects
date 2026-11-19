@@ -13,7 +13,13 @@ compose_yaml_quote() {
 }
 
 case "$(uname -s)" in
-  Darwin) DOCKER_GID=$(stat -f '%g' /var/run/docker.sock) ;;
+  Darwin)
+    # Compose mounts the daemon's Linux socket. Docker Desktop's optional
+    # macOS symlink is a client endpoint and may be absent.
+    DOCKER_GID=$(docker run --rm --network none \
+      --mount type=bind,source=/var/run/docker.sock,target=/docker.sock,readonly \
+      alpine sh -ec 'test -S /docker.sock && stat -c "%g" /docker.sock')
+    ;;
   *) DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) ;;
 esac
 DEVELOPER_UID=$(id -u)
@@ -31,5 +37,8 @@ _gid=$(compose_yaml_quote "$DOCKER_GID")
     "        DEVELOPER_UID: ${_uid}" \
     "        DOCKER_GID: ${_gid}" \
     '    environment:' \
-    "      UID: ${_uid}"
+    "      UID: ${_uid}" \
+    '  editor-profile-init:' \
+    '    environment:' \
+    "      DEVELOPER_UID: ${_uid}"
 } >"$COMPOSE_USER_IDS_FILE"

@@ -12,8 +12,8 @@ check_desktop_launcher() {
 	return 0
 }
 
-cursor_desktop_command_pattern='^Exec=/usr/share/cursor/cursor --disable-gpu --disable-telemetry --disable-crash-reporter --extensions-dir /usr/local/share/super-projects/remote-extension-stores/cursor/extensions '
-vscode_desktop_command_pattern='^Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 --extensions-dir /usr/local/share/super-projects/remote-extension-stores/vscode/extensions '
+cursor_desktop_command_pattern='^Exec=/usr/share/cursor/cursor --disable-gpu --disable-telemetry --disable-crash-reporter --extensions-dir /home/developer/.cursor-server/extensions '
+vscode_desktop_command_pattern='^Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 --extensions-dir /home/developer/.vscode-server/extensions '
 
 for launcher_directory in /usr/share/applications "$HOME/Desktop"; do
 	check_desktop_launcher "$launcher_directory/cursor.desktop" "$cursor_desktop_command_pattern" '^Exec=/usr/share/cursor/cursor .* --ozone-platform=x11 --new-window /workspaces %F$'

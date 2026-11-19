@@ -466,15 +466,6 @@ RUN for desktop_entry in /usr/share/applications/cursor.desktop /usr/share/appli
       install -o developer -g developer -m 0755 "$desktop_entry" /home/developer/Desktop/; \
     done
 
-# Docker Compose mounts the remote extension stores over these paths.
-# The empty directories also allow a desktop launch without Compose.
-RUN install -d -m 0555 \
-      /usr/local/share/super-projects/remote-extension-stores/cursor/extensions \
-      /usr/local/share/super-projects/remote-extension-stores/vscode/extensions \
-  && printf '[]\n' | tee \
-      /usr/local/share/super-projects/remote-extension-stores/cursor/extensions/extensions.json \
-      /usr/local/share/super-projects/remote-extension-stores/vscode/extensions/extensions.json >/dev/null
-
 # Image-owned controls apply to existing state volumes as well as fresh profiles.
 # These disable optional local reporting, not provider account training consent.
 COPY .devcontainer/privacy/codex/config.toml /etc/codex/config.toml
@@ -486,10 +477,11 @@ ENV DO_NOT_TRACK=1 \
     GEMINI_TELEMETRY_TRACES_ENABLED=false \
     GEMINI_TELEMETRY_LOG_PROMPTS=false \
     OTEL_SDK_DISABLED=true
-# Cursor uses the read-only view of the extensions installed by its remote server.
+# Cursor shares the extension store of its remote server, so extensions installed
+# from the host editor or the desktop editor are available in both.
 RUN for desktop_entry in $(dpkg-query -L cursor | sed -n '\#^/usr/share/applications/.*\.desktop$#p') /home/developer/Desktop/cursor.desktop; do \
       [ -f "$desktop_entry" ] || continue; \
-      sed -i 's#^Exec=/usr/share/cursor/cursor\( --disable-gpu\)\? #Exec=/usr/share/cursor/cursor --disable-gpu --disable-telemetry --disable-crash-reporter --extensions-dir /usr/local/share/super-projects/remote-extension-stores/cursor/extensions #' "$desktop_entry"; \
+      sed -i 's#^Exec=/usr/share/cursor/cursor\( --disable-gpu\)\? #Exec=/usr/share/cursor/cursor --disable-gpu --disable-telemetry --disable-crash-reporter --extensions-dir /home/developer/.cursor-server/extensions #' "$desktop_entry"; \
     done
 
 
@@ -501,10 +493,9 @@ RUN install -d -m 0700 -o developer -g developer \
       /home/developer/.config/Code /home/developer/.config/Code/User \
       /home/developer/.config/Cursor/User /home/developer/.vscode \
       /home/developer/.vscode-server /home/developer/.cursor-server \
-      /home/developer/.vscode-server/extensions /home/developer/.cursor-server/extensions \
   && update-alternatives --install /usr/bin/editor editor /usr/bin/code 0 \
   && while IFS= read -r desktop_entry; do \
-      sed -i 's#^Exec=/usr/share/code/code #Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 --extensions-dir /usr/local/share/super-projects/remote-extension-stores/vscode/extensions #' "$desktop_entry"; \
+      sed -i 's#^Exec=/usr/share/code/code #Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 --extensions-dir /home/developer/.vscode-server/extensions #' "$desktop_entry"; \
       if grep -q '^Type=Application' "$desktop_entry" && ! grep -q '^NoDisplay=true' "$desktop_entry"; then \
         sed -i '0,/ %F/s# %F# --new-window /workspaces %F#' "$desktop_entry"; \
         install -o developer -g developer -m 0755 "$desktop_entry" /home/developer/Desktop/; \
@@ -522,7 +513,6 @@ USER developer:developer
 #   Uses nohup so background processes survive when postStartCommand's shell exits.
 # ------------------------------------------------------------------------------
 COPY --chmod=0755 .devcontainer/scripts/dockerfile/start-vnc \
-    .devcontainer/scripts/dockerfile/initialize-editor-extension-stores \
     .devcontainer/scripts/dockerfile/report-desktop-launcher-errors \
     .devcontainer/scripts/dockerfile/start-desktop-browser /usr/local/bin/
 
@@ -533,4 +523,4 @@ COPY --link --from=biome-cli --chown=developer:developer /home/developer/.npm-gl
 # dumb-init is PID 1: properly forwards signals and reaps zombie child processes.
 # compose's `command: tail -f /dev/null` becomes `dumb-init -- tail -f /dev/null`.
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["bash", "-c", "initialize-editor-extension-stores; report-desktop-launcher-errors; start-vnc; start-desktop-browser; exec tail -f /dev/null"]
+CMD ["bash", "-c", "report-desktop-launcher-errors; start-vnc; start-desktop-browser; exec tail -f /dev/null"]

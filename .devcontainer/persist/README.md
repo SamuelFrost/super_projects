@@ -135,12 +135,13 @@ and desktop telemetry flags still apply.
 ## Editor extensions
 
 Dev Containers clients install the extensions listed in
-[`devcontainer.json`](../devcontainer.json) during editor setup. Install or
-update extensions through the host editor while connected to the container.
-The browser desktop launchers for VS Code and Cursor read the corresponding
-server's `extensions` directory through a read-only mount. Restart the
-desktop editor to pick up changes if it's already open. Extensions that run
-only in the host editor stay on the host.
+[`devcontainer.json`](../devcontainer.json) during editor setup. The browser
+desktop launchers for VS Code and Cursor use the `extensions` directory of the
+corresponding remote server (`~/.vscode-server/extensions` and
+`~/.cursor-server/extensions`), so an extension installed or updated from the
+host editor or from the desktop editor is available in both. Restart the other
+editor to pick up changes if it's already open. Extensions that run only in
+the host editor stay on the host.
 
 Before the desktop starts, Compose prepares the persisted VS Code and Cursor
 desktop profiles for the configured developer UID. This also repairs older
@@ -149,9 +150,7 @@ and stay read-only.
 
 Editor profiles and remote extension stores persist across rebuilds. The
 browser desktop launchers use the server stores in place of any extensions
-previously installed into the standalone desktop directories. The read-only
-mount blocks writes through the desktop extension path. The development user
-can also access the writable server volume and the Docker socket.
+previously installed into the standalone desktop directories.
 
 See [privacy controls](../privacy/README.md) for telemetry policies and provider
 account training settings.

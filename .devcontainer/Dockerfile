@@ -1,47 +1,37 @@
 # syntax=docker/dockerfile:1
 ARG UBUNTU_VERSION=24.04
-# Use BuildKit's automatically detected architecture throughout the build.
-ARG TARGET_ARCHITECTURE=${TARGETARCH}
 
 # Independent installers share only download tools, not the desktop or host IDs.
 FROM ubuntu:${UBUNTU_VERSION} AS installer-base
-ARG TARGET_ARCHITECTURE
 ENV DEBIAN_FRONTEND=noninteractive
-# Keep APT metadata and reusable Ubuntu packages in the builder. One writer per
-# architecture lets stages share downloads without competing for the same cache.
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=super-projects-apt-packages-${TARGET_ARCHITECTURE},target=/var/cache/apt/build-archives,sharing=locked \
-    apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get -o Dir::Cache::archives=/var/cache/apt/build-archives install -y --no-install-recommends \
-    ca-certificates curl gnupg
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    ca-certificates curl gnupg \
+  && rm -rf /var/lib/apt/lists/*
 RUN install -m 0755 -d /etc/apt/keyrings
 
 # Install the common Python and native build tools once for npm, ADK, and mise.
 FROM installer-base AS build-toolchain
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=super-projects-apt-packages-${TARGET_ARCHITECTURE},target=/var/cache/apt/build-archives,sharing=locked \
-    apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get -o Dir::Cache::archives=/var/cache/apt/build-archives install -y --no-install-recommends \
-    python3 python3-venv make gcc g++
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    python3 python3-venv make gcc g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 # Resolve Node once so npm installers and the final image use the same package.
 FROM installer-base AS node-package
 WORKDIR /tmp
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
        | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
   && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main" \
        > /etc/apt/sources.list.d/nodesource.list \
-  && apt-get -o APT::Get::List-Cleanup=false update -qq \
+  && apt-get update -qq \
   && apt-get download nodejs \
-  && mv nodejs_*.deb nodejs.deb
+  && mv nodejs_*.deb nodejs.deb \
+  && rm -rf /var/lib/apt/lists/*
 
 FROM build-toolchain AS node-base
 RUN --mount=from=node-package,source=/tmp/nodejs.deb,target=/tmp/nodejs.deb \
-    --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=super-projects-apt-packages-${TARGET_ARCHITECTURE},target=/var/cache/apt/build-archives,sharing=locked \
-    apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get -o Dir::Cache::archives=/var/cache/apt/build-archives install -y --no-install-recommends /tmp/nodejs.deb
+    apt-get update -qq \
+  && apt-get install -y --no-install-recommends /tmp/nodejs.deb \
+  && rm -rf /var/lib/apt/lists/*
 # Keep the update repository, adding it after apt consumes the local package.
 COPY --link --from=node-package /etc/apt/keyrings/nodesource.gpg /etc/apt/keyrings/nodesource.gpg
 COPY --link --from=node-package /etc/apt/sources.list.d/nodesource.list /etc/apt/sources.list.d/nodesource.list
@@ -75,23 +65,18 @@ RUN python3 -m venv /opt/google-adk \
   && /opt/google-adk/bin/pip install --no-cache-dir "litellm>=1.84" "google-adk[mcp]"
 
 FROM installer-base AS cursor-desktop-download
+ARG TARGETARCH
 ARG CURSOR_DESKTOP_VERSION=3.29
-RUN case "$TARGET_ARCHITECTURE" in \
+RUN case "$TARGETARCH" in \
       amd64) cursor_download_architecture=x64 ;; \
       arm64) cursor_download_architecture=arm64 ;; \
-      *) echo "Unsupported target architecture: $TARGET_ARCHITECTURE" >&2; exit 1 ;; \
+      *) echo "Unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
   && curl -fsSL "https://api2.cursor.sh/updates/download/golden/linux-${cursor_download_architecture}-deb/cursor/${CURSOR_DESKTOP_VERSION}" -o /tmp/cursor.deb
 
 FROM installer-base AS chatgpt-desktop-download
-RUN curl -fsSL https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_${TARGET_ARCHITECTURE}.deb -o /tmp/chatgpt.deb
-
-# Azure CLI and VS Code repositories use the same signing key.
-FROM installer-base AS microsoft-key
-RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc -o /tmp/microsoft.asc \
-  && gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg /tmp/microsoft.asc \
-  && chmod a+r /etc/apt/keyrings/microsoft.gpg \
-  && rm /tmp/microsoft.asc
+ARG TARGETARCH
+RUN curl -fsSL https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_${TARGETARCH}.deb -o /tmp/chatgpt.deb
 
 # Apt installs run in the runtime filesystem to retain dependencies and package hooks.
 FROM build-toolchain AS desktop-runtime
@@ -127,10 +112,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # libsqlite3-dev: embedded database (Python)
 # patch:          applies source patches during ruby-build compilation
 # autoconf:       generates ./configure scripts from Makefile.in templates
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=super-projects-apt-packages-${TARGET_ARCHITECTURE},target=/var/cache/apt/build-archives,sharing=locked \
-    apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get -o Dir::Cache::archives=/var/cache/apt/build-archives install -y --no-install-recommends \
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   git \
   openssh-client \
   vim \
@@ -153,7 +135,8 @@ RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target
   libbz2-dev \
   libsqlite3-dev \
   patch \
-  autoconf
+  autoconf \
+  && rm -rf /var/lib/apt/lists/*
 
 # Route ssh/git clients to the host-forwarded agent even when SSH_AUTH_SOCK is unset.
 RUN printf '%s\n' 'Host *' '  IdentityAgent /ssh-agent.sock' \
@@ -169,14 +152,14 @@ RUN head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' > /etc/machine-id
 # ------------------------------------------------------------------------------
 # GitHub CLI (gh)
 # ------------------------------------------------------------------------------
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
   && chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
   && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
        > /etc/apt/sources.list.d/github-cli.list \
-  && apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get install -y --no-install-recommends gh
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends gh \
+  && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
 # Docker CLI (outside-of-docker: uses the host daemon via mounted socket)
@@ -187,15 +170,15 @@ RUN install -m 0755 -d /etc/apt/keyrings \
        -o /etc/apt/keyrings/docker.asc \
   && chmod a+r /etc/apt/keyrings/docker.asc
 # /etc/os-release provides VERSION_CODENAME (e.g. "noble" for 24.04)
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    . /etc/os-release && \
+RUN . /etc/os-release && \
   printf "Types: deb\nURIs: https://download.docker.com/linux/ubuntu\nSuites: %s\nComponents: stable\nSigned-By: /etc/apt/keyrings/docker.asc\n" \
     "${VERSION_CODENAME}" > /etc/apt/sources.list.d/docker.sources \
-  && apt-get -o APT::Get::List-Cleanup=false update -qq \
+  && apt-get update -qq \
   && apt-get install -y --no-install-recommends \
        docker-ce-cli \
        docker-compose-plugin \
-       docker-buildx-plugin
+       docker-buildx-plugin \
+  && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
 # Azure CLI (az)
@@ -204,27 +187,27 @@ RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target
 #   layer stays cached.
 #   Docs: https://learn.microsoft.com/en-us/cli/azure/install-azure-cli
 # ------------------------------------------------------------------------------
-COPY --link --from=microsoft-key /etc/apt/keyrings/microsoft.gpg /etc/apt/keyrings/microsoft.gpg
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    . /etc/os-release && \
+RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+       | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
+  && chmod a+r /etc/apt/keyrings/microsoft.gpg
+RUN . /etc/os-release && \
   printf "Types: deb\nURIs: https://packages.microsoft.com/repos/azure-cli/\nSuites: %s\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n" \
     "${VERSION_CODENAME}" "$(dpkg --print-architecture)" \
     > /etc/apt/sources.list.d/azure-cli.sources \
-  && apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get install -y --no-install-recommends azure-cli
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends azure-cli \
+  && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
 # Desktop GUI: XFCE4
 #   dbus-x11:    X11 dbus integration required by the XFCE session manager.
 #   xfce4-terminal: default terminal emulator for the desktop.
 # ------------------------------------------------------------------------------
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=super-projects-apt-packages-${TARGET_ARCHITECTURE},target=/var/cache/apt/build-archives,sharing=locked \
-    apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get -o Dir::Cache::archives=/var/cache/apt/build-archives install -y --no-install-recommends \
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   xfce4 \
   xfce4-terminal \
-  dbus-x11
+  dbus-x11 \
+  && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
 # VNC server stack
@@ -251,10 +234,7 @@ ENV DISPLAY=:99 \
 # x11vnc:         VNC server, needed for VNC access.
 # xterm:          lightweight fallback terminal, needed for debugging.
 # xvfb:          virtual X display, needed for headless Chrome.
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=super-projects-apt-packages-${TARGET_ARCHITECTURE},target=/var/cache/apt/build-archives,sharing=locked \
-    apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get -o Dir::Cache::archives=/var/cache/apt/build-archives install -y --no-install-recommends \
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   libegl1 \
   libgl1 \
   libgl1-mesa-dri \
@@ -263,7 +243,8 @@ RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target
   x11-xserver-utils \
   x11vnc \
   xterm \
-  xvfb
+  xvfb \
+  && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
 # Google Chrome
@@ -275,61 +256,61 @@ RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target
 #     --enable-features=WebMCP  WebMCP tools for chrome-devtools-mcp (Chrome 150+).
 #   The namespace sandbox is enabled by .devcontainer/seccomp/desktop-sandboxes.json.
 # ------------------------------------------------------------------------------
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+ARG TARGETARCH
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
        | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
   && chmod a+r /etc/apt/keyrings/google-chrome.gpg \
-  && echo "deb [arch=${TARGET_ARCHITECTURE} signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
+  && echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
        > /etc/apt/sources.list.d/google-chrome.list \
-  && apt-get -o APT::Get::List-Cleanup=false update -qq \
+  && apt-get update -qq \
   && apt-get install -y --no-install-recommends \
        google-chrome-stable \
        fonts-liberation \
        fonts-noto-cjk \
-       dumb-init
+       dumb-init \
+  && rm -rf /var/lib/apt/lists/*
 
 # ------------------------------------------------------------------------------
 # mise — universal version manager for Ruby, Node, Python, Go, Java, etc.
 #   Installed system-wide via apt; each developer's tool installs go in ~/.local.
 #   Docs: https://mise.jdx.dev
 # ------------------------------------------------------------------------------
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    curl -fsSL https://mise.jdx.dev/gpg-key.pub \
+RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
        -o /etc/apt/keyrings/mise-archive-keyring.asc \
   && printf "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.asc] https://mise.jdx.dev/deb stable main\n" \
        > /etc/apt/sources.list.d/mise.list \
-  && apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get install -y --no-install-recommends mise
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends mise \
+  && rm -rf /var/lib/apt/lists/*
 
 # Official Linux desktop applications. Cursor uses its published Debian package;
 # ChatGPT configures OpenAI's signed update repository during package installation.
 # Claude Desktop is installed from Anthropic's signed stable apt repository.
 RUN --mount=from=cursor-desktop-download,source=/tmp/cursor.deb,target=/tmp/cursor.deb \
     --mount=from=chatgpt-desktop-download,source=/tmp/chatgpt.deb,target=/tmp/chatgpt.deb \
-    --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
     curl -fsSL https://downloads.claude.ai/claude-desktop/key.asc \
       -o /usr/share/keyrings/claude-desktop-archive-keyring.asc \
   && echo "deb [signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" \
       > /etc/apt/sources.list.d/claude-desktop.list \
-  && apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get install -y --no-install-recommends /tmp/cursor.deb /tmp/chatgpt.deb claude-desktop
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends /tmp/cursor.deb /tmp/chatgpt.deb claude-desktop \
+  && rm -rf /var/lib/apt/lists/*
 
 # Official VS Code stable package from Microsoft's signed repository, using the
 # signing key installed for Azure CLI. VSCODE_VERSION pins a Debian package version.
 ARG VSCODE_VERSION
-RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n' "$TARGET_ARCHITECTURE" \
+RUN printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n' "$TARGETARCH" \
       > /etc/apt/sources.list.d/vscode.sources \
-  && apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get install -y --no-install-recommends "code${VSCODE_VERSION:+=$VSCODE_VERSION}"
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends "code${VSCODE_VERSION:+=$VSCODE_VERSION}" \
+  && rm -rf /var/lib/apt/lists/*
 
 FROM desktop-runtime AS devcontainer
 # Install Node after the desktop so Node updates do not invalidate desktop packages.
 RUN --mount=from=node-package,source=/tmp/nodejs.deb,target=/tmp/nodejs.deb \
-    --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=cache,id=super-projects-apt-packages-${TARGET_ARCHITECTURE},target=/var/cache/apt/build-archives,sharing=locked \
-    apt-get -o APT::Get::List-Cleanup=false update -qq \
-  && apt-get -o Dir::Cache::archives=/var/cache/apt/build-archives install -y --no-install-recommends /tmp/nodejs.deb
+    apt-get update -qq \
+  && apt-get install -y --no-install-recommends /tmp/nodejs.deb \
+  && rm -rf /var/lib/apt/lists/*
 # Keep the update repository, adding it after apt consumes the local package.
 COPY --link --from=node-package /etc/apt/keyrings/nodesource.gpg /etc/apt/keyrings/nodesource.gpg
 COPY --link --from=node-package /etc/apt/sources.list.d/nodesource.list /etc/apt/sources.list.d/nodesource.list

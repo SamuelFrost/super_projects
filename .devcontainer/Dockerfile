@@ -105,7 +105,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-# Install core development tools, mise build dependencies, and Electron libraries.
+# Install core development tools and mise build dependencies.
 # curl:           downloading packages and general HTTP from the terminal
 # git:            version control
 # openssh-client: Git/SSH via host-forwarded ssh-agent (private keys stay on the host)
@@ -156,11 +156,7 @@ RUN --mount=type=cache,id=super-projects-apt-lists-${TARGET_ARCHITECTURE},target
   libbz2-dev \
   libsqlite3-dev \
   patch \
-  autoconf \
-  libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 \
-  libcups2t64 libcurl3t64-gnutls libdbus-1-3 libexpat1 libgbm1 libglib2.0-0t64 \
-  libgtk-3-0t64 libnspr4 libnss3 libpango-1.0-0 libudev1 libx11-6 libxcb1 \
-  libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxkbfile1 libxrandr2 xdg-utils
+  autoconf
 
 # Route ssh/git clients to the host-forwarded agent even when SSH_AUTH_SOCK is unset.
 RUN printf '%s\n' 'Host *' '  IdentityAgent /ssh-agent.sock' \

@@ -36,8 +36,6 @@ _gid=$(compose_yaml_quote "$DOCKER_GID")
     '      args:' \
     "        DEVELOPER_UID: ${_uid}" \
     "        DOCKER_GID: ${_gid}" \
-    '    group_add:' \
-    "      - ${_gid}" \
     '    environment:' \
     "      UID: ${_uid}" \
     '  editor-profile-init:' \

@@ -227,7 +227,7 @@ When creating docker compose configurations to run inside the container, you wil
 
 Inside the devcontainer you are the `developer` user. That user is created with your host user id, so files it creates in the mounted workspace are owned by you on the host. The id is set when the image is built.
 
-Compose adds the mounted socket's numeric group ID to the `developer` user's supplementary groups so the user can access Docker. The image also creates a named `docker` group.
+The `developer` user belongs to the group that owns that socket, which is what allows it to use the socket. The group id is set when the image is built, so a different socket group needs a rebuild. Docker Desktop on macOS presents the socket with the root group, so there the user joins that group.
 
 <details>
 <summary>Image architecture</summary>

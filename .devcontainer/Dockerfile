@@ -341,14 +341,15 @@ ARG DOCKER_GID=1
 
 # Ubuntu 24.04 ships a default `ubuntu` user at UID 1000; remove it before
 # creating `developer` so there is no UID conflict when the host uid is 1000.
-# Create docker group with the host's GID so the mounted docker.sock is accessible.
+# Name the group that owns the mounted docker.sock unless the image already has
+# that GID (Docker Desktop on macOS presents the socket with the root group).
 RUN userdel --remove ubuntu 2>/dev/null || true && \
-    groupadd --gid ${DOCKER_GID} docker || groupadd --gid 1001 docker || groupadd docker || true
+    { getent group "${DOCKER_GID}" >/dev/null || groupadd --gid "${DOCKER_GID}" docker; }
 
-# Create the developer user with the UID supplied by host filesystem compatibility.
+# Create the developer user with the UID supplied by host filesystem compatibility,
+# as a member of the docker.sock group.
 RUN groupadd --system developer && \
-  useradd --uid ${DEVELOPER_UID} --gid developer --create-home --shell /bin/bash developer && \
-  usermod -aG docker developer
+  useradd --uid ${DEVELOPER_UID} --gid developer --groups "${DOCKER_GID}" --create-home --shell /bin/bash developer
 
 # Ensure developer owns their home directory.
 # Pre-create directories that will be backed by named volumes so Docker

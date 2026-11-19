@@ -153,7 +153,7 @@ For developer convenience, the devcontainer automatically forwards your host's S
 <details>
 <summary>How to set up your Host Machine's SSH keys so they can be used in the container</summary>
 
-On macOS with Docker Desktop, the devcontainer uses [Docker Desktop’s SSH agent bridge](https://docs.docker.com/desktop/features/networking/networking-how-tos/#ssh-agent-forwarding). Keys are loaded into the macOS session agent. Set `AddKeysToAgent yes` and `UseKeychain yes` in `~/.ssh/config` to use Keychain. To use 1Password, configure Docker Desktop to inherit its agent socket when it starts.
+On macOS with Docker Desktop, the devcontainer uses [Docker Desktop’s SSH agent bridge](https://docs.docker.com/desktop/features/networking/networking-how-tos/#ssh-agent-forwarding). Keys are loaded into the macOS session agent. Set `AddKeysToAgent yes` and `UseKeychain yes` in `~/.ssh/config` to use Keychain. Initialization gives the container's user access to the bridge socket. To use 1Password, configure Docker Desktop to inherit its agent socket when it starts.
 
 On Linux and WSL, the devcontainer looks for keys on your host in this order:
 

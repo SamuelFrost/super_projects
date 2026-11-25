@@ -112,8 +112,32 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 ### Accessing the container's GUI and CLI
 
 - **GUI:** Open `http://localhost:6080/vnc.html` in your browser and press **Connect**.
-- **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to get a shell in the container.
-- **IDE:** Open the project folder in your preferred IDE that supports Dev Containers. VS code and Cursor will automatically detect the devcontainer and prompt you to open it - follow the prompts to open the project in the container.
+- **Terminal:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to open a shell in the container.
+- **IDE remote connection:** Open the project folder and choosing **Reopen in Container**. Alternatively run `./ide code` or `./ide cursor` on the host to open the container's workspace directly.
+
+<details>
+<summary>Shotrcut to open the remote workspace directly from the CLI </summary>
+
+Run these commands from within the `super_projects` directory (use WSL on Windows):
+
+```sh
+./ide cursor  # Cursor
+./ide code    # VS Code
+```
+
+`./ide` opens your workspace directly inside the container. It opens the
+`.code-workspace` file in this directory, or the `/workspaces/` folder if there
+isn't one. If there are several workspace files, choose one with
+`./ide code team.code-workspace`.
+
+Pass editor options after `--`, for example `./ide cursor -- --reuse-window`.
+See `./ide --help` for more options.
+
+For editors without remote support, such as Vim or Neovim, run them inside a
+running container using `devcontainer exec vim` or
+`./not_devcontainer exec devcontainer vim`.
+
+</details>
 
 ## Features & details
 
@@ -397,6 +421,7 @@ You are encouraged to modify everything to your own company's needs. Some likely
 | `.cursor/`, `.vscode/`, `.gemini/`, `.codex/` | IDE & AI tool configs |
 | `.mise.toml` | Default tool versions |
 | `not_devcontainer` | Helper script to run Docker Compose matching devcontainer configuration |
+| `ide` | Open the devcontainer workspace directly in a host VS Code-compatible IDE |
 | `README.md` | This file |
 | `LICENSE` | Super Projects License |
 

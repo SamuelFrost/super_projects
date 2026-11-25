@@ -58,7 +58,6 @@
         "marcoroth.stimulus-lsp",
         "biomejs.biome",
         "vitest.explorer",
-        "zoma.vscode-auto-open-workspace",
         "ms-azuretools.vscode-containers",
         "ms-vscode-remote.remote-containers",
         "ms-vscode-remote.remote-wsl",
@@ -68,7 +67,6 @@
         "ms-vscode.remote-explorer"
       ],
       "settings": {
-        "autoOpenWorkspace.enableAutoOpenAlwaysFirst": true,
         "telemetry.telemetryLevel": "off",
         // Named-volume shortcuts under persist/ can be huge (mise installs, Chrome profile).
         // Keep them out of the workspace file watcher and search index.

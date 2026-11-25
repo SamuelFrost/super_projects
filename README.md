@@ -113,7 +113,34 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 
 - **GUI:** Open `http://localhost:6080/vnc.html` in your browser and press **Connect**.
 - **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to get a shell in the container.
-- **IDE:** Open the project folder in your preferred IDE that supports Dev Containers. VS code and Cursor will automatically detect the devcontainer and prompt you to open it - follow the prompts to open the project in the container.
+- **IDE:** Run `./ide code` or `./ide cursor` on the host to open the container's workspace directly. Opening the project folder and choosing **Reopen in Container** also works.
+
+#### Open an IDE directly
+
+```sh
+./ide code
+./ide cursor
+```
+
+The launcher opens the single `.code-workspace` file in the repository root
+directly inside the devcontainer, skipping the local-folder window and subsequent
+workspace reload. If there is no workspace file, it opens `/workspaces/` instead.
+If you have several workspace files, choose one with
+`./ide code team.code-workspace`. The command resolves paths from its own location,
+so it also works when invoked from another directory.
+
+Use an installed host editor command on `PATH`, with that editor's Dev Containers
+extension enabled. Other VS Code-based editors can be used by supplying their
+command or executable path if they support `--file-uri`, `--folder-uri`, and
+`dev-container` remote connections. On macOS, install the editor's shell command;
+on Windows, run this from WSL using the Windows editor's WSL launcher.
+
+The editor manages container startup, initialization, and configured extensions
+through `.devcontainer/devcontainer.json` as usual. Existing containers and named
+volumes are reused; this command does not request a rebuild or recreate. Initial
+setup, authentication, trust, or extension-install prompts may still appear.
+It does not fix failures in the editor's Dev Containers extension. Use
+`./ide --print-uri` to inspect the destination without opening an editor.
 
 ## Features & details
 
@@ -397,6 +424,7 @@ You are encouraged to modify everything to your own company's needs. Some likely
 | `.cursor/`, `.vscode/`, `.gemini/`, `.codex/` | IDE & AI tool configs |
 | `.mise.toml` | Default tool versions |
 | `not_devcontainer` | Helper script to run Docker Compose matching devcontainer configuration |
+| `ide` | Open the devcontainer workspace directly in a host VS Code-compatible IDE |
 | `README.md` | This file |
 | `LICENSE` | Super Projects License |
 

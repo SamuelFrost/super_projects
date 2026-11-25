@@ -1,0 +1,118 @@
+#!/bin/sh
+# Open this project's devcontainer and workspace directly in a host IDE.
+set -eu
+
+usage() {
+	cat <<'USAGE'
+Usage: ./ide EDITOR [WORKSPACE.code-workspace]
+       ./ide --print-uri [WORKSPACE.code-workspace]
+
+Examples:
+  ./ide code
+  ./ide cursor
+  ./ide code team.code-workspace
+
+EDITOR is a VS Code-compatible host command with Dev Containers support.
+The single .code-workspace file in the repository root is opened by default.
+If there is no workspace file, the container's /workspaces folder is opened.
+With multiple workspace files, specify the filename explicitly.
+Run from Linux, macOS, or WSL (using a Windows editor's WSL launcher).
+USAGE
+}
+
+case "${1:-}" in
+-h | --help)
+	usage
+	exit 0
+	;;
+'')
+	usage >&2
+	exit 2
+	;;
+esac
+
+editor_command=$1
+shift
+if [ "$#" -gt 1 ]; then
+	usage >&2
+	exit 2
+fi
+if [ "$editor_command" != --print-uri ] && ! command -v "$editor_command" >/dev/null 2>&1; then
+	printf 'IDE command not found: %s. Add the host editor launcher to PATH.\n' "$editor_command" >&2
+	exit 127
+fi
+
+workspace_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+if [ ! -f "$workspace_directory/.devcontainer/devcontainer.json" ]; then
+	printf 'Devcontainer configuration not found in %s\n' "$workspace_directory" >&2
+	exit 1
+fi
+
+workspace_filename=${1:-}
+if [ -n "$workspace_filename" ]; then
+	# Keep the host file and container path relative to the same workspace mount.
+	case "$workspace_filename" in
+	*/*)
+		printf 'Choose a workspace filename in the repository root.\n' >&2
+		exit 2
+		;;
+	*.code-workspace) ;;
+	*)
+		printf 'Expected a .code-workspace filename: %s\n' "$workspace_filename" >&2
+		exit 2
+		;;
+	esac
+	if [ ! -f "$workspace_directory/$workspace_filename" ]; then
+		printf 'Workspace file not found: %s\n' "$workspace_filename" >&2
+		exit 1
+	fi
+else
+	for workspace_candidate in "$workspace_directory"/*.code-workspace; do
+		[ -f "$workspace_candidate" ] || continue
+		if [ -n "$workspace_filename" ]; then
+			printf 'Multiple workspace files found. Use ./ide %s WORKSPACE.code-workspace\n' "$editor_command" >&2
+			exit 2
+		fi
+		workspace_filename=${workspace_candidate##*/}
+	done
+fi
+
+# Both VS Code and Cursor accept the hex-encoded host directory. Keeping the
+# dev-container authority preserves devcontainer.json lifecycle/customizations.
+encoded_host_directory=$(printf '%s' "$workspace_directory" | od -An -v -tx1 | tr -d ' \n')
+remote_authority="dev-container+$encoded_host_directory"
+if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+	remote_authority="$remote_authority@wsl+$WSL_DISTRO_NAME"
+fi
+
+remote_path=/workspaces/
+uri_argument=--folder-uri
+if [ -n "$workspace_filename" ]; then
+	remote_path="$remote_path$workspace_filename"
+	uri_argument=--file-uri
+fi
+# Preserve the .code-workspace suffix: editor CLIs use it to distinguish a
+# workspace from an ordinary file. Encode spaces, #, %, and Unicode bytes.
+encoded_remote_path=$(
+	printf '%s' "$remote_path" | od -An -v -tu1 | LC_ALL=C awk '
+		{
+			for (byte_index = 1; byte_index <= NF; byte_index++) {
+				byte_value = $byte_index
+				if ((byte_value >= 48 && byte_value <= 57) ||
+				    (byte_value >= 65 && byte_value <= 90) ||
+				    (byte_value >= 97 && byte_value <= 122) ||
+				    index("/-._~", sprintf("%c", byte_value)))
+					printf "%c", byte_value
+				else
+					printf "%%%02X", byte_value
+			}
+		}'
+)
+remote_uri="vscode-remote://$remote_authority$encoded_remote_path"
+
+if [ "$editor_command" = --print-uri ]; then
+	printf '%s\n' "$remote_uri"
+	exit 0
+fi
+
+exec "$editor_command" --new-window "$uri_argument" "$remote_uri"

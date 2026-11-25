@@ -113,10 +113,10 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 
 - **GUI:** Open `http://localhost:6080/vnc.html` in your browser and press **Connect**.
 - **Terminal:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to open a shell in the container.
-- **IDE:** Run `./ide code` or `./ide cursor` on the host to open the container's workspace directly. Opening the project folder and choosing **Reopen in Container** also works.
+- **IDE remote connection:** Open the project folder and choosing **Reopen in Container**. Alternatively run `./ide code` or `./ide cursor` on the host to open the container's workspace directly.
 
 <details>
-<summary>Open the remote workspace from the CLI</summary>
+<summary>Shotrcut to open the remote workspace directly from the CLI </summary>
 
 Run these commands from within the `super_projects` directory (use WSL on Windows):
 

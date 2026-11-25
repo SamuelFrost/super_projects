@@ -112,28 +112,30 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 ### Accessing the container's GUI and CLI
 
 - **GUI:** Open `http://localhost:6080/vnc.html` in your browser and press **Connect**.
-- **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to get a shell in the container.
+- **Terminal:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to open a shell in the container.
 - **IDE:** Run `./ide code` or `./ide cursor` on the host to open the container's workspace directly. Opening the project folder and choosing **Reopen in Container** also works.
 
 <details>
 <summary>Open the remote workspace from the CLI</summary>
 
-Run `./ide` on the host (WSL on Windows) to open the devcontainer in an editor:
+Run these commands from within the `super_projects` directory (use WSL on Windows):
 
 ```sh
 ./ide cursor  # Cursor
 ./ide code    # VS Code
-./ide vim     # Vim
-./ide nvim    # Neovim
 ```
 
-- Cursor and VS Code need their host CLI on `PATH` and Dev Containers support.
-  They open the single root `.code-workspace`, or `/workspaces/` if none exists.
-  Choose a file explicitly when needed: `./ide code team.code-workspace`.
-- Vim and Neovim start services and run inside the container at `/workspaces`.
-  Vim is included; Neovim must be installed in the image.
-- Put editor flags and file paths after `--`, for example
-  `./ide cursor -- --reuse-window`. See `./ide --help` for all options.
+`./ide` opens your workspace directly inside the container. It opens the
+`.code-workspace` file in this directory, or the `/workspaces/` folder if there
+isn't one. If there are several workspace files, choose one with
+`./ide code team.code-workspace`.
+
+Pass editor options after `--`, for example `./ide cursor -- --reuse-window`.
+See `./ide --help` for more options.
+
+For editors without remote support, such as Vim or Neovim, run them inside a
+running container using `devcontainer exec vim` or
+`./not_devcontainer exec devcontainer vim`.
 
 </details>
 

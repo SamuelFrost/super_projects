@@ -1,0 +1,170 @@
+#!/bin/sh
+# Open this project's devcontainer and workspace directly in a host IDE.
+set -eu
+
+usage() {
+	cat <<'USAGE'
+Usage: ./ide EDITOR [WORKSPACE.code-workspace] [-- EDITOR_ARGUMENTS...]
+       ./ide --print-uri [WORKSPACE.code-workspace]
+
+Examples:
+  ./ide code
+  ./ide cursor
+  ./ide code team.code-workspace
+  ./ide cursor -- --profile "Work"
+  ./ide code team.code-workspace -- --reuse-window --disable-extensions
+  ./ide code -- --help
+
+Supported editors:
+  Editors must be VS Code-compatible host commands with Dev Containers support
+  and the --file-uri / --folder-uri CLI options. Other VS Code-based editors
+  work only if they support that same connection format.
+  For editors without remote support, such as Vim and Neovim, run them inside
+  a running container using devcontainer exec or ./not_devcontainer:
+    devcontainer exec vim
+    ./not_devcontainer exec devcontainer vim
+
+Editor arguments:
+  Put the editor's own flags and values after --. Quote values containing spaces
+  normally; each argument is forwarded unchanged. Flags without -- are rejected.
+  A new window is opened by default. --reuse-window / -r and
+  --new-window / -n after the separator replace that default.
+  Use -- --help for the editor's help;
+  ./ide --help shows this launcher's help. --print-uri accepts no editor flags.
+
+The single .code-workspace file in the repository root is opened by default.
+If there is no workspace file, the container's /workspaces folder is opened.
+With multiple workspace files, specify the filename explicitly.
+Run from Linux, macOS, or WSL (using a Windows editor's WSL launcher).
+USAGE
+}
+
+case "${1:-}" in
+-h | --help)
+	usage
+	exit 0
+	;;
+'')
+	usage >&2
+	exit 2
+	;;
+esac
+
+editor_command=$1
+shift
+workspace_filename=
+if [ "$#" -gt 0 ] && [ "$1" != -- ]; then
+	case "$1" in
+	-*)
+		printf 'Put editor flags after --. See ./ide --help for examples.\n' >&2
+		exit 2
+		;;
+	esac
+	workspace_filename=$1
+	shift
+fi
+if [ "$#" -gt 0 ]; then
+	if [ "$1" != -- ]; then
+		usage >&2
+		exit 2
+	fi
+	shift
+fi
+if [ "$editor_command" = --print-uri ] && [ "$#" -gt 0 ]; then
+	printf '%s\n' '--print-uri accepts no editor arguments.' >&2
+	exit 2
+fi
+workspace_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+if [ ! -f "$workspace_directory/.devcontainer/devcontainer.json" ]; then
+	printf 'Devcontainer configuration not found in %s\n' "$workspace_directory" >&2
+	exit 1
+fi
+
+case "${editor_command##*/}" in
+nvim | neovim | vim | vi)
+	printf 'Run this editor inside the container using devcontainer exec or ./not_devcontainer exec devcontainer. See ./ide --help.\n' >&2
+	exit 2
+	;;
+esac
+
+if [ "$editor_command" != --print-uri ] && ! command -v "$editor_command" >/dev/null 2>&1; then
+	printf 'IDE command not found: %s. Add the host editor launcher to PATH.\n' "$editor_command" >&2
+	exit 127
+fi
+
+if [ -n "$workspace_filename" ]; then
+	# Keep the host file and container path relative to the same workspace mount.
+	case "$workspace_filename" in
+	*/*)
+		printf 'Choose a workspace filename in the repository root.\n' >&2
+		exit 2
+		;;
+	*.code-workspace) ;;
+	*)
+		printf 'Expected a .code-workspace filename: %s\n' "$workspace_filename" >&2
+		exit 2
+		;;
+	esac
+	if [ ! -f "$workspace_directory/$workspace_filename" ]; then
+		printf 'Workspace file not found: %s\n' "$workspace_filename" >&2
+		exit 1
+	fi
+else
+	for workspace_candidate in "$workspace_directory"/*.code-workspace; do
+		[ -f "$workspace_candidate" ] || continue
+		if [ -n "$workspace_filename" ]; then
+			printf 'Multiple workspace files found. Use ./ide %s WORKSPACE.code-workspace\n' "$editor_command" >&2
+			exit 2
+		fi
+		workspace_filename=${workspace_candidate##*/}
+	done
+fi
+
+# Both VS Code and Cursor accept the hex-encoded host directory. Keeping the
+# dev-container authority preserves devcontainer.json lifecycle/customizations.
+encoded_host_directory=$(printf '%s' "$workspace_directory" | od -An -v -tx1 | tr -d ' \n')
+remote_authority="dev-container+$encoded_host_directory"
+if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+	remote_authority="$remote_authority@wsl+$WSL_DISTRO_NAME"
+fi
+
+remote_path=/workspaces/
+uri_argument=--folder-uri
+if [ -n "$workspace_filename" ]; then
+	remote_path="$remote_path$workspace_filename"
+	uri_argument=--file-uri
+fi
+# Preserve the .code-workspace suffix: editor CLIs use it to distinguish a
+# workspace from an ordinary file. Encode spaces, #, %, and Unicode bytes.
+encoded_remote_path=$(
+	printf '%s' "$remote_path" | od -An -v -tu1 | LC_ALL=C awk '
+		{
+			for (byte_index = 1; byte_index <= NF; byte_index++) {
+				byte_value = $byte_index
+				if ((byte_value >= 48 && byte_value <= 57) ||
+				    (byte_value >= 65 && byte_value <= 90) ||
+				    (byte_value >= 97 && byte_value <= 122) ||
+				    index("/-._~", sprintf("%c", byte_value)))
+					printf "%c", byte_value
+				else
+					printf "%%%02X", byte_value
+			}
+		}'
+)
+remote_uri="vscode-remote://$remote_authority$encoded_remote_path"
+
+if [ "$editor_command" = --print-uri ]; then
+	printf '%s\n' "$remote_uri"
+	exit 0
+fi
+
+use_default_window=true
+for editor_argument; do
+	case "$editor_argument" in
+	--reuse-window | --reuse-window=* | -r | --new-window | --new-window=* | -n) use_default_window=false ;;
+	esac
+done
+if [ "$use_default_window" = true ]; then
+	exec "$editor_command" --new-window "$uri_argument" "$remote_uri" "$@"
+fi
+exec "$editor_command" "$uri_argument" "$remote_uri" "$@"

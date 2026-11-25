@@ -4,15 +4,34 @@ set -eu
 
 usage() {
 	cat <<'USAGE'
-Usage: ./ide EDITOR [WORKSPACE.code-workspace]
+Usage: ./ide EDITOR [WORKSPACE.code-workspace] [-- EDITOR_ARGUMENTS...]
        ./ide --print-uri [WORKSPACE.code-workspace]
 
 Examples:
   ./ide code
   ./ide cursor
   ./ide code team.code-workspace
+  ./ide cursor -- --profile "Work"
+  ./ide code team.code-workspace -- --reuse-window --disable-extensions
+  ./ide code -- --help
 
-EDITOR is a VS Code-compatible host command with Dev Containers support.
+Supported editors:
+  EDITOR must be a VS Code-compatible host command with Dev Containers support
+  and the --file-uri / --folder-uri CLI options. Other VS Code-based editors
+  work only if they support that same connection format.
+  Neovim and Vim are not supported by this launcher.
+  For a terminal editor inside an already running container, use:
+    ./not_devcontainer exec -w /workspaces devcontainer vim
+  Replace vim with nvim if Neovim is installed inside the container.
+  Terminal editors do not load VS Code .code-workspace files.
+
+Editor arguments:
+  Put the editor's own flags and values after --. Quote values containing spaces
+  normally; each argument is forwarded unchanged. Flags without -- are rejected.
+  A new window is opened by default. --reuse-window / -r and --new-window / -n
+  after the separator replace that default. Use -- --help for the editor's help;
+  ./ide --help shows this launcher's help. --print-uri accepts no editor flags.
+
 The single .code-workspace file in the repository root is opened by default.
 If there is no workspace file, the container's /workspaces folder is opened.
 With multiple workspace files, specify the filename explicitly.
@@ -33,8 +52,32 @@ esac
 
 editor_command=$1
 shift
-if [ "$#" -gt 1 ]; then
-	usage >&2
+workspace_filename=
+if [ "$#" -gt 0 ] && [ "$1" != -- ]; then
+	case "$1" in
+	-*)
+		printf 'Put editor flags after --, for example: ./ide %s -- --reuse-window\n' "$editor_command" >&2
+		exit 2
+		;;
+	esac
+	workspace_filename=$1
+	shift
+fi
+if [ "$#" -gt 0 ]; then
+	if [ "$1" != -- ]; then
+		usage >&2
+		exit 2
+	fi
+	shift
+fi
+case "${editor_command##*/}" in
+nvim | neovim | vim | vi)
+	printf 'Terminal editors do not use VS Code remote connections.\nUse ./not_devcontainer exec -w /workspaces devcontainer %s (if installed in the container).\n' "${editor_command##*/}" >&2
+	exit 2
+	;;
+esac
+if [ "$editor_command" = --print-uri ] && [ "$#" -gt 0 ]; then
+	printf '%s\n' '--print-uri accepts no editor arguments.' >&2
 	exit 2
 fi
 if [ "$editor_command" != --print-uri ] && ! command -v "$editor_command" >/dev/null 2>&1; then
@@ -48,7 +91,6 @@ if [ ! -f "$workspace_directory/.devcontainer/devcontainer.json" ]; then
 	exit 1
 fi
 
-workspace_filename=${1:-}
 if [ -n "$workspace_filename" ]; then
 	# Keep the host file and container path relative to the same workspace mount.
 	case "$workspace_filename" in
@@ -115,4 +157,13 @@ if [ "$editor_command" = --print-uri ]; then
 	exit 0
 fi
 
-exec "$editor_command" --new-window "$uri_argument" "$remote_uri"
+use_default_window=true
+for editor_argument; do
+	case "$editor_argument" in
+	--reuse-window | --reuse-window=* | -r | --new-window | --new-window=* | -n) use_default_window=false ;;
+	esac
+done
+if [ "$use_default_window" = true ]; then
+	exec "$editor_command" --new-window "$uri_argument" "$remote_uri" "$@"
+fi
+exec "$editor_command" "$uri_argument" "$remote_uri" "$@"

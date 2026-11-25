@@ -120,6 +120,8 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 ```sh
 ./ide code
 ./ide cursor
+./ide cursor -- --profile "Work"
+./ide code -- --reuse-window
 ```
 
 The launcher opens the single `.code-workspace` file in the repository root
@@ -134,6 +136,18 @@ extension enabled. Other VS Code-based editors can be used by supplying their
 command or executable path if they support `--file-uri`, `--folder-uri`, and
 `dev-container` remote connections. On macOS, install the editor's shell command;
 on Windows, run this from WSL using the Windows editor's WSL launcher.
+
+Pass editor flags after `--`, optionally after the workspace filename:
+`./ide code team.code-workspace -- --reuse-window --disable-extensions`.
+Arguments retain their quoting, and an explicit window flag replaces the default
+new window. Use `./ide --help` for launcher help or `./ide code -- --help` for the
+editor's help.
+
+Neovim and other editors with a different remote connection interface are not
+supported by this launcher. For a terminal editor in a running container, use
+`./not_devcontainer exec -w /workspaces devcontainer vim`, or replace `vim` with
+`nvim` if Neovim is installed in the container. This opens the container folder;
+terminal editors do not load VS Code workspace files.
 
 The editor manages container startup, initialization, and configured extensions
 through `.devcontainer/devcontainer.json` as usual. Existing containers and named

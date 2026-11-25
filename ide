@@ -5,6 +5,7 @@ set -eu
 usage() {
 	cat <<'USAGE'
 Usage: ./ide EDITOR [WORKSPACE.code-workspace] [-- EDITOR_ARGUMENTS...]
+       ./ide {vim|vi|nvim|neovim} [-- EDITOR_ARGUMENTS...]
        ./ide --print-uri [WORKSPACE.code-workspace]
 
 Examples:
@@ -14,25 +15,29 @@ Examples:
   ./ide cursor -- --profile "Work"
   ./ide code team.code-workspace -- --reuse-window --disable-extensions
   ./ide code -- --help
+  ./ide vim
+  ./ide nvim -- -R README.md
 
 Supported editors:
-  EDITOR must be a VS Code-compatible host command with Dev Containers support
+  GUI editors must be VS Code-compatible host commands with Dev Containers support
   and the --file-uri / --folder-uri CLI options. Other VS Code-based editors
   work only if they support that same connection format.
-  Neovim and Vim are not supported by this launcher.
-  For a terminal editor inside an already running container, use:
-    ./not_devcontainer exec -w /workspaces devcontainer vim
-  Replace vim with nvim if Neovim is installed inside the container.
-  Terminal editors do not load VS Code .code-workspace files.
+  vim / vi / nvim run inside the container in your current terminal. neovim is
+  an alias for nvim. The editor must be installed inside the container, not on
+  the host; Vim is included, and Neovim must be installed separately.
+  These commands start services with ./not_devcontainer up -d, then execute the
+  editor in /workspaces. Without arguments they open that directory. They do
+  not load .code-workspace files; pass editor flags and file paths after --.
 
 Editor arguments:
   Put the editor's own flags and values after --. Quote values containing spaces
   normally; each argument is forwarded unchanged. Flags without -- are rejected.
-  A new window is opened by default. --reuse-window / -r and --new-window / -n
-  after the separator replace that default. Use -- --help for the editor's help;
+  For GUI editors, a new window is opened by default. --reuse-window / -r and
+  --new-window / -n after the separator replace that default.
+  Use -- --help for the editor's help;
   ./ide --help shows this launcher's help. --print-uri accepts no editor flags.
 
-The single .code-workspace file in the repository root is opened by default.
+For GUI editors, the single root .code-workspace file is opened by default.
 If there is no workspace file, the container's /workspaces folder is opened.
 With multiple workspace files, specify the filename explicitly.
 Run from Linux, macOS, or WSL (using a Windows editor's WSL launcher).
@@ -56,7 +61,7 @@ workspace_filename=
 if [ "$#" -gt 0 ] && [ "$1" != -- ]; then
 	case "$1" in
 	-*)
-		printf 'Put editor flags after --, for example: ./ide %s -- --reuse-window\n' "$editor_command" >&2
+		printf 'Put editor flags after --. See ./ide --help for examples.\n' >&2
 		exit 2
 		;;
 	esac
@@ -70,25 +75,39 @@ if [ "$#" -gt 0 ]; then
 	fi
 	shift
 fi
-case "${editor_command##*/}" in
-nvim | neovim | vim | vi)
-	printf 'Terminal editors do not use VS Code remote connections.\nUse ./not_devcontainer exec -w /workspaces devcontainer %s (if installed in the container).\n' "${editor_command##*/}" >&2
-	exit 2
-	;;
-esac
 if [ "$editor_command" = --print-uri ] && [ "$#" -gt 0 ]; then
 	printf '%s\n' '--print-uri accepts no editor arguments.' >&2
 	exit 2
 fi
-if [ "$editor_command" != --print-uri ] && ! command -v "$editor_command" >/dev/null 2>&1; then
-	printf 'IDE command not found: %s. Add the host editor launcher to PATH.\n' "$editor_command" >&2
-	exit 127
-fi
-
 workspace_directory=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 if [ ! -f "$workspace_directory/.devcontainer/devcontainer.json" ]; then
 	printf 'Devcontainer configuration not found in %s\n' "$workspace_directory" >&2
 	exit 1
+fi
+
+case "${editor_command##*/}" in
+nvim | neovim | vim | vi)
+	if [ -n "$workspace_filename" ]; then
+		printf 'Terminal editors do not load .code-workspace files. Put editor flags and file paths after --.\n' >&2
+		exit 2
+	fi
+	terminal_editor_command=${editor_command##*/}
+	[ "$terminal_editor_command" != neovim ] || terminal_editor_command=nvim
+	cd "$workspace_directory"
+	./not_devcontainer up -d
+	if [ "$#" -eq 0 ]; then
+		set -- .
+	fi
+	if [ -t 0 ] && [ -t 1 ]; then
+		exec ./not_devcontainer exec -w /workspaces devcontainer "$terminal_editor_command" "$@"
+	fi
+	exec ./not_devcontainer exec -T -w /workspaces devcontainer "$terminal_editor_command" "$@"
+	;;
+esac
+
+if [ "$editor_command" != --print-uri ] && ! command -v "$editor_command" >/dev/null 2>&1; then
+	printf 'IDE command not found: %s. Add the host editor launcher to PATH.\n' "$editor_command" >&2
+	exit 127
 fi
 
 if [ -n "$workspace_filename" ]; then

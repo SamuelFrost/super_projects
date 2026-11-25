@@ -122,9 +122,12 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 ./ide cursor
 ./ide cursor -- --profile "Work"
 ./ide code -- --reuse-window
+./ide vim
+./ide nvim -- -R README.md
 ```
 
-The launcher opens the single `.code-workspace` file in the repository root
+For VS Code-compatible editors, the launcher opens the single `.code-workspace`
+file in the repository root
 directly inside the devcontainer, skipping the local-folder window and subsequent
 workspace reload. If there is no workspace file, it opens `/workspaces/` instead.
 If you have several workspace files, choose one with
@@ -143,13 +146,16 @@ Arguments retain their quoting, and an explicit window flag replaces the default
 new window. Use `./ide --help` for launcher help or `./ide code -- --help` for the
 editor's help.
 
-Neovim and other editors with a different remote connection interface are not
-supported by this launcher. For a terminal editor in a running container, use
-`./not_devcontainer exec -w /workspaces devcontainer vim`, or replace `vim` with
-`nvim` if Neovim is installed in the container. This opens the container folder;
-terminal editors do not load VS Code workspace files.
+`./ide vim`, `./ide vi`, and `./ide nvim` start services using the existing
+`./not_devcontainer up -d` helper and run the editor inside the container in your
+current terminal, with `/workspaces` as the working directory. `neovim` is an
+alias for `nvim`. Without arguments, they open the workspace directory; pass flags
+and file paths after `--`, such as `./ide vim -- -R README.md`. These editors do
+not load `.code-workspace` files. Vim is included in the image; Neovim must be
+installed inside the container before using it. No host editor installation is
+needed for these commands.
 
-The editor manages container startup, initialization, and configured extensions
+For GUI editors, the editor manages startup, initialization, and extensions
 through `.devcontainer/devcontainer.json` as usual. Existing containers and named
 volumes are reused; this command does not request a rebuild or recreate. Initial
 setup, authentication, trust, or extension-install prompts may still appear.

@@ -115,52 +115,27 @@ To stop: `./not_devcontainer down` or otherwise perform a docker compose down eq
 - **CLI and miscellaneous cli execution:** Run `devcontainer exec bash` or `./not_devcontainer exec devcontainer bash` to get a shell in the container.
 - **IDE:** Run `./ide code` or `./ide cursor` on the host to open the container's workspace directly. Opening the project folder and choosing **Reopen in Container** also works.
 
-#### Open an IDE directly
+<details>
+<summary>Open the remote workspace from the CLI</summary>
+
+Run `./ide` on the host (WSL on Windows) to open the devcontainer in an editor:
 
 ```sh
-./ide code
-./ide cursor
-./ide cursor -- --profile "Work"
-./ide code -- --reuse-window
-./ide vim
-./ide nvim -- -R README.md
+./ide cursor  # Cursor
+./ide code    # VS Code
+./ide vim     # Vim
+./ide nvim    # Neovim
 ```
 
-For VS Code-compatible editors, the launcher opens the single `.code-workspace`
-file in the repository root
-directly inside the devcontainer, skipping the local-folder window and subsequent
-workspace reload. If there is no workspace file, it opens `/workspaces/` instead.
-If you have several workspace files, choose one with
-`./ide code team.code-workspace`. The command resolves paths from its own location,
-so it also works when invoked from another directory.
+- Cursor and VS Code need their host CLI on `PATH` and Dev Containers support.
+  They open the single root `.code-workspace`, or `/workspaces/` if none exists.
+  Choose a file explicitly when needed: `./ide code team.code-workspace`.
+- Vim and Neovim start services and run inside the container at `/workspaces`.
+  Vim is included; Neovim must be installed in the image.
+- Put editor flags and file paths after `--`, for example
+  `./ide cursor -- --reuse-window`. See `./ide --help` for all options.
 
-Use an installed host editor command on `PATH`, with that editor's Dev Containers
-extension enabled. Other VS Code-based editors can be used by supplying their
-command or executable path if they support `--file-uri`, `--folder-uri`, and
-`dev-container` remote connections. On macOS, install the editor's shell command;
-on Windows, run this from WSL using the Windows editor's WSL launcher.
-
-Pass editor flags after `--`, optionally after the workspace filename:
-`./ide code team.code-workspace -- --reuse-window --disable-extensions`.
-Arguments retain their quoting, and an explicit window flag replaces the default
-new window. Use `./ide --help` for launcher help or `./ide code -- --help` for the
-editor's help.
-
-`./ide vim`, `./ide vi`, and `./ide nvim` start services using the existing
-`./not_devcontainer up -d` helper and run the editor inside the container in your
-current terminal, with `/workspaces` as the working directory. `neovim` is an
-alias for `nvim`. Without arguments, they open the workspace directory; pass flags
-and file paths after `--`, such as `./ide vim -- -R README.md`. These editors do
-not load `.code-workspace` files. Vim is included in the image; Neovim must be
-installed inside the container before using it. No host editor installation is
-needed for these commands.
-
-For GUI editors, the editor manages startup, initialization, and extensions
-through `.devcontainer/devcontainer.json` as usual. Existing containers and named
-volumes are reused; this command does not request a rebuild or recreate. Initial
-setup, authentication, trust, or extension-install prompts may still appear.
-It does not fix failures in the editor's Dev Containers extension. Use
-`./ide --print-uri` to inspect the destination without opening an editor.
+</details>
 
 ## Features & details
 

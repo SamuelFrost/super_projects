@@ -18,9 +18,9 @@ Examples:
   ./ide --print-uri code team.code-workspace
 
 Supported editors:
-  cursor, code, and code-insiders are the Reopen in Container authorities
-  this launcher reproduces. Another VS Code-compatible command is launched
-  with cursor's authority when it accepts --file-uri and --folder-uri.
+  cursor, code, and code-insiders. Each has its own Reopen in Container
+  authority. Other editor names stop here so the window keeps that editor's
+  agent history.
   For editors without remote support, such as Vim and Neovim, run them inside
   a running container using devcontainer exec or ./not_devcontainer:
     devcontainer exec vim
@@ -215,6 +215,11 @@ fi
 case "${editor_command##*/}" in
 nvim | neovim | vim | vi)
 	printf 'Run this editor inside the container using devcontainer exec or ./not_devcontainer exec devcontainer. See ./ide --help.\n' >&2
+	exit 2
+	;;
+cursor | code | code-insiders) ;;
+*)
+	printf '%s is not supported. Use cursor, code, or code-insiders.\n' "${editor_command##*/}" >&2
 	exit 2
 	;;
 esac

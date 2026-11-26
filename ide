@@ -125,7 +125,9 @@ fi
 encoded_host_directory=$(printf '%s' "$workspace_directory" | od -An -v -tx1 | tr -d ' \n')
 remote_authority="dev-container+$encoded_host_directory"
 if [ -n "${WSL_DISTRO_NAME:-}" ]; then
-	remote_authority="$remote_authority@wsl+$WSL_DISTRO_NAME"
+	# Match the lowercase hostnames used by webview resource URLs.
+	wsl_distribution_name=$(printf '%s' "$WSL_DISTRO_NAME" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+	remote_authority="$remote_authority@wsl+$wsl_distribution_name"
 fi
 
 remote_path=/workspaces/

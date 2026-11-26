@@ -36,7 +36,70 @@ The single .code-workspace file in the repository root is opened by default.
 If there is no workspace file, the container's /workspaces folder is opened.
 With multiple workspace files, specify the filename explicitly.
 Run from Linux, macOS, or WSL (using a Windows editor's WSL launcher).
+VS Code installs missing host Dev Containers support before opening the window,
+and WSL support when launched from WSL. Profile and storage flags are respected.
 USAGE
+}
+
+run_editor() {
+	if [ -n "$windows_editor_executable" ]; then
+		ELECTRON_RUN_AS_NODE=1 WSLENV="ELECTRON_RUN_AS_NODE/w:${WSLENV:-}" \
+			"$windows_editor_executable" "$windows_editor_cli" "$@"
+	else
+		"$editor_command" "$@"
+	fi
+}
+
+ensure_vscode_extensions() {
+	# Use the same extension store and profile as the window being opened.
+	editor_profile=
+	editor_user_data_directory=
+	editor_extensions_directory=
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+		--help | -h | --version | -v | --list-extensions | --install-extension | --install-extension=* | --uninstall-extension | --uninstall-extension=*) return ;;
+		--profile | --user-data-dir | --extensions-dir)
+			if [ "$#" -lt 2 ]; then
+				printf 'Expected a value after %s.\n' "$1" >&2
+				exit 2
+			fi
+			case "$1" in
+			--profile) editor_profile=$2 ;;
+			--user-data-dir) editor_user_data_directory=$2 ;;
+			--extensions-dir) editor_extensions_directory=$2 ;;
+			esac
+			shift
+			;;
+		--profile=*) editor_profile=${1#*=} ;;
+		--user-data-dir=*) editor_user_data_directory=${1#*=} ;;
+		--extensions-dir=*) editor_extensions_directory=${1#*=} ;;
+		esac
+		shift
+	done
+	set --
+	[ -z "$editor_profile" ] || set -- "$@" --profile "$editor_profile"
+	[ -z "$editor_user_data_directory" ] || set -- "$@" --user-data-dir "$editor_user_data_directory"
+	[ -z "$editor_extensions_directory" ] || set -- "$@" --extensions-dir "$editor_extensions_directory"
+	if ! installed_extensions=$(run_editor "$@" --list-extensions); then
+		printf 'Could not check VS Code host extensions.\n' >&2
+		exit 1
+	fi
+	missing_extensions=false
+	required_extensions=ms-vscode-remote.remote-containers
+	if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+		required_extensions="$required_extensions ms-vscode-remote.remote-wsl"
+	fi
+	for extension_identifier in $required_extensions; do
+		if ! printf '%s\n' "$installed_extensions" | tr -d '\r' | grep -Fxiq "$extension_identifier"; then
+			printf 'Installing VS Code host extension %s...\n' "$extension_identifier" >&2
+			set -- "$@" --install-extension "$extension_identifier"
+			missing_extensions=true
+		fi
+	done
+	if [ "$missing_extensions" = true ] && ! run_editor "$@"; then
+		printf 'Could not install required VS Code host extensions.\n' >&2
+		exit 1
+	fi
 }
 
 case "${1:-}" in
@@ -120,11 +183,41 @@ else
 	done
 fi
 
-# Both VS Code and Cursor accept the hex-encoded host directory. Keeping the
-# dev-container authority preserves devcontainer.json lifecycle/customizations.
-encoded_host_directory=$(printf '%s' "$workspace_directory" | od -An -v -tx1 | tr -d ' \n')
+windows_editor_executable=
+windows_editor_cli=
+is_vscode=false
+case "${editor_command##*/}" in
+code | code-insiders)
+	is_vscode=true
+	if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+		# The WSL launcher manages WSL extensions. Call its Windows CLI directly
+		# so the prerequisite extensions are installed on the host instead.
+		editor_launcher=$(readlink -f "$(command -v "$editor_command")")
+		editor_installation_directory=$(dirname -- "$(dirname -- "$editor_launcher")")
+		editor_executable_name=Code.exe
+		[ "${editor_command##*/}" != code-insiders ] || editor_executable_name='Code - Insiders.exe'
+		windows_editor_executable="$editor_installation_directory/$editor_executable_name"
+		# Newer Windows releases keep their CLI under the launcher's VERSIONFOLDER.
+		editor_version_directory=$(sed -n 's/^VERSIONFOLDER="\([[:alnum:]]*\)"$/\1/p' "$editor_launcher")
+		editor_cli_path="$editor_installation_directory/${editor_version_directory:+$editor_version_directory/}resources/app/out/cli.js"
+		if [ ! -x "$windows_editor_executable" ] || [ ! -f "$editor_cli_path" ]; then
+			printf 'Use the Windows VS Code bin/%s launcher from WSL. Could not locate its host CLI.\n' "${editor_command##*/}" >&2
+			exit 1
+		fi
+		windows_editor_cli=$(wslpath -w "$editor_cli_path")
+	fi
+	;;
+esac
+
+# Keep the dev-container authority to apply devcontainer.json customizations.
+# VS Code resolves a Windows WSL share directly, avoiding a nested WSL resolver.
+host_directory=$workspace_directory
+if [ -n "$windows_editor_executable" ]; then
+	host_directory=$(wslpath -w "$workspace_directory")
+fi
+encoded_host_directory=$(printf '%s' "$host_directory" | od -An -v -tx1 | tr -d ' \n')
 remote_authority="dev-container+$encoded_host_directory"
-if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+if [ -n "${WSL_DISTRO_NAME:-}" ] && [ -z "$windows_editor_executable" ]; then
 	# Match the lowercase hostnames used by webview resource URLs.
 	wsl_distribution_name=$(printf '%s' "$WSL_DISTRO_NAME" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 	remote_authority="$remote_authority@wsl+$wsl_distribution_name"
@@ -160,6 +253,10 @@ if [ "$editor_command" = --print-uri ]; then
 	exit 0
 fi
 
+if [ "$is_vscode" = true ]; then
+	ensure_vscode_extensions "$@"
+fi
+
 use_default_window=true
 for editor_argument; do
 	case "$editor_argument" in
@@ -167,6 +264,7 @@ for editor_argument; do
 	esac
 done
 if [ "$use_default_window" = true ]; then
-	exec "$editor_command" --new-window "$uri_argument" "$remote_uri" "$@"
+	run_editor --new-window "$uri_argument" "$remote_uri" "$@"
+else
+	run_editor "$uri_argument" "$remote_uri" "$@"
 fi
-exec "$editor_command" "$uri_argument" "$remote_uri" "$@"

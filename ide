@@ -5,7 +5,7 @@ set -eu
 usage() {
 	cat <<'USAGE'
 Usage: ./ide EDITOR [WORKSPACE.code-workspace] [-- EDITOR_ARGUMENTS...]
-       ./ide --print-uri [WORKSPACE.code-workspace]
+       ./ide --print-uri [EDITOR] [WORKSPACE.code-workspace]
 
 Examples:
   ./ide code
@@ -14,11 +14,13 @@ Examples:
   ./ide cursor -- --profile "Work"
   ./ide code team.code-workspace -- --reuse-window --disable-extensions
   ./ide code -- --help
+  ./ide --print-uri
+  ./ide --print-uri code team.code-workspace
 
 Supported editors:
-  Editors must be VS Code-compatible host commands with Dev Containers support
-  and the --file-uri / --folder-uri CLI options. Other VS Code-based editors
-  work only if they support that same connection format.
+  cursor, code, and code-insiders are the Reopen in Container authorities
+  this launcher reproduces. Another VS Code-compatible command is launched
+  with cursor's authority when it accepts --file-uri and --folder-uri.
   For editors without remote support, such as Vim and Neovim, run them inside
   a running container using devcontainer exec or ./not_devcontainer:
     devcontainer exec vim
@@ -30,7 +32,19 @@ Editor arguments:
   A new window is opened by default. --reuse-window / -r and
   --new-window / -n after the separator replace that default.
   Use -- --help for the editor's help;
-  ./ide --help shows this launcher's help. --print-uri accepts no editor flags.
+  ./ide --help shows this launcher's help. --print-uri accepts no flags after
+  the optional editor and workspace names.
+
+The URI uses that editor's Reopen in Container authority, so agent history
+stays with the window opened from the command palette. cursor records the
+workspace directory and devcontainer.json. From WSL it nests that authority
+under the lowercase wsl+ distro name. VS Code records the host path, local
+Docker, and the devcontainer file, with no nested wsl+ authority. From WSL
+the host path is the Windows share from wslpath and the config scheme is
+vscode-fileHost. On Linux and macOS the config scheme is file. The
+workspace filename is only the path inside the container. The host path
+stays the repository directory, matching a folder reopen followed by
+opening that workspace file.
 
 The single .code-workspace file in the repository root is opened by default.
 If there is no workspace file, the container's /workspaces folder is opened.
@@ -102,6 +116,43 @@ ensure_vscode_extensions() {
 	fi
 }
 
+# JSON.stringify escaping for the authority payload. The editor compares the
+# hex of this exact string. QuoteJSONString leaves U+2028 and U+2029 raw and
+# copies well-formed UTF-8 through; an ill-formed path byte such as 0xFF
+# cannot round-trip through a JavaScript string, so those paths will not match.
+json_escape() {
+	printf '%s' "$1" | od -An -v -tu1 | LC_ALL=C awk '
+		BEGIN { ORS = "" }
+		{
+			for (byte_index = 1; byte_index <= NF; byte_index++) {
+				byte_value = $byte_index
+				if (byte_value == 34)
+					printf "\\\""
+				else if (byte_value == 92)
+					printf "\\\\"
+				else if (byte_value == 8)
+					printf "\\b"
+				else if (byte_value == 9)
+					printf "\\t"
+				else if (byte_value == 10)
+					printf "\\n"
+				else if (byte_value == 12)
+					printf "\\f"
+				else if (byte_value == 13)
+					printf "\\r"
+				else if (byte_value < 32)
+					printf "\\u%04x", byte_value
+				else
+					printf "%c", byte_value
+			}
+		}'
+}
+
+# Windows file URI path for a drive path from wslpath -w: C:\foo\bar -> /C:/foo/bar.
+windows_file_uri_path() {
+	printf '%s' "$1" | sed 's|\\|/|g; s|^\([A-Za-z]:\)|/\1|'
+}
+
 case "${1:-}" in
 -h | --help)
 	usage
@@ -115,6 +166,24 @@ esac
 
 editor_command=$1
 shift
+print_uri=false
+if [ "$editor_command" = --print-uri ]; then
+	print_uri=true
+	editor_command=cursor
+	if [ "$#" -gt 0 ] && [ "$1" != -- ]; then
+		case "$1" in
+		*.code-workspace) ;;
+		-*)
+			printf '%s\n' '--print-uri accepts no editor arguments.' >&2
+			exit 2
+			;;
+		*)
+			editor_command=$1
+			shift
+			;;
+		esac
+	fi
+fi
 workspace_filename=
 if [ "$#" -gt 0 ] && [ "$1" != -- ]; then
 	case "$1" in
@@ -133,7 +202,7 @@ if [ "$#" -gt 0 ]; then
 	fi
 	shift
 fi
-if [ "$editor_command" = --print-uri ] && [ "$#" -gt 0 ]; then
+if [ "$print_uri" = true ] && [ "$#" -gt 0 ]; then
 	printf '%s\n' '--print-uri accepts no editor arguments.' >&2
 	exit 2
 fi
@@ -150,7 +219,7 @@ nvim | neovim | vim | vi)
 	;;
 esac
 
-if [ "$editor_command" != --print-uri ] && ! command -v "$editor_command" >/dev/null 2>&1; then
+if [ "$print_uri" != true ] && ! command -v "$editor_command" >/dev/null 2>&1; then
 	printf 'IDE command not found: %s. Add the host editor launcher to PATH.\n' "$editor_command" >&2
 	exit 127
 fi
@@ -189,7 +258,7 @@ is_vscode=false
 case "${editor_command##*/}" in
 code | code-insiders)
 	is_vscode=true
-	if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+	if [ "$print_uri" != true ] && [ -n "${WSL_DISTRO_NAME:-}" ]; then
 		# The WSL launcher manages WSL extensions. Call its Windows CLI directly
 		# so the prerequisite extensions are installed on the host instead.
 		editor_launcher=$(readlink -f "$(command -v "$editor_command")")
@@ -209,16 +278,87 @@ code | code-insiders)
 	;;
 esac
 
-# Keep the dev-container authority to apply devcontainer.json customizations.
-# VS Code resolves a Windows WSL share directly, avoiding a nested WSL resolver.
-host_directory=$workspace_directory
-if [ -n "$windows_editor_executable" ]; then
-	host_directory=$(wslpath -w "$workspace_directory")
+# Match Reopen in Container. A plain host-path authority is a different
+# workspace id, so agent history opened from the command palette stays hidden.
+devcontainer_config_path="$workspace_directory/.devcontainer/devcontainer.json"
+if [ "$is_vscode" = true ]; then
+	# hostPath stays the repository directory. Opening the .code-workspace
+	# file after a folder reopen keeps that authority and only changes the
+	# container path, which remote_path handles below. A WSL UNC share keeps
+	# the Linux config path and vscode-fileHost. A drive path (for example
+	# /mnt/c) and native Linux/macOS use scheme file. There is no @wsl+
+	# suffix. Cursor reopen passes dockerContext undefined, so that key stays
+	# omitted on the cursor branch below.
+	vscode_host_target=$workspace_directory
+	config_file_path=$devcontainer_config_path
+	config_scheme=file
+	if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+		vscode_host_path=$(wslpath -w "$vscode_host_target")
+		case "$vscode_host_path" in
+		\\* | //*)
+			config_scheme=vscode-fileHost
+			;;
+		*)
+			config_file_path=$(windows_file_uri_path "$(wslpath -w "$devcontainer_config_path")")
+			;;
+		esac
+	else
+		vscode_host_path=$vscode_host_target
+	fi
+	vscode_local_docker=false
+	vscode_settings_json=
+	if [ -n "${DOCKER_CONTEXT:-}" ] && [ "$DOCKER_CONTEXT" != default ]; then
+		vscode_settings_json=$(printf '{"context":"%s"}' "$(json_escape "$DOCKER_CONTEXT")")
+	else
+		docker_host=${VSCODE_DOCKER_HOST:-${DOCKER_HOST-}}
+		settings_body=
+		if [ -n "$docker_host" ]; then
+			settings_body=$(printf '"host":"%s"' "$(json_escape "$docker_host")")
+			case "$docker_host" in
+			ssh://*) vscode_local_docker=true ;;
+			esac
+		fi
+		if [ -n "${DOCKER_CERT_PATH:-}" ]; then
+			settings_pair=$(printf '"certPath":"%s"' "$(json_escape "$DOCKER_CERT_PATH")")
+			if [ -n "$settings_body" ]; then
+				settings_body="$settings_body,$settings_pair"
+			else
+				settings_body=$settings_pair
+			fi
+		fi
+		if [ -n "${DOCKER_TLS_VERIFY:-}" ]; then
+			settings_pair=$(printf '"tlsVerify":"%s"' "$(json_escape "$DOCKER_TLS_VERIFY")")
+			if [ -n "$settings_body" ]; then
+				settings_body="$settings_body,$settings_pair"
+			else
+				settings_body=$settings_pair
+			fi
+		fi
+		if [ -n "$settings_body" ]; then
+			vscode_settings_json="{$settings_body}"
+		fi
+	fi
+	escaped_host_path=$(json_escape "$vscode_host_path")
+	escaped_config_file_path=$(json_escape "$config_file_path")
+	if [ -n "$vscode_settings_json" ]; then
+		authority_json=$(printf '{"hostPath":"%s","localDocker":%s,"settings":%s,"configFile":{"$mid":1,"path":"%s","scheme":"%s"}}' \
+			"$escaped_host_path" "$vscode_local_docker" "$vscode_settings_json" "$escaped_config_file_path" "$config_scheme")
+	else
+		authority_json=$(printf '{"hostPath":"%s","localDocker":false,"configFile":{"$mid":1,"path":"%s","scheme":"%s"}}' \
+			"$escaped_host_path" "$escaped_config_file_path" "$config_scheme")
+	fi
+else
+	# Cursor stores the devcontainer config. Reopen passes dockerContext
+	# undefined, so JSON.stringify omits it. From WSL the authority is nested
+	# under the lowercase distro name used by webview resource URLs.
+	escaped_workspace_directory=$(json_escape "$workspace_directory")
+	escaped_devcontainer_config_path=$(json_escape "$devcontainer_config_path")
+	authority_json=$(printf '{"settingType":"config","workspacePath":"%s","devcontainerPath":"%s"}' \
+		"$escaped_workspace_directory" "$escaped_devcontainer_config_path")
 fi
-encoded_host_directory=$(printf '%s' "$host_directory" | od -An -v -tx1 | tr -d ' \n')
-remote_authority="dev-container+$encoded_host_directory"
-if [ -n "${WSL_DISTRO_NAME:-}" ] && [ -z "$windows_editor_executable" ]; then
-	# Match the lowercase hostnames used by webview resource URLs.
+encoded_authority=$(printf '%s' "$authority_json" | od -An -v -tx1 | tr -d ' \n')
+remote_authority="dev-container+$encoded_authority"
+if [ "$is_vscode" != true ] && [ -n "${WSL_DISTRO_NAME:-}" ]; then
 	wsl_distribution_name=$(printf '%s' "$WSL_DISTRO_NAME" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 	remote_authority="$remote_authority@wsl+$wsl_distribution_name"
 fi
@@ -248,7 +388,7 @@ encoded_remote_path=$(
 )
 remote_uri="vscode-remote://$remote_authority$encoded_remote_path"
 
-if [ "$editor_command" = --print-uri ]; then
+if [ "$print_uri" = true ]; then
 	printf '%s\n' "$remote_uri"
 	exit 0
 fi

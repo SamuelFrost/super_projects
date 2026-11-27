@@ -11,6 +11,7 @@ if ! _chrome_ready; then
 	rm -f "$_profile/SingletonLock" "$_profile/SingletonSocket" "$_profile/SingletonCookie" 2>/dev/null
 	nohup env DISPLAY=:99 /usr/bin/google-chrome \
 		--enable-unsafe-swiftshader \
+		--no-first-run \
 		--remote-debugging-port="${CHROME_PORT}" \
 		--remote-debugging-address=0.0.0.0 \
 		--remote-allow-origins="*" \

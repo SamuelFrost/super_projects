@@ -15,7 +15,7 @@ Volume names are prefixed by the Compose project name. Set a distinct name in `d
 | `cursor-desktop/` | `<name>_cursor-desktop-state` | `~/.config/Cursor` | Cursor IDE profile |
 | `cursor-server/` | `<name>_cursor-server-state` | `~/.cursor-server` | Cursor remote server, extensions, settings, and remote workspace state |
 | `vscode-profile/` | `<name>_vscode-profile-state` | `~/.config/Code` | VS Code settings, workspace state, chat history, and account profile |
-| `vscode-extensions/` | `<name>_vscode-extensions-state` | `~/.vscode` | VS Code installed desktop extensions and CLI state |
+| `vscode-extensions/` | `<name>_vscode-extensions-state` | `~/.vscode` | VS Code desktop CLI state and previously installed local extensions |
 | `vscode-server/` | `<name>_vscode-server-state` | `~/.vscode-server` | VS Code remote server, extensions, settings, and remote workspace state |
 | `gemini/` | `<name>_gemini-data` | `~/.gemini` | Gemini CLI login, sessions, settings, and caches |
 | `chrome/` | `<name>_chrome-devtools-mcp-profile` | `~/chrome-profile` | Browser logins, profiles, extensions; Gemini web app; separate `pwa/` profile |
@@ -132,13 +132,26 @@ as written: macOS modifier keys and OS-specific `when` conditions are not transl
 or workspace settings for container-specific overrides. Existing privacy policies
 and desktop telemetry flags still apply.
 
-## VS Code extensions
+## Editor extensions
 
-VS Code includes Copilot Chat. Fresh `vscode-extensions-state` volumes inherit
-extensions installed in the image, including Codex. Existing volumes retain their
-installed extensions across rebuilds and do not automatically receive extensions
-added to a newer image. Provider extensions may also use CLI storage such as
-`~/.codex`.
+Dev Containers clients install the extensions listed in
+[`devcontainer.json`](../devcontainer.json) during editor setup. The browser
+desktop launchers for VS Code and Cursor use the `extensions` directory of the
+corresponding remote server (`~/.vscode-server/extensions` and
+`~/.cursor-server/extensions`), so an extension installed or updated from the
+host editor or from the desktop editor is available in both. Restart the other
+editor to pick up changes if it's already open. Extensions that run only in
+the host editor stay on the host. The `code` and `cursor` terminal commands do
+not use these stores unless given the same `--extensions-dir`.
+
+Before the desktop starts, Compose prepares the persisted VS Code and Cursor
+desktop profiles for the configured developer UID. This also repairs older
+profiles created as root. Host settings and keybindings are mounted separately
+and stay read-only.
+
+Editor profiles and remote extension stores persist across rebuilds. The
+browser desktop launchers use the server stores in place of any extensions
+previously installed into the standalone desktop directories.
 
 See [privacy controls](../privacy/README.md) for telemetry policies and provider
 account training settings.

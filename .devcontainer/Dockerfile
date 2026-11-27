@@ -9,6 +9,12 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 RUN install -m 0755 -d /etc/apt/keyrings
 
+# Install the common Python and native build tools once for npm, ADK, and mise.
+FROM installer-base AS build-toolchain
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    python3 python3-venv make gcc g++ \
+  && rm -rf /var/lib/apt/lists/*
+
 # Resolve Node once so npm installers and the final image use the same package.
 FROM installer-base AS node-package
 WORKDIR /tmp
@@ -21,7 +27,7 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
   && mv nodejs_*.deb nodejs.deb \
   && rm -rf /var/lib/apt/lists/*
 
-FROM installer-base AS node-base
+FROM build-toolchain AS node-base
 RUN --mount=from=node-package,source=/tmp/nodejs.deb,target=/tmp/nodejs.deb \
     apt-get update -qq \
   && apt-get install -y --no-install-recommends /tmp/nodejs.deb \
@@ -30,22 +36,14 @@ RUN --mount=from=node-package,source=/tmp/nodejs.deb,target=/tmp/nodejs.deb \
 COPY --link --from=node-package /etc/apt/keyrings/nodesource.gpg /etc/apt/keyrings/nodesource.gpg
 COPY --link --from=node-package /etc/apt/sources.list.d/nodesource.list /etc/apt/sources.list.d/nodesource.list
 
-# Native npm dependencies may need compilation; these stages share the toolchain.
-FROM node-base AS npm-installer-base
-RUN apt-get update -qq && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
-
-FROM npm-installer-base AS gemini-cli
+FROM node-base AS gemini-cli
 RUN npm install --global --prefix /home/developer/.npm-global @google/gemini-cli
 
-FROM npm-installer-base AS codex-cli
+FROM node-base AS codex-cli
 RUN npm install --global --prefix /home/developer/.npm-global @openai/codex
 
-FROM npm-installer-base AS devcontainers-cli
+FROM node-base AS devcontainers-cli
 RUN npm install --global --prefix /usr @devcontainers/cli
-
-FROM npm-installer-base AS herb-dependencies
-RUN npm install --prefix /opt/herb-lsp-deps --omit=dev vscode-html-languageservice@^5.1.0
 
 # Native installers use the final home path, with ownership applied at assembly.
 FROM installer-base AS native-installer-base
@@ -61,25 +59,27 @@ RUN curl -fsSL https://claude.ai/install.sh -o /tmp/install-claude.sh \
   && bash /tmp/install-claude.sh stable \
   && rm /tmp/install-claude.sh
 
-FROM installer-base AS google-adk
-RUN apt-get update -qq && apt-get install -y --no-install-recommends python3-venv gcc g++ make \
-  && python3 -m venv /opt/google-adk \
-  && /opt/google-adk/bin/pip install --upgrade pip \
-  && /opt/google-adk/bin/pip install "litellm>=1.84" "google-adk[mcp]" \
-  && rm -rf /var/lib/apt/lists/*
+FROM build-toolchain AS google-adk
+RUN python3 -m venv /opt/google-adk \
+  && /opt/google-adk/bin/pip install --no-cache-dir --upgrade pip \
+  && /opt/google-adk/bin/pip install --no-cache-dir "litellm>=1.84" "google-adk[mcp]"
 
 FROM installer-base AS cursor-desktop-download
 ARG TARGETARCH
 ARG CURSOR_DESKTOP_VERSION=3.29
-RUN case "$TARGETARCH" in amd64) cursor_architecture=x64 ;; arm64) cursor_architecture=arm64 ;; *) echo "Unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; esac \
-  && curl -fsSL "https://api2.cursor.sh/updates/download/golden/linux-${cursor_architecture}-deb/cursor/${CURSOR_DESKTOP_VERSION}" -o /tmp/cursor.deb
+RUN case "$TARGETARCH" in \
+      amd64) cursor_download_architecture=x64 ;; \
+      arm64) cursor_download_architecture=arm64 ;; \
+      *) echo "Unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+  && curl -fsSL "https://api2.cursor.sh/updates/download/golden/linux-${cursor_download_architecture}-deb/cursor/${CURSOR_DESKTOP_VERSION}" -o /tmp/cursor.deb
 
 FROM installer-base AS chatgpt-desktop-download
 ARG TARGETARCH
 RUN curl -fsSL https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_${TARGETARCH}.deb -o /tmp/chatgpt.deb
 
 # Apt installs run in the runtime filesystem to retain dependencies and package hooks.
-FROM installer-base AS desktop-runtime
+FROM build-toolchain AS desktop-runtime
 WORKDIR /workspaces
 
 # Prevent interactive prompts during apt installs
@@ -94,7 +94,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # vim:            quick terminal edits when SSH'd in
 # procps:         top, free, ps — system monitoring
 # ripgrep:        fast recursive search via the `rg` command
-# python3:        system Python for ad-hoc scripts (project interpreters still come from mise)
 # socat:          extra TCP/UDP relay for one-off debugging
 # poppler-utils:  pdftotext etc. — lets agents/scripts read PDFs as text
 # ffmpeg:         probe/process video and audio (metadata, extract audio)
@@ -112,25 +111,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # libbz2-dev:     bzip2 compression (Python)
 # libsqlite3-dev: embedded database (Python)
 # patch:          applies source patches during ruby-build compilation
-# make:           drives the C build process (runs Makefiles)
-# gcc:            C compiler — required to build Ruby, Python, and most native gems
-# g++:            C++ compiler — required for gems/extensions with C++ code
 # autoconf:       generates ./configure scripts from Makefile.in templates
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
-  curl \
   git \
   openssh-client \
   vim \
   procps \
   ripgrep \
   socat \
-  python3 \
-  python3-venv \
   poppler-utils \
   ffmpeg \
   tzdata \
-  ca-certificates \
-  gnupg \
   locales \
   zlib1g-dev \
   libssl-dev \
@@ -144,9 +135,6 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   libbz2-dev \
   libsqlite3-dev \
   patch \
-  make \
-  gcc \
-  g++ \
   autoconf \
   && rm -rf /var/lib/apt/lists/*
 
@@ -164,8 +152,7 @@ RUN head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' > /etc/machine-id
 # ------------------------------------------------------------------------------
 # GitHub CLI (gh)
 # ------------------------------------------------------------------------------
-RUN install -m 0755 -d /etc/apt/keyrings \
-  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
   && chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
   && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
@@ -200,11 +187,9 @@ RUN . /etc/os-release && \
 #   layer stays cached.
 #   Docs: https://learn.microsoft.com/en-us/cli/azure/install-azure-cli
 # ------------------------------------------------------------------------------
-RUN install -m 0755 -d /etc/apt/keyrings \
-  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
        | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
   && chmod a+r /etc/apt/keyrings/microsoft.gpg
-# /etc/os-release provides VERSION_CODENAME (e.g. "noble" for 24.04)
 RUN . /etc/os-release && \
   printf "Types: deb\nURIs: https://packages.microsoft.com/repos/azure-cli/\nSuites: %s\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n" \
     "${VERSION_CODENAME}" "$(dpkg --print-architecture)" \
@@ -215,7 +200,6 @@ RUN . /etc/os-release && \
 
 # ------------------------------------------------------------------------------
 # Desktop GUI: XFCE4
-#   ~300 MB; almost never changes → own layer for stable caching.
 #   dbus-x11:    X11 dbus integration required by the XFCE session manager.
 #   xfce4-terminal: default terminal emulator for the desktop.
 # ------------------------------------------------------------------------------
@@ -242,7 +226,6 @@ ENV DISPLAY=:99 \
 
 # --- VNC server stack dependencies ---
 # libegl1:        EGL library, needed for WebGL support in Chrome.
-# libgbm1:        GBM library, needed for hardware acceleration in Chrome.
 # libgl1:         OpenGL library, needed for graphics in Chrome.
 # libgl1-mesa-dri: Mesa OpenGL drivers, needed for graphics in Chrome.
 # novnc:          noVNC web client, needed for VNC access.
@@ -253,7 +236,6 @@ ENV DISPLAY=:99 \
 # xvfb:          virtual X display, needed for headless Chrome.
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
   libegl1 \
-  libgbm1 \
   libgl1 \
   libgl1-mesa-dri \
   novnc \
@@ -270,12 +252,12 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
 #   fonts-liberation: core fonts Chrome needs for proper text rendering.
 #   A wrapper at /usr/local/bin/chrome applies the container-required flags:
 #     --enable-unsafe-swiftshader  Software WebGL (no GPU in the container).
+#     --no-first-run  Skip the first-run dialog, which blocks startup on a new profile.
 #     --enable-features=WebMCP  WebMCP tools for chrome-devtools-mcp (Chrome 150+).
 #   The namespace sandbox is enabled by .devcontainer/seccomp/desktop-sandboxes.json.
 # ------------------------------------------------------------------------------
 ARG TARGETARCH
-RUN install -m 0755 -d /etc/apt/keyrings \
-  && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
        | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
   && chmod a+r /etc/apt/keyrings/google-chrome.gpg \
   && echo "deb [arch=${TARGETARCH} signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
@@ -297,7 +279,8 @@ RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
        -o /etc/apt/keyrings/mise-archive-keyring.asc \
   && printf "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.asc] https://mise.jdx.dev/deb stable main\n" \
        > /etc/apt/sources.list.d/mise.list \
-  && apt-get update -qq && apt-get install -y --no-install-recommends mise \
+  && apt-get update -qq \
+  && apt-get install -y --no-install-recommends mise \
   && rm -rf /var/lib/apt/lists/*
 
 # Official Linux desktop applications. Cursor uses its published Debian package;
@@ -313,21 +296,14 @@ RUN --mount=from=cursor-desktop-download,source=/tmp/cursor.deb,target=/tmp/curs
   && apt-get install -y --no-install-recommends /tmp/cursor.deb /tmp/chatgpt.deb claude-desktop \
   && rm -rf /var/lib/apt/lists/*
 
-# Official VS Code stable package; apt selects the image's target architecture.
-# Reuse Microsoft's signing key installed for Azure CLI.
+# Official VS Code stable package from Microsoft's signed repository, using the
+# signing key installed for Azure CLI. VSCODE_VERSION pins a Debian package version.
+ARG VSCODE_VERSION
 RUN printf 'Types: deb\nURIs: https://packages.microsoft.com/repos/code\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/microsoft.gpg\n' "$TARGETARCH" \
       > /etc/apt/sources.list.d/vscode.sources \
   && apt-get update -qq \
-  && apt-get install -y --no-install-recommends code \
+  && apt-get install -y --no-install-recommends "code${VSCODE_VERSION:+=$VSCODE_VERSION}" \
   && rm -rf /var/lib/apt/lists/*
-
-# Extension downloads depend on VS Code, but not on host IDs or other installers.
-FROM desktop-runtime AS vscode-extensions
-ENV DONT_PROMPT_WSL_INSTALL=1
-RUN install -d -o ubuntu -g ubuntu /home/developer/.vscode/extensions
-USER ubuntu
-RUN code --disable-telemetry --user-data-dir /tmp/vscode-user-data \
-    --extensions-dir /home/developer/.vscode/extensions --install-extension openai.chatgpt
 
 FROM desktop-runtime AS devcontainer
 # Install Node after the desktop so Node updates do not invalidate desktop packages.
@@ -346,14 +322,15 @@ ARG DOCKER_GID=1
 
 # Ubuntu 24.04 ships a default `ubuntu` user at UID 1000; remove it before
 # creating `developer` so there is no UID conflict when the host uid is 1000.
-# Create docker group with the host's GID so the mounted docker.sock is accessible.
+# Name the group that owns the mounted docker.sock unless the image already has
+# that GID (Docker Desktop on macOS presents the socket with the root group).
 RUN userdel --remove ubuntu 2>/dev/null || true && \
-    groupadd --gid ${DOCKER_GID} docker || groupadd --gid 1001 docker || groupadd docker || true
+    { getent group "${DOCKER_GID}" >/dev/null || groupadd --gid "${DOCKER_GID}" docker; }
 
-# Create the developer user with the UID supplied by host filesystem compatibility.
+# Create the developer user with the UID supplied by host filesystem compatibility,
+# as a member of the docker.sock group.
 RUN groupadd --system developer && \
-  useradd --uid ${DEVELOPER_UID} --gid developer --create-home --shell /bin/bash developer && \
-  usermod -aG docker developer
+  useradd --uid ${DEVELOPER_UID} --gid developer --groups "${DOCKER_GID}" --create-home --shell /bin/bash developer
 
 # Ensure developer owns their home directory.
 # Pre-create directories that will be backed by named volumes so Docker
@@ -371,17 +348,14 @@ RUN mkdir -p /home/developer/chrome-profile \
     chmod 700 /home/developer/.ssh && \
     chown -R developer:developer /home/developer
 
-# Linked copies allow independent tool layers to be reused during assembly.
-COPY --link --from=gemini-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
-COPY --link --from=codex-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
+# Tool layers are built in independent stages and assembled here.
+COPY --from=gemini-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
+COPY --from=codex-cli --chown=developer:developer /home/developer/.npm-global/ /home/developer/.npm-global/
 COPY --link --from=devcontainers-cli /usr/lib/node_modules/@devcontainers/ /usr/lib/node_modules/@devcontainers/
-COPY --link --from=herb-dependencies /opt/herb-lsp-deps/ /opt/herb-lsp-deps/
-COPY --link --from=cursor-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
-COPY --link --from=claude-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
+COPY --from=cursor-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
+COPY --from=claude-cli --chown=developer:developer /home/developer/.local/ /home/developer/.local/
 COPY --link --from=google-adk /opt/google-adk/ /opt/google-adk/
-COPY --link --from=vscode-extensions --chown=developer:developer /home/developer/.vscode/ /home/developer/.vscode/
 RUN ln -sf /usr/lib/node_modules/@devcontainers/cli/devcontainer.js /usr/bin/devcontainer \
-  && ln -sfn /opt/herb-lsp-deps/node_modules /home/developer/node_modules \
   && ln -sf /opt/google-adk/bin/adk /usr/local/bin/adk \
   && printf 'prefix=/home/developer/.npm-global\n' > /home/developer/.npmrc \
   && chown developer:developer /home/developer/.npmrc
@@ -466,20 +440,21 @@ ENV DO_NOT_TRACK=1 \
     GEMINI_TELEMETRY_TRACES_ENABLED=false \
     GEMINI_TELEMETRY_LOG_PROMPTS=false \
     OTEL_SDK_DISABLED=true
-# Cursor's inherited Electron/VS Code switches disable optional local reporting.
-RUN for desktop_entry in /usr/share/applications/cursor.desktop /home/developer/Desktop/cursor.desktop; do \
+# Cursor shares the extension store of its remote server, so extensions installed
+# from the host editor or the desktop editor are available in both.
+RUN for desktop_entry in $(dpkg-query -L cursor | sed -n '\#^/usr/share/applications/.*\.desktop$#p') /home/developer/Desktop/cursor.desktop; do \
       [ -f "$desktop_entry" ] || continue; \
-      sed -i 's/ --disable-gpu / --disable-gpu --disable-telemetry --disable-crash-reporter /g' "$desktop_entry"; \
+      sed -i 's#^Exec=/usr/share/cursor/cursor\( --disable-gpu\)\? #Exec=/usr/share/cursor/cursor --disable-gpu --disable-telemetry --disable-crash-reporter --extensions-dir /home/developer/.cursor-server/extensions #' "$desktop_entry"; \
     done
 
 
 # Use the package's desktop IDs (current releases use reverse-domain names).
 RUN install -d -m 0700 -o developer -g developer \
       /home/developer/.config/Code /home/developer/.config/Code/User \
-      /home/developer/.config/Cursor/User /home/developer/.vscode /home/developer/.vscode-server \
-      /home/developer/.cursor-server \
+      /home/developer/.config/Cursor/User /home/developer/.vscode \
+      /home/developer/.vscode-server /home/developer/.cursor-server \
   && for desktop_entry in $(dpkg-query -L code | sed -n '\#^/usr/share/applications/.*\.desktop$#p'); do \
-      sed -i 's#^Exec=/usr/share/code/code #Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 #' "$desktop_entry"; \
+      sed -i 's#^Exec=/usr/share/code/code #Exec=/usr/share/code/code --disable-gpu --disable-telemetry --disable-crash-reporter --ozone-platform=x11 --extensions-dir /home/developer/.vscode-server/extensions #' "$desktop_entry"; \
       if grep -q '^Type=Application' "$desktop_entry" && ! grep -q '^NoDisplay=true' "$desktop_entry"; then \
         sed -i '0,/ %F/s# %F# --new-window /workspaces %F#' "$desktop_entry"; \
         install -o developer -g developer -m 0755 "$desktop_entry" /home/developer/Desktop/; \
